@@ -1,0 +1,12 @@
+export type Hub={id:string;name:string;x:number;y:number;description:string};
+export type Venue={id:string;name:string;hub:string;type:string;description:string;safe:boolean;opens:number;closes:number;npc:string;capacity:number};
+export type Activity={id:string;name:string;venue:string;seconds:number;cost:number;reward:number;skill:string;effects:Record<string,number>;item:string;qualification:string;requires:string;question:string;options:string[]};
+export type Route={id:string;fromHub:string;toHub:string;mode:string;seconds:number;fare:number;description:string};
+export type World={hubs:Hub[];venues:Venue[];activities:Activity[];routes:Route[]};
+export type Player={id:string;handle:string;name:string;venue:string;cash:number;bank:number;created:string;admin:boolean;state:{stats:Record<string,number>;skills:Record<string,number>;story:string;pronouns:string;bio:string;interests:string;color:string;risk:boolean;dms:boolean;quest:number;heat:number;protectedUntil:string;detainedUntil:string;lastRead:string}};
+export type Action={id:string;kind:string;target:string;status:string;started_at:string;due_at:string;result:{text?:string;activity?:string}};
+export type Message={id:string;sender:string;handle:string;name:string;recipient:string|null;venue:string|null;body:string;created_at:string};
+export type Receipt={id:string;kind:string;note:string;created_at:string;amount:number;wallet:string;counterparty:string};
+export type Encounter={id:string;attacker:string;victim:string;attacker_handle:string;victim_handle:string;status:string;defense:string;amount:number;due_at:string};
+export type Case={id:string;status:string;appealed:boolean;service_done:boolean;evidence:{event:string;venue:string;amount:number};history:{stage:string;text:string;at:string}[]};
+export type Snapshot={player:Player;now:string;hour:number;weather:string;actions:Action[];inventory:{item:string;quantity:number}[];qualifications:{qualification:string}[];nearby:{id:string;handle:string;name:string;color:string;risk:string}[];messages:Message[];receipts:Receipt[];encounters:Encounter[];cases:Case[];blocks:{handle:string;id:string}[];reports?:{id:string;handle:string;reason:string;status:string}[]};

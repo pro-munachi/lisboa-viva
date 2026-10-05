@@ -1,0 +1,1182 @@
+{
+  "hubs": [
+    {
+      "id": "arroios",
+      "name": "Arroios",
+      "x": 610,
+      "y": 220,
+      "description": "O teu bairro, o teu começo."
+    },
+    {
+      "id": "baixa",
+      "name": "Baixa e Chiado",
+      "x": 570,
+      "y": 435,
+      "description": "Encontros entre praças e esplanadas."
+    },
+    {
+      "id": "alfama",
+      "name": "Alfama e Graça",
+      "x": 775,
+      "y": 340,
+      "description": "Vizinhos, música e vistas sobre o Tejo."
+    },
+    {
+      "id": "cais",
+      "name": "Cais do Sodré",
+      "x": 475,
+      "y": 530,
+      "description": "Comboios, barcos e noites por descobrir."
+    },
+    {
+      "id": "belem",
+      "name": "Belém",
+      "x": 270,
+      "y": 505,
+      "description": "Ofícios e passeios à beira-rio."
+    },
+    {
+      "id": "benfica",
+      "name": "Benfica",
+      "x": 315,
+      "y": 180,
+      "description": "O futebol faz parte da conversa."
+    },
+    {
+      "id": "cacilhas",
+      "name": "Cacilhas",
+      "x": 650,
+      "y": 735,
+      "description": "Uma vida do outro lado do rio."
+    },
+    {
+      "id": "carcavelos",
+      "name": "Carcavelos",
+      "x": 80,
+      "y": 600,
+      "description": "O Atlântico começa aqui."
+    },
+    {
+      "id": "estrela",
+      "name": "Estrela",
+      "x": 400,
+      "y": 345,
+      "description": "Jardins e pequenos rituais."
+    },
+    {
+      "id": "oriente",
+      "name": "Parque das Nações",
+      "x": 925,
+      "y": 155,
+      "description": "Novas ideias junto ao Tejo."
+    }
+  ],
+  "venues": [
+    {
+      "id": "home",
+      "name": "Casa da Amélia",
+      "hub": "arroios",
+      "type": "home",
+      "description": "Um quarto luminoso, uma cozinha partilhada e espaço para recomeçar.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Amélia · vizinha",
+      "capacity": 40,
+      "art": "home",
+      "transportAccess": "arroios"
+    },
+    {
+      "id": "cafe",
+      "name": "Café da Esquina",
+      "hub": "arroios",
+      "type": "cafe",
+      "description": "A bica sabe melhor quando já te conhecem pelo nome.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Rita · empregada de mesa",
+      "capacity": 40,
+      "art": "cafe",
+      "transportAccess": "arroios"
+    },
+    {
+      "id": "market",
+      "name": "Mercado do Bairro",
+      "hub": "arroios",
+      "type": "market",
+      "description": "Pão fresco, fruta e conversas de balcão.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Duarte · merceeiro",
+      "capacity": 40,
+      "art": "market",
+      "transportAccess": "arroios"
+    },
+    {
+      "id": "school",
+      "name": "Escola Oficina do Bairro",
+      "hub": "arroios",
+      "type": "school",
+      "description": "Aprende atendimento e abre a porta ao teu primeiro emprego.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Leonor · formadora",
+      "capacity": 40,
+      "art": "school",
+      "transportAccess": "arroios"
+    },
+    {
+      "id": "bank",
+      "name": "Caixa do Tejo",
+      "hub": "baixa",
+      "type": "bank",
+      "description": "Depósitos, levantamentos e o teu saldo sempre à mão.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "bank",
+      "transportAccess": "baixa"
+    },
+    {
+      "id": "shop",
+      "name": "Livraria Sete Colinas",
+      "hub": "baixa",
+      "type": "work",
+      "description": "Ajuda leitores a encontrar a próxima história.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Inês · livreira",
+      "capacity": 40,
+      "art": "work",
+      "transportAccess": "baixa"
+    },
+    {
+      "id": "square",
+      "name": "Praça do Comércio",
+      "hub": "baixa",
+      "type": "square",
+      "description": "Um ponto de encontro com os pés na cidade e os olhos no rio.",
+      "safe": false,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "square",
+      "transportAccess": "baixa"
+    },
+    {
+      "id": "court",
+      "name": "Tribunal da Cidade",
+      "hub": "baixa",
+      "type": "court",
+      "description": "Justiça fictícia, assistência e recurso por juízes NPC.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "court",
+      "transportAccess": "baixa"
+    },
+    {
+      "id": "view",
+      "name": "Miradouro das Andorinhas",
+      "hub": "alfama",
+      "type": "park",
+      "description": "Recupera o fôlego com Lisboa aos teus pés.",
+      "safe": false,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "park",
+      "transportAccess": "alfama"
+    },
+    {
+      "id": "fado",
+      "name": "Tasca da Aurora",
+      "hub": "alfama",
+      "type": "music",
+      "description": "Uma pequena sala onde a música encontra os vizinhos.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Aurora · fadista",
+      "capacity": 40,
+      "art": "music",
+      "transportAccess": "alfama"
+    },
+    {
+      "id": "police",
+      "name": "Esquadra do Bairro",
+      "hub": "alfama",
+      "type": "police",
+      "description": "Consulta os teus processos e a assistência jurídica NPC.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "police",
+      "transportAccess": "alfama"
+    },
+    {
+      "id": "club",
+      "name": "Maré Alta",
+      "hub": "cais",
+      "type": "club",
+      "description": "Dança, conversa e descobre o som da cidade.",
+      "safe": false,
+      "opens": 18,
+      "closes": 5,
+      "npc": "Vasco · DJ",
+      "capacity": 40,
+      "art": "club",
+      "transportAccess": "cais"
+    },
+    {
+      "id": "station",
+      "name": "Interface do Cais",
+      "hub": "cais",
+      "type": "station",
+      "description": "Cais do Sodré: comboio para a costa e barco para Cacilhas.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "station",
+      "transportAccess": "cais"
+    },
+    {
+      "id": "kitchen",
+      "name": "Cozinha da Bica",
+      "hub": "cais",
+      "type": "work",
+      "description": "Um turno curto, uma equipa e pratos a sair.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Marta · cozinheira",
+      "capacity": 40,
+      "art": "work",
+      "transportAccess": "cais"
+    },
+    {
+      "id": "bakery",
+      "name": "Forno do Poente",
+      "hub": "belem",
+      "type": "work",
+      "description": "Mãos na massa e natas acabadas de sair.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Tiago · pasteleiro",
+      "capacity": 40,
+      "art": "work",
+      "transportAccess": "belem"
+    },
+    {
+      "id": "riverside",
+      "name": "Passeio de Belém",
+      "hub": "belem",
+      "type": "park",
+      "description": "Caminha junto ao Tejo e recupera energia.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "park",
+      "transportAccess": "belem"
+    },
+    {
+      "id": "stadium",
+      "name": "Estádio da Luz",
+      "hub": "benfica",
+      "type": "stadium",
+      "description": "Futebol amador e um calendário de jogo simulado.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "stadium",
+      "transportAccess": "benfica"
+    },
+    {
+      "id": "gym",
+      "name": "Ginásio Primeiro Passo",
+      "hub": "benfica",
+      "type": "gym",
+      "description": "Uma rotina curta para ganhar forma, ao teu ritmo.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "gym",
+      "transportAccess": "benfica"
+    },
+    {
+      "id": "dock",
+      "name": "Cais de Cacilhas",
+      "hub": "cacilhas",
+      "type": "station",
+      "description": "Chegas à margem sul; a praia exige outra viagem.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "station",
+      "transportAccess": "cacilhas"
+    },
+    {
+      "id": "restaurant",
+      "name": "Mesa da Outra Margem",
+      "hub": "cacilhas",
+      "type": "work",
+      "description": "Atravessa o rio para um turno com vista.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Sofia · gerente",
+      "capacity": 40,
+      "art": "work",
+      "transportAccess": "cacilhas"
+    },
+    {
+      "id": "beach",
+      "name": "Praia de Carcavelos",
+      "hub": "carcavelos",
+      "type": "beach",
+      "description": "O comboio leva-te à estação; uma caminhada leva-te ao mar.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "beach",
+      "transportAccess": "carcavelos"
+    },
+    {
+      "id": "surf",
+      "name": "Escola de Surf Linha Azul",
+      "hub": "carcavelos",
+      "type": "surf",
+      "description": "Uma iniciação ao surf com equipamento incluído.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Nuno · instrutor",
+      "capacity": 40,
+      "art": "surf",
+      "transportAccess": "carcavelos"
+    },
+    {
+      "id": "garden",
+      "name": "Jardim da Estrela",
+      "hub": "estrela",
+      "type": "park",
+      "description": "Corre, descansa ou ajuda a cuidar do jardim.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "park",
+      "transportAccess": "estrela"
+    },
+    {
+      "id": "community",
+      "name": "Associação Mãos Abertas",
+      "hub": "estrela",
+      "type": "community",
+      "description": "Ajuda o bairro e cumpre tarefas de serviço comunitário.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "Beatriz · coordenadora",
+      "capacity": 40,
+      "art": "community",
+      "transportAccess": "estrela"
+    },
+    {
+      "id": "office",
+      "name": "Estúdio Horizonte",
+      "hub": "oriente",
+      "type": "work",
+      "description": "Pequenas tarefas técnicas com espaço para aprender.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "work",
+      "transportAccess": "oriente"
+    },
+    {
+      "id": "promenade",
+      "name": "Passeio dos Oceanos",
+      "hub": "oriente",
+      "type": "park",
+      "description": "Espaço para conversar e esticar as pernas junto ao rio.",
+      "safe": true,
+      "opens": 0,
+      "closes": 24,
+      "npc": "",
+      "capacity": 40,
+      "art": "park",
+      "transportAccess": "oriente"
+    }
+  ],
+  "activities": [
+    {
+      "id": "rest",
+      "name": "Descansar no teu quarto",
+      "venue": "home",
+      "seconds": 12,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "energy": 35,
+        "mood": 10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "shower",
+      "name": "Tomar um duche",
+      "venue": "home",
+      "seconds": 5,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "hygiene": 45
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "cook",
+      "name": "Preparar uma refeição",
+      "venue": "home",
+      "seconds": 8,
+      "cost": 250,
+      "reward": 0,
+      "skill": "cooking",
+      "effects": {
+        "hunger": 35,
+        "mood": 8
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "coffee",
+      "name": "Pedir uma bica",
+      "venue": "cafe",
+      "seconds": 4,
+      "cost": 100,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "energy": 10,
+        "social": 5
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "cafe_shift",
+      "name": "Servir às mesas",
+      "venue": "cafe",
+      "seconds": 20,
+      "cost": 0,
+      "reward": 1800,
+      "skill": "service",
+      "effects": {
+        "energy": -10,
+        "hygiene": -4
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "Uma mesa espera há mais tempo. O que fazes?",
+      "options": [
+        "Atendo por ordem de chegada",
+        "Ignoro a mesa"
+      ],
+      "answer": "Atendo por ordem de chegada",
+      "cooldown": 5
+    },
+    {
+      "id": "bread",
+      "name": "Comprar pão e fruta",
+      "venue": "market",
+      "seconds": 2,
+      "cost": 250,
+      "reward": 0,
+      "skill": "",
+      "effects": {},
+      "item": "meal",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "course",
+      "name": "Curso breve de atendimento",
+      "venue": "school",
+      "seconds": 20,
+      "cost": 500,
+      "reward": 0,
+      "skill": "service",
+      "effects": {},
+      "item": "",
+      "qualification": "hospitality",
+      "requires": "",
+      "question": "Um cliente recebeu um pedido errado. Qual é a melhor resposta?",
+      "options": [
+        "Ouvir e corrigir o pedido",
+        "Culpar o cliente"
+      ],
+      "answer": "Ouvir e corrigir o pedido",
+      "cooldown": 5
+    },
+    {
+      "id": "retail_shift",
+      "name": "Organizar encomendas",
+      "venue": "shop",
+      "seconds": 20,
+      "cost": 0,
+      "reward": 2000,
+      "skill": "service",
+      "effects": {
+        "energy": -10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "Como separas duas encomendas semelhantes?",
+      "options": [
+        "Confirmo o nome e a referência",
+        "Escolho ao acaso"
+      ],
+      "answer": "Confirmo o nome e a referência",
+      "cooldown": 5
+    },
+    {
+      "id": "meet",
+      "name": "Conversar na praça",
+      "venue": "square",
+      "seconds": 8,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "social": 20,
+        "mood": 10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "sunset",
+      "name": "Parar no miradouro",
+      "venue": "view",
+      "seconds": 8,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "mood": 20,
+        "energy": 10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "music",
+      "name": "Ouvir uma sessão de fado",
+      "venue": "fado",
+      "seconds": 12,
+      "cost": 400,
+      "reward": 0,
+      "skill": "music",
+      "effects": {
+        "mood": 20,
+        "social": 10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "dance",
+      "name": "Dançar e conhecer a pista",
+      "venue": "club",
+      "seconds": 12,
+      "cost": 400,
+      "reward": 0,
+      "skill": "music",
+      "effects": {
+        "social": 25,
+        "mood": 20,
+        "energy": -8
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "kitchen_shift",
+      "name": "Preparar o serviço",
+      "venue": "kitchen",
+      "seconds": 20,
+      "cost": 0,
+      "reward": 2600,
+      "skill": "cooking",
+      "effects": {
+        "energy": -12
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "hospitality",
+      "question": "Antes de preparar os pratos, o que verificas?",
+      "options": [
+        "Ingredientes e pedidos",
+        "Só a decoração"
+      ],
+      "answer": "Ingredientes e pedidos",
+      "cooldown": 5
+    },
+    {
+      "id": "bakery_shift",
+      "name": "Preparar uma fornada",
+      "venue": "bakery",
+      "seconds": 20,
+      "cost": 0,
+      "reward": 2000,
+      "skill": "cooking",
+      "effects": {
+        "energy": -12
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "A fornada está pronta. Qual é o próximo passo?",
+      "options": [
+        "Retirar e deixar arrefecer",
+        "Deixar no forno"
+      ],
+      "answer": "Retirar e deixar arrefecer",
+      "cooldown": 5
+    },
+    {
+      "id": "river_walk",
+      "name": "Passear à beira-rio",
+      "venue": "riverside",
+      "seconds": 8,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "health": 8,
+        "mood": 15
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "football",
+      "name": "Jogar uma partida amigável",
+      "venue": "stadium",
+      "seconds": 12,
+      "cost": 200,
+      "reward": 0,
+      "skill": "football",
+      "effects": {
+        "energy": -12,
+        "social": 20,
+        "health": 10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "Um colega está desmarcado. O que escolhes?",
+      "options": [
+        "Passar a bola",
+        "Tentar um remate"
+      ],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "workout",
+      "name": "Fazer um circuito de treino",
+      "venue": "gym",
+      "seconds": 12,
+      "cost": 300,
+      "reward": 0,
+      "skill": "fitness",
+      "effects": {
+        "energy": -10,
+        "health": 20,
+        "hygiene": -10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "dock_walk",
+      "name": "Passear pelo cais",
+      "venue": "dock",
+      "seconds": 6,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "mood": 12
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "waiter_shift",
+      "name": "Ajudar no almoço",
+      "venue": "restaurant",
+      "seconds": 20,
+      "cost": 0,
+      "reward": 2200,
+      "skill": "service",
+      "effects": {
+        "energy": -10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "Antes de servir a mesa, confirmas…",
+      "options": [
+        "Os pedidos de cada pessoa",
+        "A cor das cadeiras"
+      ],
+      "answer": "Os pedidos de cada pessoa",
+      "cooldown": 5
+    },
+    {
+      "id": "beach_walk",
+      "name": "Caminhar na praia",
+      "venue": "beach",
+      "seconds": 10,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "mood": 25,
+        "health": 10
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "surf_lesson",
+      "name": "Experimentar uma aula de surf",
+      "venue": "surf",
+      "seconds": 15,
+      "cost": 600,
+      "reward": 0,
+      "skill": "surfing",
+      "effects": {
+        "energy": -15,
+        "health": 15,
+        "social": 15
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "Antes de entrar na água, deves…",
+      "options": [
+        "Ouvir o instrutor e verificar as condições",
+        "Entrar sem orientação"
+      ],
+      "answer": "Ouvir o instrutor e verificar as condições",
+      "cooldown": 5
+    },
+    {
+      "id": "run",
+      "name": "Correr no jardim",
+      "venue": "garden",
+      "seconds": 10,
+      "cost": 0,
+      "reward": 0,
+      "skill": "fitness",
+      "effects": {
+        "energy": -8,
+        "health": 15
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "volunteer",
+      "name": "Ajudar a associação",
+      "venue": "community",
+      "seconds": 12,
+      "cost": 0,
+      "reward": 0,
+      "skill": "trust",
+      "effects": {
+        "social": 20,
+        "mood": 15
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "office_shift",
+      "name": "Rever uma página",
+      "venue": "office",
+      "seconds": 20,
+      "cost": 0,
+      "reward": 2100,
+      "skill": "technical",
+      "effects": {
+        "energy": -12
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "Uma ligação não funciona. O que fazes?",
+      "options": [
+        "Verifico o destino e corrijo",
+        "Escondo o erro"
+      ],
+      "answer": "Verifico o destino e corrijo",
+      "cooldown": 5
+    },
+    {
+      "id": "promenade_walk",
+      "name": "Passear junto ao rio",
+      "venue": "promenade",
+      "seconds": 8,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "mood": 15,
+        "health": 8
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "tickets",
+      "name": "Consultar ligações e descontrair",
+      "venue": "station",
+      "seconds": 4,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "mood": 5
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "legal_aid",
+      "name": "Falar com a assistência jurídica",
+      "venue": "police",
+      "seconds": 5,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "mood": 8
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    },
+    {
+      "id": "court_info",
+      "name": "Conhecer os teus direitos no jogo",
+      "venue": "court",
+      "seconds": 5,
+      "cost": 0,
+      "reward": 0,
+      "skill": "",
+      "effects": {
+        "mood": 8
+      },
+      "item": "",
+      "qualification": "",
+      "requires": "",
+      "question": "",
+      "options": [],
+      "answer": "",
+      "cooldown": 5
+    }
+  ],
+  "routes": [
+    {
+      "id": "green",
+      "fromHub": "arroios",
+      "toHub": "baixa",
+      "mode": "metro",
+      "seconds": 10,
+      "fare": 150,
+      "description": "Metro: Arroios → Baixa-Chiado. Caminhada final incluída.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    },
+    {
+      "id": "downhill",
+      "fromHub": "arroios",
+      "toHub": "alfama",
+      "mode": "walk",
+      "seconds": 15,
+      "fare": 0,
+      "description": "A pé pelas colinas. Inclui escadas.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": false
+    },
+    {
+      "id": "old_town",
+      "fromHub": "alfama",
+      "toHub": "baixa",
+      "mode": "walk",
+      "seconds": 10,
+      "fare": 0,
+      "description": "A pé até à Baixa.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": false
+    },
+    {
+      "id": "river",
+      "fromHub": "baixa",
+      "toHub": "cais",
+      "mode": "walk",
+      "seconds": 8,
+      "fare": 0,
+      "description": "Pela frente ribeirinha até ao Cais do Sodré.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": false
+    },
+    {
+      "id": "tram",
+      "fromHub": "baixa",
+      "toHub": "estrela",
+      "mode": "tram",
+      "seconds": 12,
+      "fare": 150,
+      "description": "Elétrico simulado com caminhada até à paragem.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    },
+    {
+      "id": "west",
+      "fromHub": "estrela",
+      "toHub": "belem",
+      "mode": "bus",
+      "seconds": 15,
+      "fare": 150,
+      "description": "Autocarro simulado com ligação local.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    },
+    {
+      "id": "cascais1",
+      "fromHub": "cais",
+      "toHub": "belem",
+      "mode": "train",
+      "seconds": 12,
+      "fare": 180,
+      "description": "Linha de Cascais: Cais do Sodré → Belém.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    },
+    {
+      "id": "cascais2",
+      "fromHub": "belem",
+      "toHub": "carcavelos",
+      "mode": "train",
+      "seconds": 18,
+      "fare": 220,
+      "description": "Linha de Cascais até Carcavelos + caminhada até à praia.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    },
+    {
+      "id": "ferry",
+      "fromHub": "cais",
+      "toHub": "cacilhas",
+      "mode": "ferry",
+      "seconds": 12,
+      "fare": 180,
+      "description": "Barco Cais do Sodré → Cacilhas. Não termina numa praia.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    },
+    {
+      "id": "stadium",
+      "fromHub": "baixa",
+      "toHub": "benfica",
+      "mode": "metro",
+      "seconds": 15,
+      "fare": 180,
+      "description": "Metro até à zona do Colégio Militar/Luz + caminhada.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    },
+    {
+      "id": "east",
+      "fromHub": "arroios",
+      "toHub": "oriente",
+      "mode": "metro",
+      "seconds": 16,
+      "fare": 180,
+      "description": "Metro com transbordo e caminhada final até ao recinto.",
+      "opens": 0,
+      "closes": 24,
+      "frequency": 0,
+      "passEligible": true
+    }
+  ],
+  "balance": {
+    "startingCash": 3500,
+    "startingBank": 10000,
+    "newcomerSeconds": 600,
+    "robberyLimit": 10000,
+    "robberyPercent": 10,
+    "victimProtectionSeconds": 3600,
+    "pairCooldownSeconds": 86400,
+    "offlineDecayCapSeconds": 1800
+  },
+  "research": [
+    {
+      "url": "https://www.cp.pt/info/documents/d/cp/comboios-urbanos-lisboa-cascais",
+      "supports": "Cais do Sodré–Belém–Carcavelos corridor; all game times/fares are invented."
+    },
+    {
+      "url": "https://ttsl.pt/avisos/cacilhas-cais-do-sodre-a-partir-de-28-abr/",
+      "supports": "Cais do Sodré–Cacilhas ferry endpoints; no real-time timetable imported."
+    }
+  ]
+}

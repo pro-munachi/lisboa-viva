@@ -1,0 +1,1145 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Lisboa Viva API",
+    "version": "0.1.0",
+    "description": "Go-authoritative pt-PT game. All mutations require an allowed Origin and an authenticated HttpOnly session except auth. Never trust client amounts for wages or fares."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "summary": "Database health",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        }
+      }
+    },
+    "/v1/world": {
+      "get": {
+        "summary": "Public content; correct assessment answers are never included",
+        "responses": {
+          "200": {
+            "description": "Authorized response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/World"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        }
+      }
+    },
+    "/v1/auth": {
+      "post": {
+        "summary": "Register an adult character or log in",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "mode",
+                  "handle",
+                  "password"
+                ],
+                "properties": {
+                  "mode": {
+                    "type": "string"
+                  },
+                  "handle": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "story": {
+                    "type": "string"
+                  },
+                  "pronouns": {
+                    "type": "string"
+                  },
+                  "bio": {
+                    "type": "string"
+                  },
+                  "interests": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/logout": {
+      "post": {
+        "summary": "Revoke current session",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/state": {
+      "get": {
+        "summary": "Authorized player snapshot and current venue messages; heartbeat",
+        "responses": {
+          "200": {
+            "description": "Authorized response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/profile": {
+      "get": {
+        "summary": "Public character identity by handle",
+        "responses": {
+          "200": {
+            "description": "Public identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "handle"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "handle": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/command": {
+      "post": {
+        "summary": "Idempotent authoritative command",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Command"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ws": {
+      "get": {
+        "summary": "WebSocket upgrade; origin/session checked, events trigger authorized snapshot refresh",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Localized error key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          },
+          "403": {
+            "description": "Not authorized"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Command": {
+        "type": "object",
+        "required": [
+          "kind",
+          "key"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "activity",
+              "travel",
+              "cancel",
+              "consume",
+              "deposit",
+              "withdraw",
+              "transfer",
+              "message",
+              "read",
+              "risk",
+              "dm_permission",
+              "block",
+              "unblock",
+              "report",
+              "quest",
+              "rob",
+              "defend",
+              "appeal",
+              "service",
+              "admin_adjust",
+              "admin_ban",
+              "admin_report",
+              "admin_setting"
+            ]
+          },
+          "target": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "text": {
+            "type": "string"
+          },
+          "choice": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 100
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Hub": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "x",
+          "y",
+          "description"
+        ]
+      },
+      "Venue": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "hub": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "safe": {
+            "type": "boolean"
+          },
+          "opens": {
+            "type": "integer"
+          },
+          "closes": {
+            "type": "integer"
+          },
+          "npc": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "hub",
+          "type",
+          "description",
+          "safe",
+          "opens",
+          "closes",
+          "npc",
+          "capacity"
+        ]
+      },
+      "Activity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "venue": {
+            "type": "string"
+          },
+          "seconds": {
+            "type": "integer"
+          },
+          "cost": {
+            "type": "integer"
+          },
+          "reward": {
+            "type": "integer"
+          },
+          "skill": {
+            "type": "string"
+          },
+          "effects": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "item": {
+            "type": "string"
+          },
+          "qualification": {
+            "type": "string"
+          },
+          "requires": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "venue",
+          "seconds",
+          "cost",
+          "reward",
+          "skill",
+          "effects",
+          "item",
+          "qualification",
+          "requires",
+          "question",
+          "options"
+        ]
+      },
+      "Route": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fromHub": {
+            "type": "string"
+          },
+          "toHub": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "seconds": {
+            "type": "integer"
+          },
+          "fare": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "fromHub",
+          "toHub",
+          "mode",
+          "seconds",
+          "fare",
+          "description"
+        ]
+      },
+      "World": {
+        "type": "object",
+        "properties": {
+          "hubs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Hub"
+            }
+          },
+          "venues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Venue"
+            }
+          },
+          "activities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            }
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            }
+          }
+        },
+        "required": [
+          "hubs",
+          "venues",
+          "activities",
+          "routes"
+        ]
+      },
+      "Player": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "handle": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "venue": {
+            "type": "string"
+          },
+          "cash": {
+            "type": "integer"
+          },
+          "bank": {
+            "type": "integer"
+          },
+          "created": {
+            "type": "string"
+          },
+          "admin": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "object",
+            "properties": {
+              "stats": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "skills": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "story": {
+                "type": "string"
+              },
+              "pronouns": {
+                "type": "string"
+              },
+              "bio": {
+                "type": "string"
+              },
+              "interests": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string"
+              },
+              "risk": {
+                "type": "boolean"
+              },
+              "dms": {
+                "type": "boolean"
+              },
+              "quest": {
+                "type": "integer"
+              },
+              "heat": {
+                "type": "integer"
+              },
+              "protectedUntil": {
+                "type": "string"
+              },
+              "detainedUntil": {
+                "type": "string"
+              },
+              "lastRead": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "stats",
+              "skills",
+              "story",
+              "pronouns",
+              "bio",
+              "interests",
+              "color",
+              "risk",
+              "dms",
+              "quest",
+              "heat",
+              "protectedUntil",
+              "detainedUntil",
+              "lastRead"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "handle",
+          "name",
+          "venue",
+          "cash",
+          "bank",
+          "created",
+          "admin",
+          "state"
+        ]
+      },
+      "Action": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "due_at": {
+            "type": "string"
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "activity": {
+                "type": "string"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "target",
+          "status",
+          "started_at",
+          "due_at",
+          "result"
+        ]
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "handle": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string",
+            "nullable": true
+          },
+          "venue": {
+            "type": "string",
+            "nullable": true
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sender",
+          "handle",
+          "name",
+          "recipient",
+          "venue",
+          "body",
+          "created_at"
+        ]
+      },
+      "Receipt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "wallet": {
+            "type": "string"
+          },
+          "counterparty": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "note",
+          "created_at",
+          "amount",
+          "wallet",
+          "counterparty"
+        ]
+      },
+      "Encounter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "attacker": {
+            "type": "string"
+          },
+          "victim": {
+            "type": "string"
+          },
+          "attacker_handle": {
+            "type": "string"
+          },
+          "victim_handle": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "defense": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "due_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "attacker",
+          "victim",
+          "attacker_handle",
+          "victim_handle",
+          "status",
+          "defense",
+          "amount",
+          "due_at"
+        ]
+      },
+      "Case": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "appealed": {
+            "type": "boolean"
+          },
+          "service_done": {
+            "type": "boolean"
+          },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string"
+              },
+              "venue": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "event",
+              "venue",
+              "amount"
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stage": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "stage",
+                "text",
+                "at"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "appealed",
+          "service_done",
+          "evidence",
+          "history"
+        ]
+      },
+      "Snapshot": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "$ref": "#/components/schemas/Player"
+          },
+          "now": {
+            "type": "string"
+          },
+          "hour": {
+            "type": "integer"
+          },
+          "weather": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Action"
+            }
+          },
+          "inventory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "item",
+                "quantity"
+              ]
+            }
+          },
+          "qualifications": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "qualification": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "qualification"
+              ]
+            }
+          },
+          "nearby": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "handle": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string"
+                },
+                "risk": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "handle",
+                "name",
+                "color",
+                "risk"
+              ]
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Receipt"
+            }
+          },
+          "encounters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Encounter"
+            }
+          },
+          "cases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Case"
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "handle": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "handle",
+                "id"
+              ]
+            }
+          },
+          "reports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "handle": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "handle",
+                "reason",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "player",
+          "now",
+          "hour",
+          "weather",
+          "actions",
+          "inventory",
+          "qualifications",
+          "nearby",
+          "messages",
+          "receipts",
+          "encounters",
+          "cases",
+          "blocks"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "lv_session"
+      }
+    }
+  }
+}
