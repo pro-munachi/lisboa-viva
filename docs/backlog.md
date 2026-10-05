@@ -1,7 +1,7 @@
 # Remaining work
 
 ## First-release hardening and completeness
-- Complete pt-PT localization-key extraction and optional English selection/fallback.
+- Move the current Portuguese/English presentation dictionary into structured locale files as the content set grows.
 - Departure windows/frequencies, pass and last-mile fields as first-class data.
 - Make every balancing constant configurable and validate tuning values on startup.
 - Add richer NPC schedules and story-specific relationship memory; appearance currently has three colour choices.

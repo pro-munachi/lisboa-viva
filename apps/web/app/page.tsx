@@ -52,7 +52,19 @@ import {
 } from "lucide-react";
 import CityMap, { VenueScene } from "./CityMap";
 import type { World, Snapshot, Activity, Venue, Route } from "./types";
-import { pt, euro, time, statNames, skillNames, modes, kinds } from "./i18n";
+import {
+  pt,
+  euro,
+  time,
+  statNames,
+  skillNames,
+  modes,
+  kinds,
+  setI18nLocale,
+  createDomTranslationState,
+  translateDom,
+  type Locale,
+} from "./i18n";
 import type { components } from "./api.generated";
 type Cmd = components["schemas"]["Command"];
 const iconFor = (t: string) =>
@@ -138,6 +150,40 @@ function Modal({
     </div>
   );
 }
+
+function LanguageToggle({
+  locale,
+  onChange,
+}: {
+  locale: Locale;
+  onChange: (locale: Locale) => void;
+}) {
+  return (
+    <div
+      className="language-toggle"
+      role="group"
+      aria-label="Idioma / Language"
+    >
+      <button
+        type="button"
+        className={locale === "pt" ? "active" : ""}
+        aria-pressed={locale === "pt"}
+        onClick={() => onChange("pt")}
+      >
+        PT
+      </button>
+      <button
+        type="button"
+        className={locale === "en" ? "active" : ""}
+        aria-pressed={locale === "en"}
+        onClick={() => onChange("en")}
+      >
+        EN
+      </button>
+    </div>
+  );
+}
+
 export default function Game() {
   const [world, setWorld] = useState<World | null>(null),
     [state, setState] = useState<Snapshot | null>(null),
@@ -155,10 +201,54 @@ export default function Game() {
     [tick, setTick] = useState(Date.now()),
     [filter, setFilter] = useState("all"),
     [routePreference, setRoutePreference] = useState("fast"),
-    [mobilePanel, setMobilePanel] = useState(false);
+    [mobilePanel, setMobilePanel] = useState(false),
+    [locale, setLocale] = useState<Locale>("pt"),
+    [localeReady, setLocaleReady] = useState(false);
   const pending = useRef<Record<string, string>>({});
   const booted = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const translationState = useRef(createDomTranslationState());
+  setI18nLocale(locale);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("lv-locale");
+    if (saved === "en" || saved === "pt") setLocale(saved);
+    setLocaleReady(true);
+  }, []);
+  useEffect(() => {
+    if (!localeReady) return;
+    localStorage.setItem("lv-locale", locale);
+    document.documentElement.lang = locale === "en" ? "en-GB" : "pt-PT";
+    document.title =
+      locale === "en"
+        ? "Lisboa Viva — the city is yours"
+        : "Lisboa Viva — a cidade é tua";
+    const apply = (node: Node = document.body) =>
+      translateDom(node, locale, translationState.current);
+    apply();
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "characterData") apply(mutation.target);
+        else {
+          if (mutation.type === "attributes") apply(mutation.target);
+          mutation.addedNodes.forEach((node) => apply(node));
+        }
+      }
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["aria-label", "placeholder", "title"],
+    });
+    return () => observer.disconnect();
+  }, [locale, localeReady]);
+
+  function changeLocale(next: Locale) {
+    setI18nLocale(next);
+    setLocale(next);
+  }
   const notify = useCallback((s: string) => {
     setToast(s);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -389,6 +479,7 @@ export default function Game() {
           </button>
         </nav>
         <div className="top-right">
+          <LanguageToggle locale={locale} onChange={changeLocale} />
           <span
             className={"connection " + (connection === "offline" ? "bad" : "")}
           >
@@ -1122,6 +1213,8 @@ export default function Game() {
             setPhone("");
             booted.current = false;
           }}
+          locale={locale}
+          setLocale={changeLocale}
         />
       )}
       <button className="mobile-explore" onClick={() => setMobilePanel(true)}>
@@ -1358,6 +1451,8 @@ function Phone({
   go,
   notify,
   logout,
+  locale,
+  setLocale,
 }: {
   tab: string;
   setTab: (s: string) => void;
@@ -1369,6 +1464,8 @@ function Phone({
   go: (v: Venue) => void;
   notify: (s: string) => void;
   logout: () => Promise<void>;
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
 }) {
   const p = state.player;
   const [recipient, setRecipient] = useState(""),
@@ -2030,6 +2127,13 @@ function Phone({
                 <h3>{p.name}</h3>
                 <p>@{p.handle}</p>
               </div>
+            </div>
+            <div className="settings-language">
+              <div>
+                <strong>Idioma / Language</strong>
+                <small>Português (Portugal) · English</small>
+              </div>
+              <LanguageToggle locale={locale} onChange={setLocale} />
             </div>
             <div className="callout">
               Idioma: Português (Portugal). O jogo respeita a preferência de
