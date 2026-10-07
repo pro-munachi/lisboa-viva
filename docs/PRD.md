@@ -1,9 +1,10 @@
 # ROAM — Product Requirements Document
 
-**Status:** Draft for Bassey and Munachi to review
-**Date:** 6 October 2026
-**Working name:** ROAM; final brand to be agreed
-**Proposed pilot:** Lisbon
+**Status:** Draft for Bassey and Munachi to review  
+**Date:** 6 October 2026  
+**Working name:** ROAM; final brand to be agreed  
+**Proposed pilot:** Lisbon  
+
 **Target market:** Travelers visiting European and US cities
 
 ## 1. Product concept
