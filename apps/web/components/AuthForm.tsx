@@ -45,15 +45,15 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         setError(
           authError[result.error || ""] ||
             (response.status === 503
-              ? "O serviço de contas ainda não está disponível."
-              : "Não foi possível continuar."),
+              ? "The account service is not available yet."
+              : "We could not continue."),
         );
         return;
       }
       router.replace("/");
       router.refresh();
     } catch {
-      setError("Não foi possível ligar ao serviço de contas.");
+      setError("We could not connect to the account service.");
     } finally {
       setBusy(false);
     }
@@ -71,13 +71,11 @@ export default function AuthForm({ mode }: { mode: Mode }) {
           <span>Lisbon. Your way.</span>
         </Link>
         <div className="auth-story-copy">
-          <span className="eyebrow">LISBOA, AO TEU RITMO</span>
-          <h1>
-            {registering ? "Começa uma nova história." : "Bem-vindo de volta."}
-          </h1>
+          <span className="eyebrow">LISBON, YOUR WAY</span>
+          <h1>{registering ? "Start a new story." : "Welcome back."}</h1>
           <p>
-            Guarda a tua conta, escolhe como vives a cidade e entra no mapa com
-            uma sessão protegida.
+            Save your account, choose how you experience the city, and enter the
+            map with a protected session.
           </p>
           <div className="auth-place-row" aria-hidden="true">
             <span>
@@ -95,28 +93,28 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       <section className="auth-panel">
         <div className="auth-card">
           <span className="eyebrow">
-            {registering ? "CRIAR CONTA" : "ENTRAR"}
+            {registering ? "CREATE ACCOUNT" : "SIGN IN"}
           </span>
           <h2>
-            {registering ? "Quem és em Lisboa?" : "Continua a tua viagem"}
+            {registering ? "Who are you in Lisbon?" : "Continue your journey"}
           </h2>
           <p className="auth-intro">
             {registering
-              ? "A tua escolha ajuda-nos a adaptar o início da experiência."
-              : "Usa o teu nome de utilizador ou email."}
+              ? "Your choice helps us tailor the start of your experience."
+              : "Use your username or email address."}
           </p>
           <form onSubmit={submit} className="auth-form">
             {registering ? (
               <>
                 <label>
-                  Nome de utilizador
+                  Username
                   <input
                     name="handle"
                     autoComplete="username"
                     minLength={3}
                     maxLength={24}
                     pattern="[a-z0-9_]+"
-                    placeholder="ex.: ines_em_lisboa"
+                    placeholder="e.g. ines_in_lisbon"
                     required
                   />
                 </label>
@@ -126,20 +124,20 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                     name="email"
                     type="email"
                     autoComplete="email"
-                    placeholder="tu@exemplo.pt"
+                    placeholder="you@example.com"
                     required
                   />
                 </label>
                 <fieldset className="auth-type">
-                  <legend>Vais explorar como…</legend>
+                  <legend>You will explore as…</legend>
                   <button
                     type="button"
                     aria-pressed={userType === "tourist"}
                     onClick={() => setUserType("tourist")}
                   >
                     <Compass size={20} />
-                    <strong>Visitante</strong>
-                    <span>Estou a descobrir Lisboa.</span>
+                    <strong>Tourist</strong>
+                    <span>I am discovering Lisbon.</span>
                   </button>
                   <button
                     type="button"
@@ -147,25 +145,25 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                     onClick={() => setUserType("local")}
                   >
                     <Home size={20} />
-                    <strong>Residente</strong>
-                    <span>Lisboa faz parte do meu dia.</span>
+                    <strong>Local</strong>
+                    <span>Lisbon is part of my daily life.</span>
                   </button>
                 </fieldset>
               </>
             ) : (
               <label>
-                Nome de utilizador ou email
+                Username or email
                 <input
                   name="identity"
                   autoComplete="username"
-                  placeholder="nome ou email"
+                  placeholder="username or email"
                   required
                   autoFocus
                 />
               </label>
             )}
             <label>
-              Palavra-passe
+              Password
               <input
                 name="password"
                 type="password"
@@ -174,12 +172,12 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                 maxLength={72}
                 required
               />
-              {registering && <small>Entre 10 e 72 caracteres.</small>}
+              {registering && <small>Between 10 and 72 characters.</small>}
             </label>
             {registering && (
               <label className="auth-check">
                 <input name="adultConfirmed" type="checkbox" required />
-                <span>Confirmo que tenho pelo menos 18 anos.</span>
+                <span>I confirm that I am at least 18 years old.</span>
               </label>
             )}
             {error && (
@@ -192,14 +190,14 @@ export default function AuthForm({ mode }: { mode: Mode }) {
               disabled={busy}
               type="submit"
             >
-              {busy ? "A verificar…" : registering ? "Criar conta" : "Entrar"}
+              {busy ? "Checking…" : registering ? "Create account" : "Sign in"}
               {!busy && <ArrowRight size={18} />}
             </button>
           </form>
           <p className="auth-switch">
-            {registering ? "Já tens conta?" : "Ainda não tens conta?"}{" "}
+            {registering ? "Already have an account?" : "New to ROAM?"}{" "}
             <Link href={registering ? "/login" : "/register"}>
-              {registering ? "Entrar" : "Criar conta"}
+              {registering ? "Sign in" : "Create account"}
             </Link>
           </p>
         </div>

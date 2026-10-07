@@ -9,7 +9,7 @@ The account service is a Go HTTP service backed by PostgreSQL. Next.js exposes s
 - `/` is optimistically redirected to `/login` when no session cookie exists, then validates the session through the protected `me` endpoint before rendering the city.
 - The account control identifies the active handle and user type and provides logout.
 
-All authored authentication copy defaults to European Portuguese.
+All authored authentication copy defaults to English. European Portuguese remains a supported account locale.
 
 ## Endpoints
 

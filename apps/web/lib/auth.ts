@@ -16,15 +16,14 @@ export type AuthUser = {
 };
 
 export const authError: Record<string, string> = {
-  adult_confirmation_required: "Confirma que tens pelo menos 18 anos.",
-  credentials: "O identificador ou a palavra-passe não estão corretos.",
-  email_taken: "Já existe uma conta com este email.",
-  handle_taken: "Este nome de utilizador já está ocupado.",
-  invalid_input: "Revê o email e o nome de utilizador.",
-  invalid_json: "Não foi possível ler os dados enviados.",
-  invalid_password: "Usa uma palavra-passe entre 10 e 72 caracteres.",
-  invalid_user_type: "Escolhe visitante ou residente.",
-  rate_limited:
-    "Foram feitas demasiadas tentativas. Tenta novamente dentro de um minuto.",
-  server_error: "O serviço de contas está temporariamente indisponível.",
+  adult_confirmation_required: "Confirm that you are at least 18 years old.",
+  credentials: "The username, email, or password is incorrect.",
+  email_taken: "An account already uses this email address.",
+  handle_taken: "This username is already taken.",
+  invalid_input: "Check the email address and username.",
+  invalid_json: "We could not read the submitted information.",
+  invalid_password: "Use a password between 10 and 72 characters.",
+  invalid_user_type: "Choose tourist or local.",
+  rate_limited: "Too many attempts. Try again in one minute.",
+  server_error: "The account service is temporarily unavailable.",
 };

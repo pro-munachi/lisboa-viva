@@ -117,7 +117,7 @@ components:
         email: { type: string, format: email }
         userType: { type: string, enum: [tourist, local] }
         accountStatus: { type: string, enum: [active, suspended, banned, deletion_pending] }
-        preferredLocale: { type: string, enum: [pt-PT, en] }
+        preferredLocale: { type: string, enum: [en, pt-PT], default: en }
         timezone: { type: string }
         roles:
           type: array

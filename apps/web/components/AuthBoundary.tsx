@@ -38,10 +38,10 @@ export default function AuthBoundary({ children }: { children: ReactNode }) {
   if (unavailable) {
     return (
       <main className="auth-status">
-        <h1>Não foi possível validar a sessão.</h1>
-        <p>Confirma que o serviço de contas está ativo e tenta novamente.</p>
+        <h1>We could not verify your session.</h1>
+        <p>Check that the account service is running and try again.</p>
         <button className="primary" onClick={() => location.reload()}>
-          Tentar novamente
+          Try again
         </button>
       </main>
     );
@@ -49,24 +49,20 @@ export default function AuthBoundary({ children }: { children: ReactNode }) {
   if (!user) {
     return (
       <main className="auth-status" aria-live="polite">
-        <p>A validar a sessão…</p>
+        <p>Checking your session…</p>
       </main>
     );
   }
   return (
     <>
       {children}
-      <aside className="auth-account" aria-label="Conta ativa">
+      <aside className="auth-account" aria-label="Active account">
         <UserRound size={16} />
         <span>
           <strong>@{user.handle}</strong>
-          <small>{user.userType === "local" ? "Residente" : "Visitante"}</small>
+          <small>{user.userType === "local" ? "Local" : "Tourist"}</small>
         </span>
-        <button
-          onClick={logout}
-          aria-label="Terminar sessão"
-          title="Terminar sessão"
-        >
+        <button onClick={logout} aria-label="Sign out" title="Sign out">
           <LogOut size={16} />
         </button>
       </aside>
