@@ -27,6 +27,7 @@ type MultiplayerState = {
   setEnabled: (enabled: boolean) => void;
   setLocation: (location: PresenceLocation) => void;
   appearance: CharacterAppearance;
+  location: PresenceLocation;
 };
 
 const MultiplayerContext = createContext<MultiplayerState | null>(null);
@@ -43,6 +44,9 @@ export function MultiplayerProvider({
     longitude: -9.1459,
     area: "Cais do Sodré",
   });
+  const [visibleLocation, setVisibleLocation] = useState<PresenceLocation>({
+    ...location.current,
+  });
   const [peers, setPeers] = useState<MultiplayerPeer[]>([]);
   const [status, setStatus] =
     useState<MultiplayerState["status"]>("connecting");
@@ -53,6 +57,13 @@ export function MultiplayerProvider({
   const setLocation = useCallback((next: PresenceLocation) => {
     if (!validPresenceLocation(next)) return;
     location.current = next;
+    setVisibleLocation((current) =>
+      current.latitude === next.latitude &&
+      current.longitude === next.longitude &&
+      current.area === next.area
+        ? current
+        : { ...next },
+    );
     client.current?.setLocation(next);
   }, []);
   const setEnabled = useCallback((next: boolean) => {
@@ -102,8 +113,9 @@ export function MultiplayerProvider({
       setEnabled,
       setLocation,
       appearance: user.appearance,
+      location: visibleLocation,
     }),
-    [peers, status, enabled, setLocation, user.appearance],
+    [peers, status, enabled, setLocation, user.appearance, visibleLocation],
   );
   return (
     <MultiplayerContext.Provider value={value}>

@@ -26,6 +26,9 @@ var chatRoomsJSON []byte
 var chatRooms = loadChatRooms(chatRoomsJSON)
 var chatUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+const nearbyRoomPrefix = "nearby:"
+const directRoomPrefix = "direct:"
+
 func loadChatRooms(data []byte) map[string]struct{} {
 	var names []string
 	if err := json.Unmarshal(data, &names); err != nil || len(names) == 0 {
@@ -45,8 +48,17 @@ func loadChatRooms(data []byte) map[string]struct{} {
 }
 
 func validChatRoom(room string) bool {
-	_, allowed := chatRooms[room]
-	return allowed
+	if _, allowed := chatRooms[room]; allowed {
+		return true
+	}
+	if strings.HasPrefix(room, nearbyRoomPrefix) {
+		area := strings.TrimPrefix(room, nearbyRoomPrefix)
+		return len(area) >= 1 && len([]byte(area)) <= 80 && area == strings.TrimSpace(area) && !strings.ContainsAny(area, "\r\n\x00")
+	}
+	if strings.HasPrefix(room, directRoomPrefix) {
+		return chatUUID.MatchString(strings.TrimPrefix(room, directRoomPrefix))
+	}
+	return false
 }
 
 type chatInput struct {
@@ -136,7 +148,7 @@ type chatPage struct {
 }
 
 type chatStore interface {
-	list(context.Context, chatQuery) (chatPage, error)
+	list(context.Context, string, chatQuery) (chatPage, error)
 	post(context.Context, string, chatInput) (chatMessage, bool, error)
 }
 
@@ -158,7 +170,7 @@ func (handler *chatHandler) get(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	page, err := handler.store.list(r.Context(), query)
+	page, err := handler.store.list(r.Context(), currentUser(r).ID, query)
 	if err != nil {
 		fail(w, err)
 		return
@@ -242,6 +254,46 @@ func (limiter *chatLimiter) allow(account string, now time.Time) bool {
 
 type pgChatStore struct{ db *pgxpool.Pool }
 
+type chatRoomQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func resolveChatRoom(ctx context.Context, q chatRoomQuerier, userID, requested string) (string, error) {
+	if _, allowed := chatRooms[requested]; allowed {
+		return requested, nil
+	}
+	if strings.HasPrefix(requested, nearbyRoomPrefix) {
+		area := strings.TrimPrefix(requested, nearbyRoomPrefix)
+		var current string
+		err := q.QueryRow(ctx, `SELECT area FROM player_presence
+			WHERE user_id=$1 AND last_seen_at>now()-interval '45 seconds'`, userID).Scan(&current)
+		if err != nil || current != area {
+			return "", apiError("chat_presence_required")
+		}
+		return requested, nil
+	}
+	if strings.HasPrefix(requested, directRoomPrefix) {
+		peerID := strings.ToLower(strings.TrimPrefix(requested, directRoomPrefix))
+		if !chatUUID.MatchString(peerID) || peerID == strings.ToLower(userID) {
+			return "", apiError("invalid_room")
+		}
+		var active bool
+		if err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users
+			WHERE id=$1 AND account_status='active' AND deleted_at IS NULL)`, peerID).Scan(&active); err != nil {
+			return "", err
+		}
+		if !active {
+			return "", apiError("invalid_room")
+		}
+		ids := []string{strings.ToLower(userID), peerID}
+		if ids[1] < ids[0] {
+			ids[0], ids[1] = ids[1], ids[0]
+		}
+		return directRoomPrefix + ids[0] + ":" + ids[1], nil
+	}
+	return "", apiError("invalid_room")
+}
+
 const chatColumns = `m.id,m.room,m.body,m.sent_at,u.id::text,u.handle,u.user_type::text`
 
 func scanChatMessage(row pgx.Row) (chatMessage, error) {
@@ -257,15 +309,19 @@ func scanChatMessage(row pgx.Row) (chatMessage, error) {
 	return message, nil
 }
 
-func (store pgChatStore) list(ctx context.Context, query chatQuery) (chatPage, error) {
+func (store pgChatStore) list(ctx context.Context, userID string, query chatQuery) (chatPage, error) {
 	page := chatPage{Messages: make([]chatMessage, 0, query.Limit)}
+	storageRoom, err := resolveChatRoom(ctx, store.db, userID, query.Room)
+	if err != nil {
+		return page, err
+	}
 	statement := `SELECT ` + chatColumns + ` FROM chat_messages m JOIN users u ON u.id=m.user_id
 		WHERE m.room=$1 ORDER BY m.id DESC LIMIT $2`
-	args := []any{query.Room, query.Limit + 1}
+	args := []any{storageRoom, query.Limit + 1}
 	if query.After != nil {
 		statement = `SELECT ` + chatColumns + ` FROM chat_messages m JOIN users u ON u.id=m.user_id
 			WHERE m.room=$1 AND m.id>$2 ORDER BY m.id ASC LIMIT $3`
-		args = []any{query.Room, *query.After, query.Limit + 1}
+		args = []any{storageRoom, *query.After, query.Limit + 1}
 	}
 	rows, err := store.db.Query(ctx, statement, args...)
 	if err != nil {
@@ -277,6 +333,7 @@ func (store pgChatStore) list(ctx context.Context, query chatQuery) (chatPage, e
 		if err != nil {
 			return page, err
 		}
+		message.Room = query.Room
 		page.Messages = append(page.Messages, message)
 	}
 	if err := rows.Err(); err != nil {
@@ -309,11 +366,19 @@ type chatTransaction interface {
 }
 
 func (store pgChatStore) post(ctx context.Context, userID string, input chatInput) (chatMessage, bool, error) {
+	requestedRoom := input.Room
+	storageRoom, err := resolveChatRoom(ctx, store.db, userID, requestedRoom)
+	if err != nil {
+		return chatMessage{}, false, err
+	}
+	input.Room = storageRoom
 	tx, err := store.db.Begin(ctx)
 	if err != nil {
 		return chatMessage{}, false, err
 	}
-	return postChatMessage(ctx, tx, userID, input)
+	message, created, err := postChatMessage(ctx, tx, userID, input)
+	message.Room = requestedRoom
+	return message, created, err
 }
 
 func postChatMessage(ctx context.Context, tx chatTransaction, userID string, input chatInput) (chatMessage, bool, error) {

@@ -185,7 +185,8 @@ const transitHubFor = (hotspot: WorldHotspot | null) =>
   );
 function RoamExperience({ user }: { user: AuthUser }) {
   const storage = accountStorageKeys(user.id);
-  const { peers, setLocation, appearance } = useMultiplayer();
+  const { peers, setLocation, appearance, location, enabled } =
+    useMultiplayer();
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -1063,6 +1064,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
           user={user}
           cityId="lisbon"
           place={chatPlace}
+          peers={peers}
+          nearbyArea={enabled ? location.area : undefined}
           onClose={() => {
             setChatOpen(false);
             chatTrigger.current?.focus();

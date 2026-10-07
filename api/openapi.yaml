@@ -151,6 +151,61 @@ paths:
                   expiresInSeconds: { type: integer, example: 45 }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+  /chat/messages:
+    get:
+      summary: Read a public, nearby, or two-person conversation
+      security: [{ session: [] }]
+      parameters:
+        - { in: query, name: room, required: true, schema: { type: string } }
+        - {
+            in: query,
+            name: after,
+            schema: { type: string, pattern: "^[0-9]+$" },
+          }
+        - {
+            in: query,
+            name: limit,
+            schema: { type: integer, minimum: 1, maximum: 50, default: 50 },
+          }
+      responses:
+        "200":
+          description: Messages ordered by cursor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Send a message as the authenticated player
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [room, body, clientId]
+              properties:
+                room: { type: string }
+                body: { type: string, minLength: 1, maxLength: 1000 }
+                clientId: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { $ref: "#/components/schemas/ChatMessage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     session:
@@ -273,3 +328,31 @@ components:
         roles:
           type: array
           items: { type: string }
+    ChatAuthor:
+      type: object
+      required: [id, handle, userType]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: string }
+        userType: { type: string, enum: [tourist, local] }
+    ChatMessage:
+      type: object
+      required: [id, room, body, sentAt, author]
+      properties:
+        id: { type: string, pattern: "^[0-9]+$" }
+        room:
+          type: string
+          description: Public room, nearby area, or direct peer identifier as requested by the caller.
+        body: { type: string, minLength: 1, maxLength: 1000 }
+        sentAt: { type: string, format: date-time }
+        author: { $ref: "#/components/schemas/ChatAuthor" }
+    ChatPage:
+      type: object
+      required: [messages, hasMore, nextCursor]
+      properties:
+        messages:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/ChatMessage" }
+        hasMore: { type: boolean }
+        nextCursor: { type: [string, "null"], pattern: "^[0-9]+$" }

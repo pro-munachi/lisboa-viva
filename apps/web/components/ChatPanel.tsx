@@ -15,11 +15,14 @@ import {
   Globe2,
   MapPin,
   MessageCircle,
+  MessagesSquare,
   Send,
   Sparkles,
+  UserRound,
   X,
 } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
+import type { MultiplayerPeer } from "../lib/multiplayer";
 import { getCity } from "../lib/cities";
 import {
   CHAT_CHARACTER_LIMIT,
@@ -40,6 +43,8 @@ export type ChatPanelProps = {
   user: AuthUser;
   cityId: string;
   place?: { id: string; label: string };
+  peers?: MultiplayerPeer[];
+  nearbyArea?: string;
   onClose: () => void;
 };
 
@@ -55,16 +60,54 @@ export default function ChatPanel({
   user,
   cityId,
   place,
+  peers = [],
+  nearbyArea,
   onClose,
 }: ChatPanelProps) {
-  const [tab, setTab] = useState<"city" | "here">("city");
+  const [tab, setTab] = useState<"nearby" | "direct" | "city" | "here">(
+    nearbyArea ? "nearby" : "city",
+  );
+  const [directPeerId, setDirectPeerId] = useState(peers[0]?.id ?? "");
+  const [knownPeers, setKnownPeers] = useState<Record<string, MultiplayerPeer>>(
+    () => Object.fromEntries(peers.map((peer) => [peer.id, peer])),
+  );
   const [drafts, setDrafts] = useState<Record<string, ChatDraft>>({});
   const closeButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const cityName = getCity(cityId).name;
   const here = tab === "here" && place;
-  const room = here ? `${cityId}:hotspot:${place.id}` : `${cityId}:city`;
-  const roomLabel = here ? place.label : cityName;
+  useEffect(() => {
+    if (!peers.length) return;
+    setKnownPeers((known) => ({
+      ...known,
+      ...Object.fromEntries(peers.map((peer) => [peer.id, peer])),
+    }));
+    if (!directPeerId) setDirectPeerId(peers[0].id);
+  }, [peers, directPeerId]);
+  const directOptions = Object.values(knownPeers);
+  const directPeer = knownPeers[directPeerId];
+  const effectiveTab =
+    tab === "nearby" && !nearbyArea
+      ? "city"
+      : tab === "direct" && !directPeer
+        ? "city"
+        : tab;
+  const room =
+    effectiveTab === "nearby"
+      ? `nearby:${nearbyArea}`
+      : effectiveTab === "direct"
+        ? `direct:${directPeer!.id}`
+        : here
+          ? `${cityId}:hotspot:${place.id}`
+          : `${cityId}:city`;
+  const roomLabel =
+    effectiveTab === "nearby"
+      ? `people around ${nearbyArea}`
+      : effectiveTab === "direct"
+        ? `@${directPeer!.handle}`
+        : here
+          ? place.label
+          : cityName;
   const draftKey = `${user.id}/${room}`;
   const setDraft = useCallback(
     (next: ChatDraft) => setDrafts((all) => ({ ...all, [draftKey]: next })),
@@ -99,7 +142,15 @@ export default function ChatPanel({
         </div>
         <div className={styles.heading}>
           <span>MAPS BECOME PLANS</span>
-          <h2 id={titleId}>{here ? place.label : `${cityName} city chat`}</h2>
+          <h2 id={titleId}>
+            {effectiveTab === "direct"
+              ? `Private chat with @${directPeer!.handle}`
+              : effectiveTab === "nearby"
+                ? `Around ${nearbyArea}`
+                : here
+                  ? place.label
+                  : `${cityName} city chat`}
+          </h2>
         </div>
         <button
           ref={closeButton}
@@ -114,14 +165,44 @@ export default function ChatPanel({
       <div className={styles.rooms} role="group" aria-label="Chat room">
         <button
           type="button"
-          aria-pressed={!here}
+          aria-pressed={effectiveTab === "nearby"}
+          disabled={!nearbyArea}
+          title={
+            nearbyArea
+              ? `Chat around ${nearbyArea}`
+              : "Join multiplayer to chat nearby"
+          }
+          onClick={() => setTab("nearby")}
+        >
+          <MessagesSquare size={16} /> Nearby
+        </button>
+        <button
+          type="button"
+          aria-pressed={effectiveTab === "direct"}
+          disabled={!directOptions.length}
+          title={
+            directOptions.length
+              ? "Chat privately with a player you met nearby"
+              : "No nearby players are online"
+          }
+          onClick={() => {
+            if (!directPeerId && directOptions[0])
+              setDirectPeerId(directOptions[0].id);
+            setTab("direct");
+          }}
+        >
+          <UserRound size={16} /> Private
+        </button>
+        <button
+          type="button"
+          aria-pressed={effectiveTab === "city"}
           onClick={() => setTab("city")}
         >
           <Globe2 size={16} /> {cityName}
         </button>
         <button
           type="button"
-          aria-pressed={Boolean(here)}
+          aria-pressed={effectiveTab === "here"}
           disabled={!place}
           title={
             place ? `Chat around ${place.label}` : "Select a mapped place first"
@@ -131,8 +212,27 @@ export default function ChatPanel({
           <MapPin size={16} /> Here
         </button>
       </div>
+      {effectiveTab === "direct" && directOptions.length > 0 && (
+        <label className={styles.peerPicker}>
+          Chat with
+          <select
+            value={directPeer!.id}
+            onChange={(event) => setDirectPeerId(event.target.value)}
+          >
+            {directOptions.map((peer) => (
+              <option key={peer.id} value={peer.id}>
+                @{peer.handle} · {peer.area}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p className={styles.disclosure}>
-        Anyone signed in can join this room. Messages are shared with the room.
+        {effectiveTab === "direct"
+          ? `Only you and @${directPeer!.handle} can read this conversation.`
+          : effectiveTab === "nearby"
+            ? `Shared with signed-in players currently around ${nearbyArea}.`
+            : "Anyone signed in can join this room. Messages are shared with the room."}
       </p>
       <RoomConversation
         key={draftKey}
