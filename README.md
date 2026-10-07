@@ -55,5 +55,6 @@ The budget excludes flights and accommodation. No server stores trips. No analyt
 - `apps/web/public/data`: compressed derived database; `scripts/geography-build.py` and `geography-validate.py`: acquisition and validation.
 - `apps/web/tests`: engine, geography, character and pin regression checks.
 - `docs/PRD.md`: preserved original requirements; [docs/scope.md](docs/scope.md): current scope; [docs/verification.md](docs/verification.md): checks and limits.
+- [docs/backend-schema-plan.md](docs/backend-schema-plan.md): feature inventory and staged PostgreSQL schema boundary for rebuilding the persistent Lisboa Viva backend.
 
 The derived OSM database is licensed under ODbL 1.0 and credited in the map. Terrain credits identify Copernicus/EU-DEM. Repository write permissions and reviewed pull requests provide the current restricted content workflow. Content changes must consider `CONTENT_VERSION` and save migration. Cross-device accounts, real social features, revocable public links, a dedicated authenticated editor, verified pricing and full accessibility/performance sign-off remain future work.
