@@ -915,9 +915,11 @@ export default function Roam() {
               }
             >
               Enter{" "}
-              {interiorForHotspot(mapHotspot) === "cafe"
-                ? "café"
-                : interiorForHotspot(mapHotspot)}{" "}
+              {mapHotspot.category === "culture"
+                ? "cultural scene"
+                : interiorForHotspot(mapHotspot) === "cafe"
+                  ? "café"
+                  : interiorForHotspot(mapHotspot)}{" "}
               <ArrowRight size={17} />
             </button>
           )}
