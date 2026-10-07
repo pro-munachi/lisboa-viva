@@ -30,6 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import World from "../components/World";
+import AuthBoundary from "../components/AuthBoundary";
 import { interiorForHotspot, type InteriorVisit } from "../lib/interiors";
 import Dialog from "../components/Dialog";
 import { searchMapLocations } from "../lib/map-locations";
@@ -114,7 +115,7 @@ const iconFor = (id: PlaceId) =>
     benfica: Home,
     sintra: Camera,
   })[id];
-export default function Roam() {
+function RoamExperience() {
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -1537,5 +1538,13 @@ export default function Roam() {
         </Dialog>
       )}
     </main>
+  );
+}
+
+export default function Roam() {
+  return (
+    <AuthBoundary>
+      <RoamExperience />
+    </AuthBoundary>
   );
 }
