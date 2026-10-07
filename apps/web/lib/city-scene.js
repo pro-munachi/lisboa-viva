@@ -81,6 +81,7 @@ export function createCity(host, options) {
     focus = options.focus,
     player = null,
     playerTarget = null,
+    openingTarget = null,
     agents = [],
     vehicles = [],
     lastTime = 0,
@@ -89,6 +90,7 @@ export function createCity(host, options) {
     generation = 0,
     overviewMesh = null,
     overviewLoading = false,
+    firstFocus = true,
     mode = "orbit",
     motion = !reduce;
   const chunkGroups = new Map(),
@@ -224,6 +226,113 @@ export function createCity(host, options) {
       );
       parent.add(mesh);
     }
+  }
+  function signatureLandmarks() {
+    const water = new THREE.MeshStandardMaterial({
+      color: "#5f9fb8",
+      roughness: 0.35,
+      metalness: 0.08,
+    });
+    const waterPlane = (west, south, east, north, rotation = 0) => {
+      const topLeft = projectGeo([west, north]);
+      const bottomRight = projectGeo([east, south]);
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(
+          bottomRight.x - topLeft.x,
+          bottomRight.z - topLeft.z,
+        ),
+        water,
+      );
+      mesh.position.set(
+        (topLeft.x + bottomRight.x) / 2,
+        0.32,
+        (topLeft.z + bottomRight.z) / 2,
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = rotation;
+      mesh.receiveShadow = true;
+      city.add(mesh);
+    };
+    // OSM coastlines are open ways, so the broad Atlantic and Tagus surfaces
+    // need explicit filled water beneath the detailed shoreline geometry.
+    waterPlane(-9.6, 38.5, -9.335, 39.1);
+    waterPlane(-9.34, 38.6, -9.0, 38.711);
+
+    const beaches = [
+      ["Santo Amaro beach", -9.2387, 38.6839, 0.15],
+      ["Carcavelos beach", -9.335, 38.6791, -0.05],
+      ["Tamariz beach", -9.399, 38.7022, 0.22],
+    ];
+    for (const [name, lng, lat, rotation] of beaches) {
+      const beach = new THREE.Mesh(
+        new THREE.CircleGeometry(1, 40),
+        mat("#ead79f"),
+      );
+      const point = point3([lng, lat]);
+      beach.position.set(point.x, Math.max(0.42, point.y + 0.18), point.z);
+      beach.rotation.x = -Math.PI / 2;
+      beach.rotation.z = rotation;
+      beach.scale.set(230, 58, 1);
+      beach.receiveShadow = true;
+      city.add(beach);
+      const label = canvasLabel(name.toUpperCase(), "#725c35");
+      label.position.copy(beach.position).add(new THREE.Vector3(0, 34, 0));
+      label.scale.set(75, 16, 1);
+      city.add(label);
+    }
+
+    const north = point3([-9.1777, 38.6996]);
+    const south = point3([-9.1813, 38.6893]);
+    north.y = south.y = 0;
+    const midpoint = north.clone().lerp(south, 0.5);
+    const span = south.clone().sub(north);
+    const length = span.length();
+    const angle = Math.atan2(span.x, span.z);
+    const bridge = new THREE.Group();
+    bridge.position.copy(midpoint);
+    bridge.rotation.y = angle;
+    const red = new THREE.MeshStandardMaterial({
+      color: "#b84f38",
+      roughness: 0.7,
+    });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(18, 3.2, length), red);
+    deck.position.y = 64;
+    deck.castShadow = true;
+    bridge.add(deck);
+    for (const z of [-length * 0.34, length * 0.34]) {
+      for (const x of [-11, 11]) {
+        const tower = new THREE.Mesh(new THREE.BoxGeometry(3.8, 104, 4.5), red);
+        tower.position.set(x, 52, z);
+        tower.castShadow = true;
+        bridge.add(tower);
+      }
+      const top = new THREE.Mesh(new THREE.BoxGeometry(27, 3.5, 5), red);
+      top.position.set(0, 101, z);
+      bridge.add(top);
+    }
+    const cableMaterial = new THREE.LineBasicMaterial({ color: "#783326" });
+    for (const x of [-10, 10]) {
+      const points = [];
+      for (let i = 0; i <= 48; i++) {
+        const z = -length / 2 + (length * i) / 48;
+        const between = Math.abs(z) <= length * 0.34;
+        const cableY = between
+          ? 70 + 31 * Math.pow(Math.abs(z) / (length * 0.34), 2)
+          : 70 + 31 * (1 - Math.abs(z) / (length / 2));
+        points.push(new THREE.Vector3(x, cableY, z));
+      }
+      bridge.add(
+        new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          cableMaterial,
+        ),
+      );
+    }
+    city.add(bridge);
+    const bridgeLabel = canvasLabel("PONTE 25 DE ABRIL", "#8e3e2f");
+    bridgeLabel.position.copy(midpoint).add(new THREE.Vector3(0, 135, 0));
+    bridgeLabel.scale.set(105, 22, 1);
+    city.add(bridgeLabel);
   }
   function path(points) {
     const ps = points.map(point3),
@@ -617,6 +726,7 @@ export function createCity(host, options) {
     scene.add(population);
     agents = [];
     vehicles = [];
+    openingTarget = null;
     const target = teleport
       ? point3([focus.lng, focus.lat])
       : controls.target.clone();
@@ -647,8 +757,20 @@ export function createCity(host, options) {
       "#496a59",
     ];
     const skins = ["#a87955", "#76513b", "#d5af8b", "#b58c6b", "#5b3d30"];
-    for (let i = 0; i < 26 && walks.length; i++) {
-      const line = walks[i % walks.length],
+    const nearestPoint = (line) => {
+      let best = { distance: Infinity, d: 0 };
+      for (let i = 0; i < line.ps.length; i++) {
+        const distance = line.ps[i].distanceTo(target);
+        if (distance < best.distance) best = { distance, d: line.lengths[i] };
+      }
+      return best;
+    };
+    const nearbyWalks = walks
+      .map((line) => ({ line, ...nearestPoint(line) }))
+      .sort((a, b) => a.distance - b.distance);
+    for (let i = 0; i < 42 && nearbyWalks.length; i++) {
+      const anchor = nearbyWalks[i % Math.min(nearbyWalks.length, 12)],
+        line = anchor.line,
         group = createCharacter({
           shirt: outfits[i % outfits.length],
           skin: skins[i % skins.length],
@@ -656,10 +778,11 @@ export function createCity(host, options) {
           hairStyle: ["short", "curly", "bob", "bun"][i % 4],
           phase: i * 0.7,
         });
+      group.scale.setScalar(i < 18 ? 1.18 : 1);
       const side = ["footway", "path", "pedestrian"].includes(line.kind)
         ? 0
         : line.width / 2 + 1.2;
-      const d = ((i * 0.173) % 1) * line.length;
+      const d = anchor.d + (Math.floor(i / 2) + 1) * (i % 2 ? 5.5 : -5.5);
       const initial = sample(line, d, side);
       group.position.copy(initial.v);
       group.rotation.y = initial.angle;
@@ -714,14 +837,75 @@ export function createCity(host, options) {
         ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 1.2).v
         : target,
     );
+    if (focus.name === "Cais do Sodré") {
+      const promenade = point3([-9.1454, 38.7048]);
+      const promenadePath = nearestPath(promenade, true);
+      if (promenadePath) {
+        player.position.copy(
+          sample(
+            promenadePath.line,
+            promenadePath.d,
+            promenadePath.line.width / 2 + 1.2,
+          ).v,
+        );
+        agents.slice(0, 20).forEach((agent, i) => {
+          agent.line = promenadePath.line;
+          agent.d =
+            promenadePath.d + (Math.floor(i / 2) + 1) * (i % 2 ? 4 : -4);
+          agent.side = promenadePath.line.width / 2 + 1.2 + ((i % 3) - 1) * 1.4;
+          const position = sample(agent.line, agent.d, agent.side);
+          agent.group.position.copy(position.v);
+          agent.group.rotation.y = position.angle;
+          agent.group.scale.setScalar(1.2);
+        });
+      }
+    }
     population.add(player);
     playerTarget = player.position.clone();
     const you = canvasLabel("YOU", "#292942");
     you.position.y = 2.6;
     you.scale.set(2.5, 0.55, 1);
     player.add(you);
+    if (focus.name === "Cais do Sodré") {
+      openingTarget = point3([-9.1472, 38.7035]);
+      openingTarget.y = 0.62;
+      const deck = new THREE.Mesh(
+        new THREE.BoxGeometry(34, 0.45, 20),
+        mat("#d9c6a4"),
+      );
+      deck.position.copy(openingTarget);
+      deck.position.y = 0.36;
+      deck.receiveShadow = true;
+      population.add(deck);
+      for (let i = 0; i < 14; i++) {
+        const person = createCharacter({
+          shirt: outfits[i % outfits.length],
+          skin: skins[i % skins.length],
+          style: ["casual", "jacket", "dress", "tourist"][i % 4],
+          hairStyle: ["short", "curly", "bob", "bun"][i % 4],
+          phase: i * 0.55,
+        });
+        person.position
+          .copy(openingTarget)
+          .add(
+            new THREE.Vector3(
+              -12 + (i % 5) * 5.8,
+              0.02,
+              -5.5 + Math.floor(i / 5) * 5.2,
+            ),
+          );
+        person.rotation.y = Math.PI * (0.75 + (i % 3) * 0.12);
+        person.scale.setScalar(1.28);
+        population.add(person);
+      }
+    }
   }
-  function restoreCity(){city.visible=true;markers.visible=true;population.visible=true;scene.background=new THREE.Color("#c7dee8");}
+  function restoreCity() {
+    city.visible = true;
+    markers.visible = true;
+    population.visible = true;
+    scene.background = new THREE.Color("#c7dee8");
+  }
   function setFocus(next, street = false) {
     restoreCity();
     if (characterGallery) {
@@ -731,19 +915,23 @@ export function createCity(host, options) {
     generation++;
     focus = next;
     const p = point3([next.lng, next.lat]);
-    const distance = street ? 24 : next.range || 160;
-    if (street && player) p.copy(player.position);
-    controls.target.copy(p);
+    if (manifest && !street) populate(true);
+    const opening = firstFocus;
+    firstFocus = false;
+    const peopleView = street || opening;
+    const distance = street ? 22 : opening ? 58 : next.range || 160;
+    if (opening && openingTarget) p.copy(openingTarget);
+    else if (peopleView && player) p.copy(player.position);
+    controls.target.copy(p).add(new THREE.Vector3(0, peopleView ? 1.1 : 0, 0));
     camera.position.set(
-      p.x + distance * 0.7,
-      p.y + distance * 0.72,
-      p.z + distance * 0.85,
+      p.x + distance * (peopleView ? 0.95 : 0.72),
+      p.y + distance * (peopleView ? 0.38 : 0.72),
+      p.z + distance * (peopleView ? -0.15 : 0.85),
     );
     sun.position.set(p.x - 150, p.y + 400, p.z + 180);
     sun.target.position.copy(p);
     controls.update();
     if (manifest) {
-      if (!street) populate(true);
       loadChunks();
     }
   }
@@ -798,6 +986,85 @@ export function createCity(host, options) {
     camera.position
       .copy(mid)
       .add(new THREE.Vector3(distance * 0.08, distance * 0.9, distance * 0.42));
+    controls.update();
+  }
+  function coast() {
+    restoreCity();
+    generation++;
+    if (characterGallery) {
+      disposeGroup(characterGallery);
+      characterGallery = null;
+    }
+    characterGallery = new THREE.Group();
+    const centre = point3([-9.335, 38.6805]);
+    centre.y = 0;
+    const sand = new THREE.Mesh(
+      new THREE.BoxGeometry(120, 0.6, 70),
+      mat("#ead79f"),
+    );
+    sand.position.copy(centre).add(new THREE.Vector3(0, -0.3, 8));
+    sand.receiveShadow = true;
+    const ocean = new THREE.Mesh(
+      new THREE.BoxGeometry(160, 0.25, 95),
+      new THREE.MeshStandardMaterial({
+        color: "#5f9fb8",
+        roughness: 0.28,
+        metalness: 0.08,
+      }),
+    );
+    ocean.position.copy(centre).add(new THREE.Vector3(0, -0.12, -70));
+    characterGallery.add(sand, ocean);
+    for (let i = 0; i < 8; i++) {
+      const person = createCharacter({
+        shirt: ["#d86f52", "#efc55d", "#4f7778", "#e9e2d1"][i % 4],
+        skin: ["#a87955", "#76513b", "#d5af8b", "#5b3d30"][i % 4],
+        style: ["casual", "tourist"][i % 2],
+        hairStyle: ["short", "curly", "bob", "bun"][i % 4],
+      });
+      person.position
+        .copy(centre)
+        .add(
+          new THREE.Vector3(-46 + (i % 4) * 13, 0, -2 + Math.floor(i / 4) * 18),
+        );
+      person.rotation.y = Math.PI + (i % 3) * 0.3;
+      person.scale.setScalar(1.4);
+      characterGallery.add(person);
+    }
+    for (let i = 0; i < 3; i++) {
+      const x = -34 + i * 34;
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.18, 5.5, 10),
+        mat("#efe8d6"),
+      );
+      pole.position.copy(centre).add(new THREE.Vector3(x, 2.75, 24));
+      const canopy = new THREE.Mesh(
+        new THREE.ConeGeometry(5.2, 2.1, 20),
+        mat(["#d65f4a", "#e6b84f", "#527f82"][i]),
+      );
+      canopy.position.copy(centre).add(new THREE.Vector3(x, 5.9, 24));
+      characterGallery.add(pole, canopy);
+    }
+    scene.add(characterGallery);
+    city.visible = false;
+    markers.visible = false;
+    population.visible = false;
+    scene.background = new THREE.Color("#c7dee8");
+    controls.target.copy(centre).add(new THREE.Vector3(0, 2.5, -5));
+    camera.position.copy(centre).add(new THREE.Vector3(54, 34, 78));
+    controls.update();
+  }
+  function bridge() {
+    restoreCity();
+    generation++;
+    if (characterGallery) {
+      disposeGroup(characterGallery);
+      characterGallery = null;
+    }
+    const centre = point3([-9.1795, 38.6945]);
+    centre.y = 35;
+    centre.x += 300;
+    controls.target.copy(centre);
+    camera.position.copy(centre).add(new THREE.Vector3(1500, 520, 0));
     controls.update();
   }
   function resize() {
@@ -855,7 +1122,11 @@ export function createCity(host, options) {
     const dt = Math.min((now - lastTime) / 1000 || 0, 0.05);
     lastTime = now;
     controls.update();
-    if (motion && !characterGallery && camera.position.distanceTo(controls.target) < 900) {
+    if (
+      motion &&
+      !characterGallery &&
+      camera.position.distanceTo(controls.target) < 900
+    ) {
       for (const a of agents) {
         a.d += dt * a.speed;
         const p = sample(a.line, a.d, a.side);
@@ -883,7 +1154,7 @@ export function createCity(host, options) {
       animateCharacter(player, now / 1000, motion && distance > 0.1);
     }
     const range = camera.position.distanceTo(controls.target);
-    population.visible = !characterGallery && range < 900;
+    population.visible = !characterGallery && range < 1200;
     renderer.shadowMap.enabled = range < 1200;
     scene.fog.near = Math.max(2500, range * 1.2);
     scene.fog.far = Math.max(18000, range * 4);
@@ -928,6 +1199,7 @@ export function createCity(host, options) {
       terrain = dem;
       terrainMesh();
       surfaces();
+      signatureLandmarks();
       roads();
       setMarkers(options.hotspots || []);
       setFocus(focus);
@@ -962,8 +1234,19 @@ export function createCity(host, options) {
       person.rotation.y = angle;
       characterGallery.add(person);
     }
-    const floor=new THREE.Mesh(new THREE.BoxGeometry(7,.05,4),mat("#eeeadf"));floor.position.copy(centre);floor.position.y-=.03;floor.receiveShadow=true;characterGallery.add(floor);
-    scene.add(characterGallery);city.visible=false;markers.visible=false;population.visible=false;scene.background=new THREE.Color("#dcded5");
+    const floor = new THREE.Mesh(
+      new THREE.BoxGeometry(7, 0.05, 4),
+      mat("#eeeadf"),
+    );
+    floor.position.copy(centre);
+    floor.position.y -= 0.03;
+    floor.receiveShadow = true;
+    characterGallery.add(floor);
+    scene.add(characterGallery);
+    city.visible = false;
+    markers.visible = false;
+    population.visible = false;
+    scene.background = new THREE.Color("#dcded5");
     controls.target.copy(centre).add(new THREE.Vector3(0, 0.95, 0));
     const distance = Math.max(
       8,
@@ -983,12 +1266,15 @@ export function createCity(host, options) {
     setFocus,
     setMarkers,
     overview,
+    coast,
+    bridge,
     characters,
     setMode(next) {
       mode = next;
       controls.mouseButtons.LEFT =
         next === "pan" ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
-      controls.touches.ONE = next === "pan" ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+      controls.touches.ONE =
+        next === "pan" ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     },
     setMotion(value) {
       motion = value;
