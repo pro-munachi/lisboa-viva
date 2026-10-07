@@ -56,6 +56,14 @@ The development watcher previously reached macOS's open-file limit (`EMFILE`); t
 
 ## Limits
 
+### Latest main integration — 7 October 2026
+
+GitHub's main ref was checked again and matched `2e278a930d08789b8d23d09037182cfc352bef72` (`feat: add public map landing page`). Merge `28c40e3` includes that exact revision. The new public `/` landing and protected `/play` route are preserved; the expanded arrival/transport experience and account-scoped browser storage were moved into `/play` with corrected relative imports. Login/register continue to redirect there after successful authentication.
+
+The integrated source passed all 155 web tests, TypeScript, the production build and `git diff --check`. The refreshed production preview at `http://127.0.0.1:3035/` rendered the public city map; selecting Belém changed the selected neighbourhood and camera. Opening `/play` without a session redirected to `/login`. A desktop screenshot was saved to `/private/tmp/roam-pull-main/public-map.png`. This check does not establish successful authentication against PostgreSQL.
+
+The latest upstream [push run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37638600568) ended with `startup_failure` before creating jobs. Hosted CI therefore remains unverified. The pull was integrated locally; it did not merge a pull request, deploy the application or run an external database migration.
+
 Automated/desktop browser checks do not replace physical-device performance, screen-reader testing, a full WCAG 2.2 AA audit or itinerary user research. Actual footprint coordinates do not establish exact heights/facades, current street conditions or live traffic. NPCs and vehicles are simulated. Named venues come from the OSM snapshot; current opening status, hours, prices, website ownership and accessibility remain unverified. A venue's presence in the directory or an illustrative shopfront does not establish current availability or an exact entrance. Name search is a bundled sample, not a complete address geocoder. Place-ID-only or page-only Maps links require an expanded coordinate link or a mapped name; the resolver does not scrape Google page content.
 
 Docker configuration has not been built in this session. Earlier GitHub Actions push/PR events reported `startup_failure` before creating jobs ([recorded run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37604590966)); its reason was unavailable. The geographic-world code commit (`3f2850c`) also produced `startup_failure` before creating any jobs ([checked run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37612931493)); the API returned no cause. Hosted CI has not run the checks despite the successful local checks. No production deployment or migration of legacy accounts/data has been performed.
