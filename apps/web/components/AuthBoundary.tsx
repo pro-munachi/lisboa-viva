@@ -5,10 +5,16 @@ import { ReactNode, useEffect, useState } from "react";
 import { LogOut, UserRound } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
 
-export default function AuthBoundary({ children }: { children: ReactNode | ((user: AuthUser) => ReactNode) }) {
+export default function AuthBoundary({
+  children,
+}: {
+  children: ReactNode | ((user: AuthUser) => ReactNode);
+}) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -30,9 +36,20 @@ export default function AuthBoundary({ children }: { children: ReactNode | ((use
   }, [router]);
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
-    router.replace("/login");
-    router.refresh();
+    if (signingOut) return;
+    setSigningOut(true);
+    setLogoutError("");
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("unavailable");
+      setUser(null);
+      router.replace("/login");
+      router.refresh();
+    } catch {
+      setLogoutError("Sign out failed. Please try again.");
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   if (unavailable) {
@@ -62,7 +79,8 @@ export default function AuthBoundary({ children }: { children: ReactNode | ((use
           <strong>@{user.handle}</strong>
           <small>{user.userType === "local" ? "Local" : "Tourist"}</small>
         </span>
-        <button onClick={logout} aria-label="Sign out" title="Sign out">
+        {logoutError && <span role="alert">{logoutError}</span>}
+        <button onClick={logout} aria-label="Sign out" title="Sign out" disabled={signingOut}>
           <LogOut size={16} />
         </button>
       </aside>

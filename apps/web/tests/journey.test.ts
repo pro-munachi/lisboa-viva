@@ -29,6 +29,7 @@ import {
 } from "../lib/journey";
 import { GEO_BOUNDS, containsGeo } from "../lib/geography";
 import { CONTENT_VERSION, places } from "../lib/content";
+import { TRAVELLER_COLOURS } from "../lib/traveller-colours";
 
 const setup: Setup = {
   days: 3,
@@ -37,6 +38,33 @@ const setup: Setup = {
   base: "Graça",
   shirt: "#ece7df",
 };
+
+test("new traveller colours replay safely alongside legacy profiles and exports retain chosen calendar and preferences", () => {
+  for (const colour of TRAVELLER_COLOURS) {
+    const profile: Setup = {
+      ...setup,
+      shirt: colour.value,
+      persona: "nomad",
+      arrival: "station",
+      accommodation: "coliving",
+      interests: ["food", "community"],
+      startDate: "2026-10-07",
+      endDate: "2026-10-10",
+    };
+    assert.ok(validSetup(profile));
+    const trip = newTrip(profile, `palette-${colour.name}`);
+    assert.deepEqual(restore(serialize(trip)), trip);
+    const output = itinerary(trip);
+    assert.match(output, /Traveller: nomad.*coliving/);
+    assert.match(output, /2026-10-07 → 2026-10-10 \(checkout\)/);
+    assert.match(output, /Interests: food, community/);
+  }
+  assert.ok(validSetup({ ...setup, shirt: "#456a86" }));
+  assert.equal(
+    validSetup({ ...setup, shirt: "url(https://invalid.example)" }),
+    false,
+  );
+});
 function arrivalTrip(arrival: Arrival = "airport") {
   return newTrip(
     { ...setup, persona: "tourist", arrival },

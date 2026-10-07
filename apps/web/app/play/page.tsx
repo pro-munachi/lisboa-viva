@@ -35,6 +35,7 @@ import World from "../../components/World";
 import AuthBoundary from "../../components/AuthBoundary";
 import type { AuthUser } from "../../lib/auth";
 import { accountStorageKeys } from "../../lib/account-storage";
+import { TRAVELLER_COLOURS } from "../../lib/traveller-colours";
 import { interiorForHotspot, type InteriorVisit } from "../../lib/interiors";
 import Dialog from "../../components/Dialog";
 import JourneyPanel from "../../components/JourneyPanel";
@@ -98,16 +99,7 @@ import {
   type Interest,
   type Accommodation,
 } from "../../lib/engine";
-const colors = [
-  "#ece7df",
-  "#687f73",
-  "#b47459",
-  "#777791",
-  "#456a86",
-  "#ceab62",
-  "#b9828f",
-  "#454b4e",
-];
+const colors = TRAVELLER_COLOURS.map((colour) => colour.value);
 const interests: { id: Interest; name: string }[] = [
   { id: "food", name: "Food & cafés" },
   { id: "culture", name: "Art & culture" },
@@ -316,8 +308,12 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }
   function visitTransitHub(id: HubId) {
     const currentTrip = tripRef.current;
-    if (currentTrip && currentTrip.journey.hub !== id &&
-        !command({ kind: "journey", action: "visit-hub", hub: id })) return;
+    if (
+      currentTrip &&
+      currentTrip.journey.hub !== id &&
+      !command({ kind: "journey", action: "visit-hub", hub: id })
+    )
+      return;
     enterTransitHub(id);
   }
   async function addPin() {
@@ -355,9 +351,12 @@ function RoamExperience({ user }: { user: AuthUser }) {
       : transport[mode];
   }
   function routeReason(mode: Mode) {
-    if (trip?.journey.phase === "arriving") return "Continue into the city from your arrival hub first.";
-    if (trip?.journey.ticket) return "Board your ready ticket before continuing.";
-    if (trip && destination === trip.place) return "You are already in this chapter.";
+    if (trip?.journey.phase === "arriving")
+      return "Continue into the city from your arrival hub first.";
+    if (trip?.journey.ticket)
+      return "Board your ready ticket before continuing.";
+    if (trip && destination === trip.place)
+      return "You are already in this chapter.";
     const r = route(mode);
     return !r
       ? "This mode does not serve this trip"
@@ -464,7 +463,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }
   function begin() {
     try {
-      const next = newTrip({ ...setup, startDate: calendarStart, endDate: calendarEnd }, crypto.randomUUID());
+      const next = newTrip(
+        { ...setup, startDate: calendarStart, endDate: calendarEnd },
+        crypto.randomUUID(),
+      );
       leaveRoom();
       setClean(false);
       if (trip) setArchive((a) => [trip, ...a].slice(0, 4));
@@ -562,7 +564,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
         </div>
         <header className="topbar">
           <a className="brand" href="/" aria-label="ROAM home">
-            ROAM<span>LISBON. YOUR WAY.</span>
+            ROAM<span>EVERY CITY. YOUR STORY.</span>
           </a>
           {trip ? (
             <div className="clock">
@@ -705,10 +707,15 @@ function RoamExperience({ user }: { user: AuthUser }) {
               className="interaction card"
               aria-label="Available experiences"
             >
-              {(trip.journey.phase === "arriving" || trip.journey.ticket) && !trip.complete ? (
+              {(trip.journey.phase === "arriving" || trip.journey.ticket) &&
+              !trip.complete ? (
                 <>
                   <span className="eyebrow">YOUR ARRIVAL CHAPTER</span>
-                  <h2>{trip.journey.ticket ? "Your ticket is ready." : "Welcome to Lisbon."}</h2>
+                  <h2>
+                    {trip.journey.ticket
+                      ? "Your ticket is ready."
+                      : "Welcome to Lisbon."}
+                  </h2>
                   <p>
                     {trip.journey.ticket
                       ? "Your fare is already covered. Board from your travel hub to continue your journey."
@@ -718,7 +725,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
                     className="primary"
                     onClick={() => setPanel("journey")}
                   >
-                    {trip.journey.ticket ? "Return to boarding" : "Continue your arrival"} <Plane size={17} />
+                    {trip.journey.ticket
+                      ? "Return to boarding"
+                      : "Continue your arrival"}{" "}
+                    <Plane size={17} />
                   </button>
                 </>
               ) : trip.complete ? (
@@ -1074,14 +1084,22 @@ function RoamExperience({ user }: { user: AuthUser }) {
           {transitHubFor(mapHotspot) && (
             <button
               className="secondary full"
-              disabled={!!trip && trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
-                !!previewJourney(trip, { action: "visit-hub", hub: transitHubFor(mapHotspot)!.id }).reason}
+              disabled={
+                !!trip &&
+                trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
+                !!previewJourney(trip, {
+                  action: "visit-hub",
+                  hub: transitHubFor(mapHotspot)!.id,
+                }).reason
+              }
               onClick={() => visitTransitHub(transitHubFor(mapHotspot)!.id)}
             >
               {transitHubFor(mapHotspot)!.kind === "bus-stop"
                 ? "Stand at the bus stop"
                 : `Enter ${transitHubFor(mapHotspot)!.kind === "station" ? "train station" : "airport"}`}{" "}
-              {trip && trip.journey.hub !== transitHubFor(mapHotspot)!.id && "· 20 min · €0 "}
+              {trip &&
+                trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
+                "· 20 min · €0 "}
               <ArrowRight size={17} />
             </button>
           )}
@@ -1093,7 +1111,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
               <button
                 className="secondary full"
                 onClick={() => {
-                  if (trip.journey.phase === "arriving" || trip.journey.ticket) {
+                  if (
+                    trip.journey.phase === "arriving" ||
+                    trip.journey.ticket
+                  ) {
                     setPanel("journey");
                     return;
                   }
@@ -1350,19 +1371,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
                   <button
                     type="button"
                     key={shirt}
-                    style={{ background: shirt }}
-                    aria-label={
-                      [
-                        "Cream",
-                        "Sage",
-                        "Terracotta",
-                        "Slate",
-                        "Tile blue",
-                        "Ochre",
-                        "Rose",
-                        "Charcoal",
-                      ][i]
-                    }
+                    style={{
+                      background: shirt,
+                      color: ["#42b894", "#ffce45", "#fff9ed"].includes(shirt)
+                        ? "#172546"
+                        : "#ffffff",
+                    }}
+                    aria-label={TRAVELLER_COLOURS[i].name}
                     aria-pressed={setup.shirt === shirt}
                     onClick={() => setSetup((s) => ({ ...s, shirt }))}
                   >
@@ -1408,7 +1423,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
               if (
                 trip.journey.phase !== "arriving" &&
                 !trip.journey.ticket &&
-                !trip.complete && id !== trip.place
+                !trip.complete &&
+                id !== trip.place
               ) {
                 setDestination(id);
                 setMode(
@@ -1745,7 +1761,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
             </span>
             <span>
               Current trip and up to four earlier trips stay on this browser. No
-              account, tracking, location collection, or server trip storage.
+              automatic location tracking or cross-device trip storage. Your
+              account uses a protected session; trips and pins stay in this
+              browser, scoped to that account.
             </span>
           </div>
           {archive.length > 0 && (

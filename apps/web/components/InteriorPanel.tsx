@@ -25,6 +25,7 @@ import {
   type InteriorVisit,
 } from "../lib/interiors";
 import styles from "./InteriorPanel.module.css";
+import ClubMusic from "./ClubMusic";
 
 export type InteriorPanelProps = {
   visit: InteriorVisit;
@@ -211,13 +212,21 @@ export default function InteriorPanel({
         )}
       </div>
 
+      {visit.kind === "bar" && (
+        <div className={styles.activity}>
+          <ClubMusic key={visit.id} enabled={motion} compact />
+        </div>
+      )}
+
       <footer className={styles.footer}>
         <p>
           {visit.kind === "home"
             ? "Your ROAM home is an original imagined space."
             : transit
               ? "This is an original imagined transit scene. The real facility’s layout and services may differ."
-              : "This is an original imagined room. The venue’s actual layout and services may differ."}
+              : visit.kind === "bar"
+                ? "This room and its synthesized club mix are original ROAM creations. The venue’s actual layout and services may differ."
+                : "This is an original imagined room. The venue’s actual layout and services may differ."}
         </p>
         {sourceUrl && (
           <a

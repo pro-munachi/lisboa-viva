@@ -1,4 +1,4 @@
 {
  "name":"roam-lisbon","private":true,
- "scripts":{"dev":"npm --prefix apps/web run dev","build":"npm --prefix apps/web run build","start":"npm --prefix apps/web run start","typecheck":"npm --prefix apps/web run typecheck","test":"npm --prefix apps/web test"}
+ "scripts":{"dev":"npm --prefix apps/web run dev","build":"npm --prefix apps/web run build","start":"npm --prefix apps/web run start","typecheck":"npm --prefix apps/web run typecheck","test":"npm --prefix apps/web test","local:start":"bash scripts/local-services.sh start","local:stop":"bash scripts/local-services.sh stop","local:status":"bash scripts/local-services.sh status"}
 }

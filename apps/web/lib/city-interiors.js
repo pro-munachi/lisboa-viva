@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createCharacter, animateCharacter } from "./characters";
 import { createTransitScene } from "./city-transit-scenes";
+import { createClubLighting } from "./city-club-lighting";
+import { lightingForMinute } from "./city-lighting";
 
 // Original illustrative Lisbon interiors. None reproduces a surveyed business
 // floor plan or imports artwork, furniture, textures or reference-game assets.
@@ -137,12 +139,100 @@ function label(text, color = "#335e63", cream = "#f1e5ca") {
   });
 }
 
+/** Interior direction follows city time, with enough fill to explore at night.
+ * The bar stays subdued so its original colored fixtures remain readable.
+ */
+export function interiorLightingForMinute(minute, kind = "home") {
+  const state = lightingForMinute(minute),
+    night = state.night,
+    club = kind === "bar";
+  return {
+    ...state,
+    hemisphereSky: club
+      ? "#c6bdd5"
+      : `#${new THREE.Color("#e4f1ff").lerp(new THREE.Color("#e8d0b5"), night).getHexString()}`,
+    hemisphereGround: club ? "#8a746a" : "#ae9172",
+    hemisphereIntensity: club ? 0.84 - night * 0.14 : 1.55 - night * 0.43,
+    sunColor: "#f5ddbc",
+    sunIntensity: club ? 0.65 - night * 0.33 : 2.35 - night * 1.6,
+    exposure: club ? 1.12 : 1.04 + night * 0.06,
+  };
+}
+
+function withInteriorLighting(room, kind, reducedMotion, glowMaterial = null) {
+  const fixtures =
+    kind === "bar" ? createClubLighting({ reducedMotion }) : null;
+  // Cut the soft decorative cones at the actual room floor. World-space clip
+  // planes follow the translated room rather than bleeding below its cutaway.
+  const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.02),
+    floorPoint = new THREE.Vector3();
+  fixtures?.group.traverse((node) => {
+    if (node.geometry?.type === "ConeGeometry")
+      node.material.clippingPlanes = [floorPlane];
+  });
+  const lamps = new THREE.Group();
+  lamps.name = "ROAM warm room lamps";
+  const lights = [-2.9, 2.9].map((x) => {
+    const light = new THREE.PointLight("#ffce91", 0, 11, 2);
+    light.position.set(x, 2.83, 0);
+    light.castShadow = false;
+    light.userData.interiorLamp = true;
+    lamps.add(light);
+    return light;
+  });
+  room.group.add(lamps);
+  if (fixtures) room.group.add(fixtures.group);
+  let disposed = false;
+  const setNight = (value) => {
+    if (disposed) return;
+    const night = Number.isFinite(value)
+      ? THREE.MathUtils.clamp(value, 0, 1)
+      : 0;
+    lights.forEach((light) => {
+      light.intensity = kind === "bar" ? 4 + night * 5 : 3 + night * 24;
+    });
+    if (glowMaterial) glowMaterial.emissiveIntensity = 0.25 + night * 0.75;
+  };
+  setNight(0);
+  return {
+    ...room,
+    setNight,
+    update(time, dt, motion, activeZoneId) {
+      if (disposed) return;
+      room.update?.(time, dt, motion, activeZoneId);
+      fixtures?.update(time, { paused: !motion, reducedMotion });
+      if (fixtures)
+        floorPlane.setFromNormalAndCoplanarPoint(
+          floorPlane.normal,
+          room.group.localToWorld(floorPoint.set(0, 0.02, 0)),
+        );
+    },
+    // Release managed fixtures before the caller traverses room resources.
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      fixtures?.dispose();
+      lights.forEach((light) => light.dispose());
+      lamps.removeFromParent();
+      lamps.clear();
+      room.dispose?.();
+    },
+  };
+}
+
 /** A roofless room centred on local coordinates. Front entry is at +Z.
  * All returned resources belong to group and can use the city scene's teardown.
  */
-export function createInteriorScene(requestedKind, { shirt = "#e6a253" } = {}) {
+export function createInteriorScene(
+  requestedKind,
+  { shirt = "#e6a253", reducedMotion = false } = {},
+) {
   if (["airport", "station", "bus-stop"].includes(requestedKind))
-    return createTransitScene(requestedKind, { shirt });
+    return withInteriorLighting(
+      createTransitScene(requestedKind, { shirt }),
+      requestedKind,
+      reducedMotion,
+    );
   const kind =
     requestedKind === "restaurant"
       ? "cafe"
@@ -1070,13 +1160,18 @@ export function createInteriorScene(requestedKind, { shirt = "#e6a253" } = {}) {
       );
     }
   };
-  return {
-    group,
-    spawn,
-    zones,
-    residents,
-    update,
-    bounds: group.userData.room.bounds,
-    obstacles,
-  };
+  return withInteriorLighting(
+    {
+      group,
+      spawn,
+      zones,
+      residents,
+      update,
+      bounds: group.userData.room.bounds,
+      obstacles,
+    },
+    kind,
+    reducedMotion,
+    mats.glow,
+  );
 }

@@ -154,7 +154,11 @@ test("recommendation endpoint bounds JSON and rejects cross-origin or forged pro
   const request = (body: string, headers: Record<string, string> = {}) =>
     new Request("http://127.0.0.1/api/recommendations", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "lv_session=test-only",
+        ...headers,
+      },
       body,
     });
   assert.equal(
@@ -176,19 +180,32 @@ test("recommendation endpoint bounds JSON and rejects cross-origin or forged pro
   );
   assert.equal((await POST(request(" ".repeat(4100)))).status, 413);
   const previous = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (url) => {
+    assert.match(String(url), /\/v1\/auth\/me$/);
+    return Response.json({ id: "test-only" });
+  }) as typeof fetch;
   delete process.env.OPENAI_API_KEY;
   try {
     const response = await POST(request(JSON.stringify({ setup })));
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal((await response.json()).source, "curated");
-    const localAlias = await POST(new Request("http://localhost:3021/api/recommendations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1:3021", Host: "127.0.0.1:3021" },
-      body: JSON.stringify({ setup }),
-    }));
+    const localAlias = await POST(
+      new Request("http://localhost:3021/api/recommendations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://127.0.0.1:3021",
+          Host: "127.0.0.1:3021",
+          Cookie: "lv_session=test-only",
+        },
+        body: JSON.stringify({ setup }),
+      }),
+    );
     assert.equal(localAlias.status, 200);
   } finally {
+    globalThis.fetch = previousFetch;
     if (previous !== undefined) process.env.OPENAI_API_KEY = previous;
   }
 });
@@ -211,7 +228,43 @@ test("leaving a recommendations request also cancels the upstream AI request", a
   await recommendTrip(setup, {
     key: "test-only",
     signal: browser.signal,
-    fetcher: (async () => { calls++; throw new Error(); }) as typeof fetch,
+    fetcher: (async () => {
+      calls++;
+      throw new Error();
+    }) as typeof fetch,
   });
   assert.equal(calls, 0);
+});
+
+test("valid recommendation requests require a verified account before any AI request", async () => {
+  const previousFetch = globalThis.fetch;
+  let calls = 0;
+  const request = (cookie?: string) =>
+    new Request("http://127.0.0.1/api/recommendations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body: JSON.stringify({ setup }),
+    });
+  try {
+    globalThis.fetch = (async (url) => {
+      calls++;
+      assert.match(String(url), /\/v1\/auth\/me$/);
+      return Response.json({ error: "session_expired" }, { status: 401 });
+    }) as typeof fetch;
+    assert.equal((await POST(request())).status, 401);
+    assert.equal(calls, 0);
+    const rejected = await POST(request("lv_session=forged"));
+    assert.equal(rejected.status, 401);
+    assert.equal(rejected.headers.get("cache-control"), "no-store");
+    assert.equal(calls, 1);
+    globalThis.fetch = (async () => {
+      throw new Error("Offline");
+    }) as typeof fetch;
+    assert.equal((await POST(request("lv_session=existing"))).status, 503);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });

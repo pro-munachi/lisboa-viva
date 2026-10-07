@@ -62,17 +62,20 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const registering = mode === "register";
   return (
     <main className="auth-page">
-      <section className="auth-story" aria-label="Lisboa Viva">
+      <section className="auth-story" aria-label="ROAM — Lisbon pilot">
         <Link className="auth-brand" href="/">
           ROAM
-          <span>Lisbon. Your way.</span>
+          <span>Every city. Your story.</span>
         </Link>
         <div className="auth-story-copy">
-          <span className="eyebrow">LISBON, YOUR WAY</span>
-          <h1>{registering ? "Start a new story." : "Welcome back."}</h1>
+          <span className="eyebrow">FIRST CHAPTER · LISBON</span>
+          <h1>
+            {registering ? "A city of possibilities." : "Your story continues."}
+          </h1>
           <p>
-            Save your account, choose how you experience the city, and enter the
-            map with a protected session.
+            Explore Lisbon, our first playable city, at your own pace. Your
+            saved trips stay on this browser, ready for your next little
+            adventure.
           </p>
           <div className="auth-place-row" aria-hidden="true">
             <span>
@@ -169,7 +172,9 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                 maxLength={72}
                 required
               />
-              {registering && <small>Between 10 and 72 characters.</small>}
+              {registering && (
+                <small>At least 10 characters, up to 72 UTF-8 bytes.</small>
+              )}
             </label>
             {registering && (
               <label className="auth-check">

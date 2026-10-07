@@ -1,5 +1,7 @@
 import { validSetup, type Setup } from "../../../lib/engine";
 import { recommendTrip } from "../../../lib/recommendations";
+import { requireAccount } from "../../../lib/server-account";
+import { createHash } from "node:crypto";
 
 const headers = { "Cache-Control": "no-store" };
 const attempts = new Map<string, { count: number; reset: number }>();
@@ -14,9 +16,13 @@ export async function POST(request: Request) {
   if (origin && !sameOrigin) {
     try {
       const source = new URL(origin);
-      sameOrigin = source.origin === origin && source.protocol === target.protocol &&
+      sameOrigin =
+        source.origin === origin &&
+        source.protocol === target.protocol &&
         source.host === request.headers.get("host");
-    } catch { sameOrigin = false; }
+    } catch {
+      sameOrigin = false;
+    }
   }
   if (!sameOrigin)
     return Response.json(
@@ -85,21 +91,28 @@ export async function POST(request: Request) {
       { status: 400, headers },
     );
   }
+  const accountError = await requireAccount(request);
+  if (accountError) return accountError;
   if (process.env.OPENAI_API_KEY) {
     const now = Date.now();
     for (const [id, bucket] of attempts)
       if (bucket.reset <= now) attempts.delete(id);
-    const address = (request.headers.get("x-forwarded-for") || "local")
-      .split(",")[0]
-      .slice(0, 80);
-    const bucket = attempts.get(address) || { count: 0, reset: now + 60000 };
+    // Go has validated this opaque session. Do not trust client-supplied IP headers
+    // for a cost-bearing endpoint, or retain the raw session token in the map.
+    const session =
+      (request.headers.get("cookie") || "")
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith("lv_session=")) || "";
+    const identity = createHash("sha256").update(session).digest("hex");
+    const bucket = attempts.get(identity) || { count: 0, reset: now + 60000 };
     if (active >= 2 || bucket.count >= 3 || attempts.size >= 1000)
       return Response.json(
         { error: "Give your suggestions a moment, then try again." },
         { status: 429, headers: { ...headers, "Retry-After": "60" } },
       );
     bucket.count++;
-    attempts.set(address, bucket);
+    attempts.set(identity, bucket);
   }
   active++;
   try {

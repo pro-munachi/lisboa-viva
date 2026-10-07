@@ -20,6 +20,7 @@ import { coastRegions } from "./city-water";
 import { drapedPolygonGeometry } from "./city-surfaces";
 import { createVenueDecorations } from "./city-venues";
 import { createInteriorRuntime } from "./city-interior-runtime";
+import { interiorLightingForMinute } from "./city-interiors";
 import { createHotspotBadgeLayer } from "./city-hotspot-badges";
 import {
   createLocalWalkerProfiles,
@@ -40,6 +41,7 @@ export function createCity(host, options) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.localClippingEnabled = true;
   renderer.setClearColor("#dae5e0");
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -72,7 +74,7 @@ export function createCity(host, options) {
   });
   let exteriorLighting = lightingForMinute(options.minute ?? 660),
     lightingKey = "";
-  const interiorLighting = lightingForMinute(660);
+  const galleryLighting = lightingForMinute(660);
   const camera = new THREE.PerspectiveCamera(43, 1, 0.3, 90000);
   camera.position.set(200, 160, 200);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -184,11 +186,17 @@ export function createCity(host, options) {
     shirt: options.shirt,
     onZone: options.onInteriorZone,
     onActivity: options.onInteriorActivity,
+    reducedMotion: reduce,
+    night: exteriorLighting.night,
   });
   function syncLighting() {
     const exterior = !indoor.active && !characterGallery;
-    const state = exterior ? exteriorLighting : interiorLighting;
-    const key = `${exterior}:${state.minute}`;
+    const state = exterior
+      ? exteriorLighting
+      : indoor.active
+        ? interiorLightingForMinute(exteriorLighting.minute, indoor.kind)
+        : galleryLighting;
+    const key = `${exterior}:${indoor.kind || "gallery"}:${state.minute}`;
     if (key !== lightingKey) {
       lightingKey = key;
       atmosphere.setLighting(state, exterior);
@@ -198,6 +206,7 @@ export function createCity(host, options) {
       sun.color.set(state.sunColor);
       sun.intensity = state.sunIntensity;
       architecture.setNight(exterior ? state.night : 0);
+      indoor.setLighting(state.night);
     }
     const target = controls.target;
     sun.position.set(

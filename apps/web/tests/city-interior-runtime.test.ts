@@ -8,7 +8,10 @@ const THREE = require("three");
 type ActivityEvent = { state: string; zoneId: string | null; error?: string };
 const kinds: InteriorKind[] = ["home", "cafe", "gym", "shop", "museum", "bar"];
 
-function harness(badgeHost?: any) {
+function harness(
+  badgeHost?: any,
+  lighting?: { night?: number; reducedMotion?: boolean },
+) {
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(43, 1.6, 0.3, 90000),
     controls = {
@@ -71,6 +74,7 @@ function harness(badgeHost?: any) {
     onZone: (id: string) => zones.push(id),
     onActivity: (event: ActivityEvent) => events.push({ ...event }),
     badgeHost,
+    ...lighting,
   });
   const group = () => {
     const result = scene.children.find((node: any) => node.userData.room);
@@ -358,6 +362,102 @@ test("switching rooms or exiting cancels previous completion and releases the re
     } finally {
       h.runtime.clear();
     }
+  }
+});
+
+test("bar fixtures follow translated floors, freeze during pause and dispose once before generic room cleanup", () => {
+  const h = harness(undefined, { night: 1 });
+  h.enter("bar");
+  const group = h.group(),
+    fixtures = group.children.find((node: any) => node.userData.clubLighting)!;
+  assert.ok(fixtures);
+  const geometries = new Set<any>(),
+    materials = new Set<any>(),
+    lamps: any[] = [];
+  let geometryDisposals = 0,
+    materialDisposals = 0;
+  fixtures.traverse((node: any) => {
+    if (node.geometry) geometries.add(node.geometry);
+    if (node.material) materials.add(node.material);
+  });
+  group.traverse((node: any) => {
+    if (node.userData.interiorLamp) lamps.push(node);
+  });
+  geometries.forEach((geometry) =>
+    geometry.addEventListener("dispose", () => geometryDisposals++),
+  );
+  materials.forEach((material) =>
+    material.addEventListener("dispose", () => materialDisposals++),
+  );
+  const snapshot = () => {
+    const states: any[] = [];
+    fixtures.traverse((node: any) =>
+      states.push([
+        node.position.toArray(),
+        node.rotation.toArray(),
+        node.isLight ? node.intensity : null,
+      ]),
+    );
+    return states;
+  };
+  try {
+    assert.ok(lamps.every((lamp) => lamp.intensity === 9));
+    h.runtime.update(0.05, true);
+    fixtures.traverse((node: any) => {
+      if (node.geometry?.type === "ConeGeometry") {
+        const plane = node.material.clippingPlanes[0];
+        assert.equal(plane.normal.y, 1);
+        assert.ok(Math.abs(plane.constant + group.position.y + 0.02) < 1e-8);
+      }
+    });
+    const moving = snapshot();
+    h.runtime.update(0.05, true);
+    assert.notDeepEqual(snapshot(), moving);
+    const frozen = snapshot();
+    for (let i = 0; i < 100; i++) h.runtime.update(1, false);
+    assert.deepEqual(snapshot(), frozen);
+    h.runtime.setLighting(0);
+    assert.ok(lamps.every((lamp) => lamp.intensity === 4));
+    assert.deepEqual(
+      snapshot(),
+      frozen,
+      "changing city time leaves the paused fixture phase alone",
+    );
+    h.enter("home");
+    assert.equal(fixtures.parent, null);
+    assert.equal(fixtures.children.length, 0);
+    assert.equal(geometryDisposals, geometries.size);
+    assert.equal(materialDisposals, materials.size);
+    h.runtime.dispose();
+    h.runtime.dispose();
+    assert.equal(geometryDisposals, geometries.size);
+    assert.equal(materialDisposals, materials.size);
+    assert.equal(h.disposed.length, 2);
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
+test("reduced-motion bar fixtures remain steady even when room exploration is enabled", () => {
+  const h = harness(undefined, { reducedMotion: true });
+  try {
+    h.enter("bar");
+    const fixtures = h
+      .group()
+      .children.find((node: any) => node.userData.clubLighting)!;
+    const lights: any[] = [],
+      ball = fixtures.children.find(
+        (node: any) => node.geometry?.type === "IcosahedronGeometry",
+      )!;
+    fixtures.traverse((node: any) => {
+      if (node.isLight) lights.push(node);
+    });
+    for (let i = 0; i < 500; i++) h.runtime.update(0.05, true);
+    assert.ok(lights.every((light) => light.intensity === 6.5));
+    assert.equal(ball.rotation.y, 0);
+    assert.equal(ball.rotation.z, 0);
+  } finally {
+    h.runtime.dispose();
   }
 });
 

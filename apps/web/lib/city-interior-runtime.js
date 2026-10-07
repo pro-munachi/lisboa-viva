@@ -14,6 +14,8 @@ export function createInteriorRuntime({
   onZone,
   onActivity,
   badgeHost,
+  reducedMotion = false,
+  night = 0,
 }) {
   let room = null,
     actor = null,
@@ -21,7 +23,10 @@ export function createInteriorRuntime({
     action = null,
     selected = null,
     clock = 0,
-    disposed = false;
+    disposed = false,
+    lightingNight = Number.isFinite(night)
+      ? THREE.MathUtils.clamp(night, 0, 1)
+      : 0;
   const origin = new THREE.Vector3();
   const badges = badgeHost
     ? createHotspotBadgeLayer(badgeHost, { onSelect: selectZone })
@@ -36,7 +41,10 @@ export function createInteriorRuntime({
   };
   function clear() {
     badges?.clear();
-    if (room) disposeGroup(room.group);
+    if (room) {
+      room.dispose?.();
+      disposeGroup(room.group);
+    }
     room = actor = visit = action = selected = null;
   }
   function dispose() {
@@ -86,7 +94,8 @@ export function createInteriorRuntime({
     visit = next;
     clock = 0;
     origin.copy(at);
-    room = createInteriorScene(next.kind, { shirt });
+    room = createInteriorScene(next.kind, { shirt, reducedMotion });
+    room.setNight?.(lightingNight);
     room.group.position.copy(origin);
     actor = createCharacter({
       shirt: shirt || "#c58e59",
@@ -119,6 +128,13 @@ export function createInteriorRuntime({
     selected = id;
     onZone?.(id);
     updateBadges();
+  }
+  function setLighting(value) {
+    if (disposed) return;
+    lightingNight = Number.isFinite(value)
+      ? THREE.MathUtils.clamp(value, 0, 1)
+      : 0;
+    room?.setNight?.(lightingNight);
   }
   function walkTo(target, zoneId = null, duration = 4.5) {
     if (!room || action) return false;
@@ -293,6 +309,7 @@ export function createInteriorRuntime({
     dispose,
     frameRoom,
     selectZone,
+    setLighting,
     perform,
     pick,
     update,

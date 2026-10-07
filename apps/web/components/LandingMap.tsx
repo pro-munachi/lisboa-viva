@@ -29,7 +29,7 @@ export default function LandingMap() {
       <div className="landing-map">
         <World
           focus={focus}
-          shirt="#ece7df"
+          shirt="#f47f6d"
           hotspots={hotspots}
           onHotspot={(hotspot) =>
             setFocus({
@@ -46,7 +46,7 @@ export default function LandingMap() {
       <header className="landing-header">
         <Link className="landing-brand" href="/" aria-label="ROAM home">
           ROAM
-          <span>LISBON. YOUR WAY.</span>
+          <span>EVERY CITY. YOUR STORY.</span>
         </Link>
         <nav className="landing-auth" aria-label="Account">
           <Link className="landing-login" href="/login">
@@ -60,19 +60,19 @@ export default function LandingMap() {
 
       <section className="landing-hero">
         <span className="landing-kicker">
-          <Sparkles size={14} /> A living miniature of Lisbon
+          <Sparkles size={14} /> Lisbon · Our first playable city
         </span>
         <h1>
-          Meet Lisbon
-          <br /> before you arrive.
+          Every city.
+          <br /> <span className="landing-story">Your story.</span>
         </h1>
         <p>
-          Walk its streets, meet its people, and try a few days in the city.
-          Your choices shape a Lisbon story that feels like your own.
+          Start in Lisbon. Wander real streets, meet simulated locals, and find
+          your favourite corners. A few days, a thousand little possibilities.
         </p>
         <div className="landing-actions">
           <Link className="landing-primary" href="/register">
-            Start your story <ArrowRight size={18} />
+            Start in Lisbon <ArrowRight size={18} />
           </Link>
           <Link className="landing-secondary" href="/login">
             I already have an account
@@ -92,7 +92,7 @@ export default function LandingMap() {
       </section>
 
       <aside className="landing-locations" aria-label="Preview a neighbourhood">
-        <span>Preview the map</span>
+        <span>Lisbon pilot · Take a look around</span>
         <div>
           {previewPlaces.map((place) => (
             <button

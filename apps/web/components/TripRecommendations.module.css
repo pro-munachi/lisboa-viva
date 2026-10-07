@@ -1,7 +1,7 @@
 .recommendations {
   margin-top: 28px;
   padding-top: 24px;
-  border-top: 1px solid #deddd2;
+  border-top: 1px solid var(--line, #dce3ef);
 }
 .recommendations header {
   display: flex;
@@ -12,7 +12,7 @@
 .kicker {
   font-size: 10px;
   letter-spacing: 0.13em;
-  color: #526875;
+  color: var(--roam-cobalt-dark, #193faf);
 }
 .recommendations h3 {
   margin: 6px 0;
@@ -23,10 +23,11 @@
   gap: 7px;
   align-items: center;
   padding: 12px;
-  border: 1px solid #cdd6dc;
+  min-height: 44px;
+  border: 1px solid #c5d2f4;
   border-radius: 12px;
-  background: #eaf0f3;
-  color: #31576e;
+  background: var(--roam-blue-soft, #eaf0ff);
+  color: var(--roam-cobalt-dark, #193faf);
   font-size: 12px;
 }
 .items {
@@ -40,9 +41,18 @@
   text-align: left;
   padding: 16px;
   border-radius: 13px;
-  border: 1px solid #dfded2;
-  background: #f5f3eb;
-  color: #252b34;
+  border: 1px solid #dce3ef;
+  background: var(--paper, #fffefb);
+  color: var(--ink, #213052);
+}
+.items button:nth-child(3n + 1) {
+  border-top: 4px solid var(--roam-coral, #f47f6d);
+}
+.items button:nth-child(3n + 2) {
+  border-top: 4px solid var(--roam-lime, #d7ee83);
+}
+.items button:nth-child(3n) {
+  border-top: 4px solid var(--roam-mint, #c9efdf);
 }
 .items strong {
   display: flex;
@@ -55,15 +65,15 @@
   font-size: 12px;
   line-height: 1.6;
   margin-top: 8px;
-  color: #606965;
+  color: var(--muted, #5f6a80);
 }
 .recommendations p {
   font-size: 11px;
   line-height: 1.6;
-  color: #6c706a;
+  color: var(--muted, #5f6a80);
 }
 .recommendations button:focus-visible {
-  outline: 3px solid #7698ae;
+  outline: 3px solid var(--roam-cobalt, #2456d8);
   outline-offset: 3px;
 }
 .recommendations button:disabled {

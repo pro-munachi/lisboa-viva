@@ -23,6 +23,7 @@ import {
   type JourneyState,
   type JourneyAction,
 } from "./journey";
+import { VALID_TRAVELLER_COLOURS } from "./traveller-colours";
 export const STORAGE_KEY = "roam.lisbon.trips.v1";
 export type Interest =
   | "food"
@@ -128,16 +129,7 @@ export function validSetup(s: Setup): boolean {
     s.budget <= 5000 &&
     ["Budget explorer", "Foodie", "Culture seeker"].includes(s.style) &&
     ["Graça", "Baixa", "Alfama"].includes(s.base) &&
-    [
-      "#ece7df",
-      "#687f73",
-      "#b47459",
-      "#777791",
-      "#456a86",
-      "#ceab62",
-      "#b9828f",
-      "#454b4e",
-    ].includes(s.shirt) &&
+    VALID_TRAVELLER_COLOURS.has(s.shirt) &&
     (s.persona === undefined ||
       ["tourist", "nomad", "expat"].includes(s.persona)) &&
     (s.arrival === undefined ||
@@ -595,6 +587,15 @@ export function itinerary(t: Trip): string {
   return [
     "ROAM · YOUR SIMULATED LISBON ITINERARY",
     `${t.setup.days}-day ${t.setup.style.toLowerCase()} trip · Home base: ${t.setup.base}`,
+    `Traveller: ${t.setup.persona || "tourist"}${t.setup.accommodation ? ` · Accommodation preference: ${t.setup.accommodation}` : ""}`,
+    ...(t.setup.startDate && t.setup.endDate
+      ? [
+          `Planned calendar: ${t.setup.startDate} → ${t.setup.endDate} (checkout)`,
+        ]
+      : []),
+    ...(t.setup.interests?.length
+      ? [`Interests: ${t.setup.interests.join(", ")}`]
+      : []),
     `Simulated spend ${euro(t.spent)} / ${euro(t.setup.budget)} activity budget`,
     t.history.some((h) => {
       const command = h.command;

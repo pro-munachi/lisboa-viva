@@ -228,6 +228,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRow(r.Context(), `SELECT u.id::text,p.password_hash FROM users u
 		JOIN password_credentials p ON p.user_id=u.id
 		WHERE (u.handle=$1 OR lower(u.email)=$1) AND u.account_status='active'`, input.Identity).Scan(&id, &passwordHash)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		fail(w, err)
+		return
+	}
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(input.Password)) != nil {
 		fail(w, apiError("credentials"))
 		return
@@ -263,7 +267,10 @@ func clientIP(r *http.Request) string {
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookie); err == nil {
-		_, _ = s.db.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", tokenHash(cookie.Value))
+		if _, err = s.db.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", tokenHash(cookie.Value)); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(1, 0)})
 	respond(w, http.StatusOK, map[string]bool{"ok": true})

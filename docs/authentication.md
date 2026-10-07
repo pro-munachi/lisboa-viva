@@ -44,6 +44,23 @@ docker compose up --build
 
 The local stack uses PostgreSQL on `127.0.0.1:55433`, Go on `127.0.0.1:8080`, and Next.js on `127.0.0.1:3000`.
 
+For native development without Docker, use PostgreSQL 17 and Go 1.26, then run these commands in a normal terminal from the repository root:
+
+```sh
+npm run local:start
+npm run dev
+```
+
+The helper initializes an isolated cluster, creates the `lisboa` development database, builds the account service and waits for its database-backed health check. PostgreSQL listens only on `127.0.0.1:55433`; Go listens only on `127.0.0.1:8080`. An existing Next.js preview can stay running on its current port because its default API target is already `http://127.0.0.1:8080`.
+
+All database data, binaries, build caches, PID files and logs stay under ignored `work/local/`. The helper discovers the project-local PostgreSQL and Go installations, then Homebrew PostgreSQL 17/16 or tools on `PATH`. Set `PGBIN` to a PostgreSQL bin directory or `ROAM_GO_BIN` to a Go executable to override discovery. PostgreSQL must match an existing cluster’s major version. This setup uses the repository’s fixed development credentials and never reads the staging database URL.
+
+The current workspace has PostgreSQL 17.11 compiled from the official source release under `work/local/postgresql/` and the verified Go 1.26.0 toolchain under `work/local/go/`. These ignored installations are discovered automatically and are not part of the repository. Another checkout must install these prerequisites or provide the tool overrides. They do not create a login-time service.
+
+Some Codex execution sandboxes block PostgreSQL shared-memory initialization and process inspection. If `initdb` reports an operating-system `Operation not permitted` error, run `npm run local:start` from a normal terminal. Installing the binaries alone does not start the database or make signup available; the helper must finish its health check first.
+
+Use `npm run local:status` to check the managed services and `npm run local:stop` to stop them. Stopping retains accounts and database data; it does not install a system service or stop an unrelated API process. Startup applies the checked migrations through Go. Logs are `work/local/postgres.log` and `work/local/auth.log`.
+
 ## Render and staging database
 
 Configure these as secrets or environment variables rather than committing them:
@@ -74,10 +91,20 @@ The baseline review identified shared browser trip/pin keys, database failures r
 
 The proxy currently forwards neither a trusted client identity nor a client IP. Go limits registration to 10 attempts and login to 15 attempts per minute using its connection's `RemoteAddr`. Consequently, browser users sharing one Next.js proxy share these limits. Forwarded headers must not be trusted without a defined trusted-proxy boundary.
 
-`server-account.ts` supplies a server-side guard for additional API handlers. Missing or empty session cookies reject with HTTP 401 before fetching. A nonempty cookie must pass Go's `GET /v1/auth/me` check; rejected sessions remain 401, while backend failures become 503. The check leaves the caller's request body unread.
+`server-account.ts` supplies the verified-account guard used by the recommendation endpoint. Its cost-bearing rate bucket uses a hash of a verified opaque session rather than trusting forwarded IP headers. The limit is local to one process, so production-wide enforcement still requires shared storage. The helper also supplies a guard for additional API handlers. Missing or empty session cookies reject with HTTP 401 before fetching. A nonempty cookie must pass Go's `GET /v1/auth/me` check; rejected sessions remain 401, while backend failures become 503. The check leaves the caller's request body unread.
 
 Before correction, an isolated upstream snapshot passed four mocked proxy checks: same-origin cookie/status forwarding, cross-origin rejection, service-unavailable responses and the oversized-body buffering reproduction. Go 1.26.0 passed seven source-only checks: the three upstream normalization/token tests, invalid-input and missing-session HTTP responses, secure cookie flags, the shared-proxy rate-limit reproduction, and the trailing-data limit reproduction. The reproduction tests established baseline bugs and were not proof of a fix. These checks make no calls to an external account service or database; they do not prove registration, login, SQL migrations or role enforcement against PostgreSQL.
 
-After correction, 11 web checks cover account namespaces, bounded streaming/cancellation, cookie/status forwarding, origin rejection and validated-session API guards. All 13 Go tests pass, along with the race detector and `go vet`; these include outage classification, strict JSON limits, checksums, rollback and a simulated concurrent migration waiter. Those migration tests use transaction doubles, not PostgreSQL. The shared-proxy rate limit remains a documented deployment limitation.
+After correction, 11 web checks cover account namespaces, bounded streaming/cancellation, cookie/status forwarding, origin rejection and validated-session API guards. All 13 Go tests pass, along with the race detector and `go vet`; these include outage classification, strict JSON limits, checksums, rollback and a simulated concurrent migration waiter. Those migration tests use transaction doubles, not PostgreSQL. The shared-proxy rate limit remains a documented deployment limitation. Logout now reports failed database revocation and the browser stays on the current account with a retry message instead of claiming successful sign-out.
 
-At the reviewed revision, both the [checks run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37634596146) and [staging migration run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37634618662) ended with `startup_failure`. Neither is evidence of passing tests or successful database migration. No staging database credentials were used, no external migrations were run, and no end-to-end PostgreSQL registration/login test was performed during this review.
+At the reviewed revision, both the [checks run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37634596146) and [staging migration run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37634618662) ended with `startup_failure`. Neither is evidence of passing tests or successful database migration. No staging database credentials were used and no external migrations were run. PostgreSQL registration/login had not been checked at that baseline stage; the later local verification below records the real database test.
+
+
+A later default Go run passes 14 source tests and explicitly skips the opt-in PostgreSQL integration test. `auth_integration_test.go` rejects remote/effective/fallback hosts and uses a unique temporary schema for real migrations, registration, login, session revocation, account suspension and role checks. Run it only after the prepared loopback database is healthy, with `ROAM_TEST_DATABASE_URL` set to that local database URL. The schema is removed after the test. Compilation is not evidence that the database check has run.
+
+
+## Live local verification
+
+After the user ran `npm run local:start` in a normal Terminal, the database-backed API health check returned `{"ok":true}`. SQL confirmed migrations `001_users.sql`, `002_auth.sql` and `003_default_locale_en.sql` in the isolated project cluster. Registration through the Next.js browser proxy returned 201 and an ordinary `player` account; browser login reached protected `/play`. No staging database was accessed.
+
+The root's network-authorized context ran the complete Go race suite with the explicit loopback PostgreSQL URL: all 16 top-level tests passed, including the opt-in real database test. An independent SQL check confirmed that no temporary integration-test schemas remained. Child-agent network restrictions had prevented an earlier attempt before schema creation; that failed attempt is not counted as successful verification. `go vet` also passed. A named QA account and its demo trip were retained when the preview state changed during checks.
