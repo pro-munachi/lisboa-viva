@@ -44,4 +44,4 @@ Authenticated content editor, cross-device trip synchronisation/server-backed tr
 
 Architectural fidelity needs better facade/roof models, surveyed height detail, richer terrain and collision/navigation data. Google imagery or another licensed photogrammetry source would be a separately configured provider, subject to its coverage/terms. The open-data world remains usable without that dependency.
 
-R2 social discovery, groups, chat, reporting/blocking and moderation remain outside this delivery. No real player presence is fabricated.
+Shared city and mapped-hotspot chat is now available through authenticated Go/PostgreSQL endpoints; see [chat scope and verification](chat.md). Broader social discovery, structured plans/RSVPs, private groups/messages, reporting/blocking and moderation remain future work. No real player presence is fabricated.

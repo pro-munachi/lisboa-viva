@@ -18,6 +18,7 @@ import {
   Home,
   Map,
   MapPin,
+  MessageCircle,
   Search,
   Eye,
   EyeOff,
@@ -41,6 +42,8 @@ import Dialog from "../../components/Dialog";
 import JourneyPanel from "../../components/JourneyPanel";
 import TripCalendar from "../../components/TripCalendar";
 import TripRecommendations from "../../components/TripRecommendations";
+import ChatPanel from "../../components/ChatPanel";
+import { chatPlaceFor } from "../../lib/chat-rooms";
 import {
   JOURNEY_HUBS,
   JOURNEY_PERSONAS,
@@ -188,6 +191,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [pinError, setPinError] = useState("");
   const [pinName, setPinName] = useState("");
   const [clean, setClean] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatTrigger = useRef<HTMLButtonElement>(null);
   const [interior, setInterior] = useState<InteriorVisit | null>(null);
   const beforeInterior = useRef(false);
   const worldHotspots = useMemo<WorldHotspot[]>(
@@ -524,6 +529,12 @@ function RoamExperience({ user }: { user: AuthUser }) {
     new Date(Date.parse(`${calendarStart}T00:00:00Z`) + setup.days * 86400000)
       .toISOString()
       .slice(0, 10);
+  const chatPlace = chatPlaceFor(
+    interior
+      ? interior.id
+      : mapHotspot?.id ||
+          (trip?.journey.hub ? `transit-${trip.journey.hub}` : undefined),
+  );
   return (
     <main className="app-shell">
       <div className={clean ? "game clean-world" : "game"}>
@@ -549,6 +560,17 @@ function RoamExperience({ user }: { user: AuthUser }) {
           </button>
           <button onClick={enterHome}>
             <Home size={16} /> Your home
+          </button>
+          <button
+            ref={chatTrigger}
+            aria-expanded={chatOpen}
+            aria-controls={chatOpen ? "roam-chat" : undefined}
+            onClick={() => {
+              setPanel(null);
+              setChatOpen((open) => !open);
+            }}
+          >
+            <MessageCircle size={16} /> City chat
           </button>
           {!interior && (
             <button onClick={() => setClean((v) => !v)}>
@@ -893,6 +915,17 @@ function RoamExperience({ user }: { user: AuthUser }) {
           {notice}
         </div>
       </div>
+      {chatOpen && (
+        <ChatPanel
+          user={user}
+          cityId="lisbon"
+          place={chatPlace}
+          onClose={() => {
+            setChatOpen(false);
+            chatTrigger.current?.focus();
+          }}
+        />
+      )}
       <div className="below-game">
         <span>Try a city. Find your rhythm.</span>
         <span>Lisbon pilot · Illustrative costs · Europe/Lisbon time</span>

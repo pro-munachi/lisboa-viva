@@ -49,6 +49,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("GET /v1/auth/me", s.requireSession(http.HandlerFunc(s.me)))
 	mux.Handle("PATCH /v1/auth/me", s.requireSession(http.HandlerFunc(s.updateMe)))
 	mux.Handle("GET /v1/admin/users", s.requireRole("admin", http.HandlerFunc(s.adminUsers)))
+	s.registerChatRoutes(mux)
 	return s.headers(mux)
 }
 
@@ -102,6 +103,7 @@ func fail(w http.ResponseWriter, err error) {
 			"session_expired": http.StatusUnauthorized, "forbidden": http.StatusForbidden,
 			"rate_limited":      http.StatusTooManyRequests,
 			"payload_too_large": http.StatusRequestEntityTooLarge,
+			"nonce_conflict":    http.StatusConflict,
 		}[code]
 	}
 	if status == 0 {

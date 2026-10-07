@@ -2,6 +2,18 @@
 
 Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, React 19.2.4, TypeScript 5.9.3 and Three.js 0.160.0. The project supports Node 22 or newer; GitHub Actions is configured for Node 22.
 
+## Place-connected chat — 7 October 2026
+
+The chat increment passed all **176 web tests**, TypeScript and the production build. The full Go race run passed all **29 top-level tests**, including both opt-in integrations against the running loopback PostgreSQL database. Those integrations use isolated schemas and test real account/session enforcement, concurrent idempotent retries, changed-payload conflicts, room isolation, latest/forward pagination, revocation/suspension, invalid input and room-transaction ordering before sequence allocation. The generated Go roster matches the frontend's 621 city/place rooms. `go vet` and `git diff --check` passed.
+
+The production preview at `http://localhost:3046/play` uses the rebuilt chat API at `127.0.0.1:8081` and the existing local PostgreSQL database. Startup applies migration `004_chat.sql`; the user's previous API at port 8080 remains running. A synthetic traveller posted through the browser, and a separate synthetic local account read/replied through the API. The open browser received the reply by polling. City messages survived a reload. The airport room retained its own message after reload and did not show city messages. Switching rooms preserved an unsent room-specific draft. Escape closed chat and returned focus to **City chat**.
+
+Selecting mapped **Café Janis**, entering its original café interior and choosing **Here** opened that café's room. The coffee prompt filled the composer without sending; an explicit Send stored it. The other test account replied in that room and the reply appeared beside the interior. Unsigned API reads returned 401. Only ID, username and tourist/local category appeared in the public author object. These local test messages and accounts are demonstration fixtures, not actual travellers or physical presence.
+
+Desktop and 390 × 844 browser checks measured 44-pixel chat controls and no horizontal page overflow. The phone check found that the fixed account badge covered Send; chat was moved outside the game stacking context so its panel can appear above that badge. The rebuilt phone preview showed an enabled, uncovered Send button, confirmed by a DOM hit test, with 390-pixel content/viewport widths. The final desktop café view retained both account messages. No warning/error logs were captured in these checks. After the placement fix, the production build and all 14 focused chat checks passed again. Screenshot evidence is saved locally under `/private/tmp/roam-chat-review/`. Lagos Life's phone Messages interface and map venue icons were inspected as design references; no reference-game messages were sent. ROAM's original interface combines those place conversations with travel-planning prompts and mapped rooms; structured activities/RSVPs, DMs and moderation remain outside this increment. See [chat contract and review steps](chat.md).
+
+These checks do not establish a hosted staging deployment, physical-device performance, a full keyboard/screen-reader audit or moderation readiness for a public community. Earlier verification records below retain their original test counts and limits.
+
 ## Ordered request list and current evidence
 
 1. **Floating hotspot and interior icons — implemented and browser checked.** Original category glyphs select a preview; an explicit action enters or starts an activity. The earlier map/café checks are recorded below.

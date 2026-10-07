@@ -100,6 +100,8 @@ func TestClosedPoolAuthFailuresReturn500WithoutConnecting(t *testing.T) {
 		{"session lookup", http.MethodGet, "/v1/auth/me", ""},
 		{"logout", http.MethodPost, "/v1/auth/logout", ""},
 		{"login", http.MethodPost, "/v1/auth/login", `{"identity":"test_visitor","password":"test-password"}`},
+		{"chat history", http.MethodGet, "/v1/chat/messages?room=lisbon:city", ""},
+		{"chat send", http.MethodPost, "/v1/chat/messages", `{"room":"lisbon:city","body":"Hello","clientId":"8fd242be-20f7-4c2c-9224-4f16fdd9d56c"}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
@@ -181,7 +183,7 @@ func TestAuthPostgresLoopbackIntegration(t *testing.T) {
 		t.Fatal("test pool is not scoped to its temporary schema")
 	}
 
-	// Two fresh startups must serialize all three real migration files. A third
+	// Two fresh startups must serialize all real migration files. A third
 	// run must see the same ledger and leave the already-created schema intact.
 	root, err := filepath.Abs("../..")
 	if err != nil {
