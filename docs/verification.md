@@ -4,6 +4,8 @@ Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, Re
 
 ## Automated checks
 
+The floating-icon update passed the complete 94-test suite, followed by 15 focused badge/runtime tests after adding the keyboard focus-transfer regression. TypeScript and the production build passed after correcting keyboard activation and anchoring mapped venue icons to the same illustrative storefront used by the close camera. New checks cover world-to-screen projection, clipping, deterministic collision spacing, fixed 44-pixel targets, selected/focused priority, all 18 interior controls, busy-state disabling, paused-camera projection, room-switch cleanup, stale controls and Enter/Space activation when a dialog takes focus. Three category tests preserve curated versus mapped venue provenance. The normal `tsx` CLI was blocked by the sandbox's IPC restriction; the direct `node --import tsx --test tests/*.test.ts` entry point ran the same test files.
+
 **82 tests passed** in the complete automated run at merged commit `5b0dc12`, including the latest `main` integration. The same complete suite had passed at interior commit `81df3fa` before that integration. The direct Node/tsx loader is also available:
 
 ```sh
@@ -35,6 +37,8 @@ The uncompressed `lisbon-locations.json` index is **627,553 bytes**, with 1,100 
 The bundled world and coordinate-link pins need no Google credential. Google 3D/Places live validation has not been performed because no key is configured. No paid Google requests were made during these checks.
 
 ## Browser verification
+
+The floating-icon production build at `http://127.0.0.1:3021` was checked in an isolated browser origin. Mercado da Ribeira opened from its market icon with both pointer and Enter activation; the dialog stayed open after the keyboard fix. Camera dragging moved the projected controls without opening a place. Characters hid the city controls and Whole region restored them. Café Janis retained a selected, labelled icon in its close storefront view, and that icon opened the café interior. Selecting the table icon updated the panel's selected activity; the explicit action walked the character, disabled all room controls while busy, froze during Pause, resumed and completed with `1/3` explored. Native controls measured 44 pixels. No warning/error logs were captured in these checks. These observations cover the listed map/café controls, not a full keyboard/screen-reader audit or every venue.
 
 Earlier geographic-world production checks ran at `http://127.0.0.1:3017` in the in-app browser. Desktop and 390 × 844 layouts rendered the geographic world and four original character variants. The character gallery isolated models from geographic occlusion; Street level and Whole region returned to the city. Camera zoom/rotation and camera mode selection were exercised. Region loading, named hotspot search, coordinate-link pin creation/removal, pin reload persistence, trip resume, Sintra train travel (€6, 65 minutes) and a confirmed activity/journal were verified. No warning/error logs were captured in those successful render checks. Temporary viewport overrides were reset.
 

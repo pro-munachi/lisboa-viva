@@ -19,6 +19,7 @@ import { coastRegions } from "./city-water";
 import { drapedPolygonGeometry } from "./city-surfaces";
 import { createVenueDecorations } from "./city-venues";
 import { createInteriorRuntime } from "./city-interior-runtime";
+import { createHotspotBadgeLayer } from "./city-hotspot-badges";
 import {
   createLocalWalkerProfiles,
   advanceLocalWalker,
@@ -99,17 +100,15 @@ export function createCity(host, options) {
   const chunkGroups = new Map(),
     chunkCache = new Map(),
     roadPaths = [],
-    markerMeshes = [],
     venueMeshes = [],
-    personMeshes = [],
-    labels = [];
+    personMeshes = [];
+  let selectedHotspotId = null;
+  const badgeItems = [];
   let markerSelection = "",
     populationCentre = null,
     venueCentre = null;
   const city = new THREE.Group();
   scene.add(city);
-  const markers = new THREE.Group();
-  scene.add(markers);
   const population = new THREE.Group();
   scene.add(population);
   const materials = new Map();
@@ -158,11 +157,17 @@ export function createCity(host, options) {
     group.removeFromParent();
     group.clear();
   }
+  function selectHotspot(hotspot) {
+    selectedHotspotId = hotspot.id;
+    options.onHotspot?.(hotspot);
+  }
+  const badges = createHotspotBadgeLayer(host, { onSelect: selectHotspot });
   const indoor = createInteriorRuntime({
     scene,
     camera,
     controls,
     disposeGroup,
+    badgeHost: host,
     shirt: options.shirt,
     onZone: options.onInteriorZone,
     onActivity: options.onInteriorActivity,
@@ -525,6 +530,7 @@ export function createCity(host, options) {
           group.traverse((mesh) => {
             if (mesh.userData.hotspot) venueMeshes.push(mesh);
           });
+        refreshMarkers();
         if (
           pendingTeleport ||
           changed ||
@@ -680,45 +686,49 @@ export function createCity(host, options) {
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 16)
       .map((v) => v.h);
-    const selected = [...hotspots.filter((h) => !h.mapVenue), ...nearby];
-    const key = selected.map((h) => h.id).join("|");
+    const selected = [
+      ...new Map(
+        [
+          ...hotspots.filter((h) => !h.mapVenue),
+          ...nearby,
+          ...hotspots.filter((h) => h.id === selectedHotspotId),
+        ].map((h) => [h.id, h]),
+      ).values(),
+    ];
+    const items = selected.map((h) => {
+      const v = point3([h.lng, h.lat]);
+      const storefront = h.mapVenue
+        ? venueMeshes.find(
+            (mesh) =>
+              mesh.userData.hotspot?.id === h.id && mesh.userData.venueView,
+          )?.userData.venueView
+        : null;
+      if (storefront) {
+        // Anchor to the same illustrative storefront used by the close camera.
+        v.set(storefront.point.x, storefront.point.y + 0.8, storefront.point.z);
+      } else {
+        v.y += h.custom || h.mapLocation ? 5 : h.mapVenue ? 10 : 16;
+      }
+      return {
+        id: h.id,
+        name: h.name,
+        category:
+          h.custom || h.mapLocation ? "custom" : h.category || "landmark",
+        position: v,
+        value: h,
+      };
+    });
+    const key = items
+      .map(
+        ({ id, name, category, position: p }) =>
+          `${id}:${name}:${category}:${p.x}:${p.y}:${p.z}`,
+      )
+      .join("|");
     if (key === markerSelection) return;
     markerSelection = key;
-    disposeGroup(markers);
-    scene.add(markers);
-    markerMeshes.length = 0;
-    labels.length = 0;
-    for (const h of selected) {
-      const v = point3([h.lng, h.lat]);
-      const g = new THREE.Group();
-      g.position.copy(v);
-      const pin = new THREE.Mesh(
-        new THREE.SphereGeometry(1.5, 12, 8),
-        new THREE.MeshBasicMaterial({
-          color: h.custom ? "#6d896e" : h.mapVenue ? "#3e6a63" : "#292942",
-          depthTest: false,
-        }),
-      );
-      pin.position.y = 7;
-      pin.renderOrder = 6;
-      pin.userData.hotspot = h;
-      const stem = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, 5, 6),
-        mat("#292942"),
-      );
-      stem.position.y = 4;
-      g.add(stem, pin);
-      const label = canvasLabel(
-        h.name,
-        h.custom ? "#527460" : h.mapVenue ? "#3e6a63" : "#292942",
-      );
-      label.position.y = 11;
-      label.userData.hotspot = h;
-      g.add(label);
-      markers.add(g);
-      markerMeshes.push(pin, label);
-      labels.push({ group: g, pin, stem, label, hotspot: h });
-    }
+    badgeItems.length = 0;
+    badgeItems.push(...items);
+    badges.setItems(badgeItems);
   }
   function sample(line, d, side = 0) {
     const doubled =
@@ -939,7 +949,6 @@ export function createCity(host, options) {
   function restoreCity() {
     indoor.clear();
     city.visible = true;
-    markers.visible = true;
     population.visible = true;
     scene.background = new THREE.Color(atmosphere.horizon);
     atmosphere.sky.visible = true;
@@ -952,6 +961,7 @@ export function createCity(host, options) {
     }
     generation++;
     focus = next;
+    selectedHotspotId = next.id || null;
     pendingVenue = !street && next.mapVenue ? next.id : null;
     const p = point3([next.lng, next.lat]);
     const distance = street ? 24 : next.range || 160;
@@ -1086,12 +1096,9 @@ export function createCity(host, options) {
       }
       return false;
     };
-    const hit = ray.intersectObjects(
-      [...markerMeshes, ...venueMeshes].filter(visible),
-      false,
-    )[0];
+    const hit = ray.intersectObjects(venueMeshes.filter(visible), false)[0];
     if (hit) {
-      options.onHotspot?.(hit.object.userData.hotspot);
+      selectHotspot(hit.object.userData.hotspot);
       return;
     }
     const personHit =
@@ -1187,27 +1194,12 @@ export function createCity(host, options) {
         if (child.userData.streetDetail) child.visible = range < 2300;
     }
     if (overviewMesh) overviewMesh.visible = range > 2200 && !characterGallery;
-    const seenAreas = new Set();
-    for (const m of labels) {
-      const scale = Math.max(
-        m.hotspot.mapVenue ? 0.22 : 0.4,
-        Math.min(180, range / 160),
-      );
-      m.label.scale.set(24 * scale, 5.3 * scale, 1);
-      m.label.position.y = 12 * scale;
-      m.pin.scale.setScalar(Math.max(1, scale * 0.8));
-      m.pin.position.y = 7 * scale;
-      m.stem.visible = scale < 3;
-      const far = m.group.position.distanceTo(controls.target);
-      m.label.visible =
-        range > 1800 || (range > 35 && far < Math.max(60, range * 2));
-      const area = m.hotspot.area || m.hotspot.id;
-      if (range > 5000) {
-        m.label.visible = m.label.visible && !seenAreas.has(area);
-        seenAreas.add(area);
-      }
-      m.pin.visible = range < 5000 ? m.label.visible : true;
-    }
+    badges.update(camera, {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      visible: !characterGallery && !indoor.active,
+      selectedId: selectedHotspotId,
+    });
     if (manifest && now - lastChunkUpdate > 2200) {
       lastChunkUpdate = now;
       loadChunks();
@@ -1277,7 +1269,6 @@ export function createCity(host, options) {
     characterGallery.add(floor);
     scene.add(characterGallery);
     city.visible = false;
-    markers.visible = false;
     population.visible = false;
     scene.background = new THREE.Color("#dcded5");
     atmosphere.sky.visible = false;
@@ -1391,7 +1382,7 @@ export function createCity(host, options) {
     }
     generation++;
     indoor.enter(next, point3([focus.lng, focus.lat]));
-    city.visible = markers.visible = population.visible = false;
+    city.visible = population.visible = false;
     atmosphere.sky.visible = false;
     scene.background = new THREE.Color("#d9dfd3");
     status("");
@@ -1435,6 +1426,8 @@ export function createCity(host, options) {
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
+      badges.dispose();
+      indoor.dispose();
       renderer.domElement.removeEventListener("pointerdown", pointerDown);
       renderer.domElement.removeEventListener("pointerup", pointerUp);
       disposeGroup(scene);

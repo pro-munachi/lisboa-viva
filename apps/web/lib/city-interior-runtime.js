@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { createCharacter, animateCharacter } from "./characters";
 import { createInteriorScene } from "./city-interiors";
 import { findRoomRoute } from "./city-room-navigation";
+import { createHotspotBadgeLayer } from "./city-hotspot-badges";
 
 /** Local, original room exploration. It does not issue trip purchases or bookings. */
 export function createInteriorRuntime({
@@ -12,14 +13,19 @@ export function createInteriorRuntime({
   shirt,
   onZone,
   onActivity,
+  badgeHost,
 }) {
   let room = null,
     actor = null,
     visit = null,
     action = null,
     selected = null,
-    clock = 0;
+    clock = 0,
+    disposed = false;
   const origin = new THREE.Vector3();
+  const badges = badgeHost
+    ? createHotspotBadgeLayer(badgeHost, { onSelect: selectZone })
+    : null;
   const boundsOf = () => {
     const b = room.group.userData.room?.bounds;
     return Array.isArray(b)
@@ -29,8 +35,25 @@ export function createInteriorRuntime({
         : [-8.5, -6.5, 8.5, 6.5];
   };
   function clear() {
+    badges?.clear();
     if (room) disposeGroup(room.group);
     room = actor = visit = action = selected = null;
+  }
+  function dispose() {
+    if (disposed) return;
+    clear();
+    disposed = true;
+    badges?.dispose();
+  }
+  function updateBadges() {
+    if (!badges || disposed) return;
+    badges.update(camera, {
+      width: badgeHost.clientWidth,
+      height: badgeHost.clientHeight,
+      visible: !!room,
+      selectedId: selected,
+      disabled: !!action,
+    });
   }
   function frameRoom() {
     if (!room) return;
@@ -54,8 +77,10 @@ export function createInteriorRuntime({
         new THREE.Vector3(distance * 0.48, distance * 0.66, distance * 0.73),
       );
     controls.update();
+    updateBadges();
   }
   function enter(next, at) {
+    if (disposed) return;
     clear();
     if (!next) return;
     visit = next;
@@ -74,6 +99,17 @@ export function createInteriorRuntime({
     room.group.add(actor);
     scene.add(room.group);
     selected = room.zones[0]?.id || null;
+    badges?.setItems(
+      room.zones.map((zone) => ({
+        id: zone.id,
+        name: zone.name,
+        category: zone.id,
+        value: zone.id,
+        position: origin
+          .clone()
+          .add(new THREE.Vector3(zone.point.x, 2.4, zone.point.z)),
+      })),
+    );
     if (selected) onZone?.(selected);
     onActivity?.({ state: "idle", zoneId: selected });
     frameRoom();
@@ -82,6 +118,7 @@ export function createInteriorRuntime({
     if (!room?.zones.some((z) => z.id === id) || action) return;
     selected = id;
     onZone?.(id);
+    updateBadges();
   }
   function walkTo(target, zoneId = null, duration = 4.5) {
     if (!room || action) return false;
@@ -112,6 +149,7 @@ export function createInteriorRuntime({
       duration,
     };
     if (zoneId) selected = zoneId;
+    updateBadges();
     onActivity?.({ state: "walking", zoneId });
     return true;
   }
@@ -167,6 +205,7 @@ export function createInteriorRuntime({
         0;
   }
   function update(dt, motion) {
+    updateBadges();
     if (!room) return;
     const step = motion ? dt : 0;
     clock += step;
@@ -215,6 +254,7 @@ export function createInteriorRuntime({
           onActivity?.({ state: "active", zoneId: action.zoneId });
         } else {
           action = null;
+          updateBadges();
           onActivity?.({ state: "idle", zoneId: null });
         }
       }
@@ -231,6 +271,7 @@ export function createInteriorRuntime({
         const zoneId = action.zoneId;
         if (action.standing) actor.position.copy(action.standing);
         action = null;
+        updateBadges();
         onActivity?.({ state: "complete", zoneId });
       }
     }
@@ -249,6 +290,7 @@ export function createInteriorRuntime({
   return {
     enter,
     clear,
+    dispose,
     frameRoom,
     selectZone,
     perform,

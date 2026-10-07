@@ -6,7 +6,7 @@ export type WorldHotspot = GoogleHotspot & {
   area?: string;
   sourceUrl?: string;
   custom?: boolean;
-  category?: VenueCategory;
+  category?: VenueCategory | GeographicHotspot["category"];
   description?: string;
   address?: string;
   mapVenue?: boolean;
@@ -85,6 +85,7 @@ export function fromGeographic(h: GeographicHotspot): WorldHotspot {
     lat: h.point[1],
     lng: h.point[0],
     area: h.area,
+    category: h.category,
     sourceUrl: h.culturalSource,
     mapsUrl: h.mapsUrl,
   };

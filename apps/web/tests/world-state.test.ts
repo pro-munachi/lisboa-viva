@@ -4,12 +4,14 @@ import {
   areaPlace,
   focusFor,
   fromGeographic,
+  fromVenue,
   mapLinkPin,
   placeFocus,
   restorePins,
 } from "../lib/world-state";
 import { containsGeo, GEOGRAPHIC_HOTSPOTS, GEO_BOUNDS } from "../lib/geography";
 import { places } from "../lib/content";
+import { VENUES, type VenueCategory } from "../lib/venues";
 
 const CAIS_URL =
   "https://www.google.com/maps/place/Cais+do+Sodre/@38.7105,-9.145,15z/data=!3d38.7063!4d-9.1455";
@@ -159,6 +161,61 @@ test("all gameplay destinations and authored hotspots use covered geographic pos
   assert.equal(areaPlace.Sintra, "sintra");
   assert.ok(placeFocus.sintra.lat > placeFocus.cais.lat);
   assert.ok(placeFocus.sintra.lng < placeFocus.benfica.lng);
+});
+
+test("curated place categories reach world markers without implying a mapped business", () => {
+  const expected = {
+    comercio: "landmark",
+    "graca-lookout": "viewpoint",
+    "ribeira-market": "market",
+    "cais-station": "transport",
+    "pink-street": "street",
+    maat: "museum",
+  };
+  for (const [id, category] of Object.entries(expected)) {
+    const source = GEOGRAPHIC_HOTSPOTS.find((hotspot) => hotspot.id === id);
+    assert.ok(source, id);
+    const marker = fromGeographic(source);
+    assert.equal(marker.category, category, source.name);
+    assert.equal(marker.mapVenue, undefined);
+    assert.equal(marker.custom, undefined);
+    assert.equal(marker.sourceUrl, source.culturalSource);
+  }
+  for (const source of GEOGRAPHIC_HOTSPOTS)
+    assert.equal(fromGeographic(source).category, source.category, source.name);
+});
+
+test("mapped business categories remain available alongside curated landmark categories", () => {
+  const categories: VenueCategory[] = [
+    "cafe",
+    "gym",
+    "restaurant",
+    "bar",
+    "shop",
+    "culture",
+  ];
+  for (const category of categories) {
+    const source = VENUES.find((venue) => venue.category === category);
+    assert.ok(source, category);
+    const marker = fromVenue(source);
+    assert.equal(marker.category, category);
+    assert.equal(marker.mapVenue, true);
+    assert.equal(marker.sourceUrl, source.sourceUrl);
+    assert.equal(marker.id, source.id);
+  }
+});
+
+test("coordinate pins do not infer a business category from a user-chosen name", () => {
+  for (const name of ["My café", "A gym", "Museum stop"]) {
+    const pin = mapLinkPin(CAIS_URL, name);
+    assert.ok(pin);
+    assert.equal(pin.category, undefined);
+    assert.equal(pin.mapVenue, undefined);
+    const restored = restorePins(
+      JSON.stringify([{ ...pin, category: "gym", mapVenue: true }]),
+    );
+    assert.deepEqual(restored, [pin]);
+  }
 });
 
 test("the selected home neighbourhood controls its map focus without changing other destinations", () => {

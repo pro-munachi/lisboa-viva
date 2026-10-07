@@ -714,7 +714,7 @@ export default function Roam() {
             <div className="world-tip">
               Drag to rotate · Scroll to zoom.
               <br />
-              Click a hotspot to explore.
+              Tap an icon to explore a place.
             </div>
           </>
         )}
@@ -813,8 +813,10 @@ export default function Roam() {
                       <small>
                         {h.custom
                           ? "Your saved pin"
-                          : h.category
-                            ? `${VENUE_CATEGORY_LABELS[h.category]} · ${h.address || h.area}`
+                          : h.mapVenue &&
+                              h.category &&
+                              Object.hasOwn(VENUE_CATEGORY_LABELS, h.category)
+                            ? `${VENUE_CATEGORY_LABELS[h.category as VenueCategory]} · ${h.address || h.area}`
                             : h.area}
                       </small>
                     </span>

@@ -161,8 +161,8 @@ export default function World({
         className="world"
         aria-label={
           interior
-            ? `${interior.name} original 3D interior. Select a room corner to interact.`
-            : "Continuous Lisbon 3D world. Drag to rotate, use Pan to move, or scroll to zoom."
+            ? `${interior.name} original 3D interior. Choose a floating activity icon or a room corner to interact.`
+            : "Continuous Lisbon 3D world. Select a floating hotspot icon to explore a place. Drag to rotate, use Pan to move, or scroll to zoom."
         }
       >
         {google ? (
