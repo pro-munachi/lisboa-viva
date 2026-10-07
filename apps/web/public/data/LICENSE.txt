@@ -1,0 +1,15 @@
+OpenStreetMap-derived road, coastline, surface and building geometry:
+Copyright OpenStreetMap contributors.
+Licensed under Open Database License 1.0 (ODbL).
+https://www.openstreetmap.org/copyright
+https://opendatacommons.org/licenses/odbl/1-0/
+The downloadable gzip-compressed JSON files make the derived database available.
+
+Terrain grid:
+Produced using Copernicus data and information funded by the European Union — EU-DEM layers.
+Source: Mapzen/Tilezen Terrain Tiles public AWS dataset.
+https://registry.opendata.aws/terrain-tiles/
+https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+This grid was sampled and downscaled from published EU-DEM Terrarium tiles.
+
+See docs/geography.md in the repository for coverage, source dates, modifications, and limitations.

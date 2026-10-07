@@ -1,42 +1,8 @@
 services:
-  db:
-    image: postgres:16.10-alpine
-    environment:
-      POSTGRES_USER: lisboa
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: lisboa
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: [CMD-SHELL, pg_isready -U lisboa]
-      interval: 3s
-      timeout: 3s
-      retries: 20
-  game:
-    build:
-      context: .
-      dockerfile: services/game/Dockerfile
-    environment:
-      DATABASE_URL: postgres://lisboa:${POSTGRES_PASSWORD}@db:5432/lisboa?sslmode=disable
-      PROJECT_ROOT: /app
-      LISTEN_ADDR: 0.0.0.0:8080
-      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      BOOTSTRAP_ADMIN_HANDLE: ${BOOTSTRAP_ADMIN_HANDLE:-}
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    environment:
-      API_INTERNAL_URL: http://game:8080
     ports:
-      - 127.0.0.1:3000:3000
-    depends_on:
-      - game
+      - "127.0.0.1:3000:3000"
     restart: unless-stopped
-volumes:
-  pgdata:

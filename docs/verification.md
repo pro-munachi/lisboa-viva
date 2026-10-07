@@ -1,26 +1,38 @@
-# Verification record — 2026-10-05
+# Verification — ROAM Lisbon geographic pilot
 
-## Passed
-- Next.js production build and strict TypeScript check.
-- Real PostgreSQL 16 integration suite, including Go race detector: all seven tests passed.
-- Content validation: 10 connected hubs, 26 usable venues, 28 activities, six represented transport modes and complete pt-PT API error mapping.
-- Browser, desktop: login to local demo account; start Amélia quest; accessible venue list; travel to café; arrival changes available actions; practical shift decision; €18 wage; recipient identity review; €2.50 transfer to offline Tomás; receipt and updated balance; durable private message.
-- Original city map rendered on desktop and narrow screens. Responsive venue panel and banking form inspected at 390 × 844; Portuguese copy fits, inputs remain usable, and the browser reports no errors. Map buttons changed from image semantics to grouped keyboard-accessible controls; western map cropping corrected. Fastest/cheapest route selection added. Pending request keys survive reloads and unrelated operations to preserve retry identity.
+Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, React 19.2.4, TypeScript 5.9.3 and Three.js 0.160.0. The project supports Node 22 or newer; GitHub Actions is configured for Node 22.
 
-## Automated database evidence
-`TestNewPlayerJourneyAndRestart`: work/food/course/quest/rest/gym, simulated API worker restart during a shift, exactly-once wage, train/beach, ferry, bank movements and logout/resume.
+## Automated checks
 
-`TestConcurrentMoneyAndRetries`: 20 concurrent transfer attempts against one balance, one debit/credit per accepted operation, same-key retries, key/body conflicts, negative amounts rejected, deferred ledger constraint rejects unbalanced transactions.
+**33 tests passed** with `npm test`. The direct Node/tsx loader is also available:
 
-`TestSocialOfflineAndAuthorization`: two independently authenticated sessions, real presence, room chat, idempotent messages, offline messages and funds, third-party privacy, blocking, expired sessions, forged travel and forbidden admin corrections.
+```sh
+node --import ./node_modules/tsx/dist/loader.mjs --test tests/*.test.ts
+```
 
-`TestRobberyProtectionDefenseJustice`: newcomer and safe-area protection, opt-in, defense, capped cash transfer, protected bank funds, no repeated settlement, NPC evidence and appeal, unrelated case rejection, victim and pair cooldowns.
+The normal command is `npm test`. This entry point avoids the `tsx` command-line IPC socket restriction in the local sandbox and executes the same files.
 
-`TestAdminAuditAndDetentionExpiration`: authorized ledger adjustment and audit, temporary activity suspension and offline detention expiry.
+Coverage includes all 45 scenarios and both choices of each; nine destinations; exact-once/retry protection and conflicting payloads; budget/energy/day boundaries; rest recovery; corrupt/forged/incompatible saves; private itinerary derivation; Cais/Benfica/Sintra replay; Sintra train costs and blocked tram routes; long-walk/cycle constraints; geographic projection round trips; terrain interpolation/edges; adult character dimensions, finite geometry, gait and resource cleanup; safe Maps URL parsing; labelled coordinate links; bounded/forged pin storage; and hotspot coverage.
 
-`TestOpeningsAndCSRF`: cross-midnight openings, forged Origins rejected, assessment answers omitted from public content.
+`npm run typecheck`, `npm run build` (including TypeScript compilation) and `git diff --check` passed for the continuous world. The latest regression tests also cover surface grounding against the rendered DEM triangles, preventing characters from being buried on steep terrain. The earlier dependency audit reported zero known production vulnerabilities; dependencies are unchanged in this update.
 
-`TestWebSocketOriginAndRecovery`: authenticated socket, initial snapshot signal, committed outbox notification and cross-origin rejection.
+
+## Geographic bundle
+
+The compressed manifest and terrain files were read successfully. The manifest records 273,347 building footprints, 123,185 roads/paths, 16,377 surfaces and 83 chunks. The 86 `.json.gz` files total **19,331,582 bytes (19.33 MB)**. Terrain is a 193 × 193 grid. The OSM source timestamp is 2 October 2026 at 23:00 UTC; acquisition was 7 October 2026. Provenance and the reproducible validator command are in `docs/geography.md`.
+
+The bundled world and coordinate-link pins need no Google credential. Google 3D/Places live validation has not been performed because no key is configured. No paid Google requests were made during these checks.
+
+## Browser verification
+
+The production preview runs at `http://127.0.0.1:3017` in the in-app browser. Desktop and 390 × 844 layouts render the geographic world and four original character variants. The character gallery isolates models from geographic occlusion; Street level and Whole region return to the city. Camera zoom/rotation and camera mode selection were exercised. Region loading, named hotspot search, coordinate-link pin creation/removal, pin reload persistence, trip resume, Sintra train travel (€6, 65 minutes) and a confirmed activity/journal were verified. No warning/error logs were captured in the successful render checks. Temporary viewport overrides were reset.
+
+Canvas dragging was verified in Pan mode after correcting the one-finger touch mapping to follow the selected camera mode. Full walking/collision behaviour has not received automated end-to-end verification. The itinerary button was clicked, but the in-app browser did not produce a downloadable-file event; file delivery remains unverified in this browser. The engine's exported itinerary text is covered by automated tests. Modal opening and its initial close-button focus were observed; full keyboard/screen-reader coverage remains pending. A camera interaction briefly timed out during a large regional render; distant actor rendering/shadows are now suppressed to reduce that load. Physical-device performance remains unmeasured.
+
+The development watcher previously reached macOS's open-file limit (`EMFILE`); the production build/start path was usable. This is a local tooling constraint rather than a deployment requirement.
 
 ## Limits
-Container configuration is validated separately from a full container build. No internet deployment, load test or production claim. Browser testing is interactive verification, not a checked-in automated browser suite. Some systems in the broad brief remain unfinished and are explicitly listed in README/backlog.
+
+Automated/desktop browser checks do not replace physical-device performance, screen-reader testing, a full WCAG 2.2 AA audit or itinerary user research. Actual footprint coordinates do not establish exact heights/facades, current street conditions or live traffic. NPCs and vehicles are simulated.
+
+Docker configuration has not been built in this session. Earlier GitHub Actions push/PR events reported `startup_failure` before creating jobs ([recorded run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37604590966)); its reason was unavailable. The geographic-world code commit (`3f2850c`) also produced `startup_failure` before creating any jobs ([checked run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37612931493)); the API returned no cause. Hosted CI has not run the checks despite the successful local checks. No production deployment or migration of legacy accounts/data has been performed.

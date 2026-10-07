@@ -1,144 +1,59 @@
-# Lisboa Viva
+# ROAM — Lisbon. Your way.
 
-A playable local multiplayer life-sim foundation set in Lisbon. **Next.js + TypeScript, Go, PostgreSQL**, with European Portuguese player-facing copy and original SVG city artwork. This is a development release, not a production-ready public service.
+A playable tourist trip simulator in one continuous 3D Lisbon–Sintra region. Rotate, drag, zoom and explore real mapped streets, building footprints and hills. Choose a three- or five-day trip, a euro activity budget, a home neighbourhood and a traveller style. Nine trip destinations provide 45 authored scenarios and 90 choices; your journal and itinerary come from the activities you actually tried.
 
-## Start with Docker
+The default world works without a Google API key. It bundles OpenStreetMap geography and EU-DEM terrain, with original adult-proportioned characters, simulated pedestrians, cars and trams. The 273,347 building footprints retain real mapped positions; facades, roofs and most heights are approximate. This is a geographic game world, not an exact architectural or photorealistic replica.
 
-From this directory:
+This replaces the earlier Lisboa Viva multiplayer life simulation. The old Go/PostgreSQL economy, authentication, jobs, transfers, policing and chat are removed from the active project; Git history retains that implementation. [PR #1](https://github.com/pro-munachi/lisboa-viva/pull/1) supplies the tourist trip requirements. The accepted ROAM design and later continuous-city brief extend its original 3D scope. The reference game's character assets have not been copied.
 
-```sh
-cp .env.example .env
-# Edit POSTGRES_PASSWORD in .env (use a URL-safe development password).
-docker compose up --build
-```
+## Run
 
-Open **http://localhost:3000**. Create an account and an adult character. Database migrations run once under an advisory lock, with recorded checksums. Content is loaded from `content/world.json` at startup. The PostgreSQL volume preserves accounts, actions and money across restarts. Only the frontend is published, on the host loopback interface.
-
-Docker Compose configuration is provided and validated, but its full container build has not been run on this machine because Docker Desktop was not running. The game was built and tested directly with local PostgreSQL instead.
-
-## Run with local tools
-
-Requirements: Node 20.9+ (tested with Node 20/24), Go 1.26, PostgreSQL 16. Exact package versions are pinned in `package-lock.json` and `go.sum`.
-
-Create a database and provide its connection string. Example for an existing local PostgreSQL server:
+Node 22 or newer and a modern browser supporting WebGL and `DecompressionStream`. From the repository root:
 
 ```sh
-createdb lisboa
-export DATABASE_URL='postgres://YOUR_USER@127.0.0.1:5432/lisboa?sslmode=disable'
-cd services/game
-go run .
-```
-
-In another terminal, from the repository root:
-
-```sh
-cd apps/web
-npm ci
+npm --prefix apps/web ci
 npm run dev
 ```
 
-Always open **http://localhost:3000**, matching `APP_ORIGIN`. Next proxies `/v1` to Go, including WebSocket upgrades. Do not open the app under a different hostname without updating `APP_ORIGIN`.
-
-For this workspace's isolated development database, use:
+Open [the development app](http://127.0.0.1:3000). No database, account or external API credential is required.
 
 ```sh
-export DATABASE_URL='postgres://lisboa@127.0.0.1:55432/lisboa?sslmode=disable'
-```
-
-The task started a separate PostgreSQL cluster in its `work/pgdata` directory. It is not part of the deliverable and contains only locally created game/demo data.
-
-## Demo accounts — local development only
-
-The browser verification used these accounts:
-
-| Handle | Password | Character |
-| --- | --- | --- |
-| `ines_demo` | `LisboaDemo2026!` | Inês Martins |
-| `tomas_demo` | `LisboaDemo2026!` | Tomás Costa |
-
-Their state reflects verification gameplay. New accounts start with €35 cash, €100 bank balance, a room in Arroios and ten minutes of newcomer protection. The seed never resets an existing account. To create these accounts on a direct local API instance:
-
-```sh
-ALLOW_DEMO_SEED=true python3 scripts/seed_demo.py
-```
-
-This script is hard-coded to loopback and explicitly gated. Do not create demo accounts on an internet-facing deployment.
-
-## What you can play
-
-- Create a character with name, appearance colour, story, pronouns, biography and interests; sign out and resume.
-- Explore 10 connected hubs and 26 usable venues through the map or keyboard-accessible list. A district selector exposes all venues in that district.
-- Travel on foot, by Metro, tram, bus, train or ferry. Multi-leg trips expose each leg, with fastest/cheapest route selection. The train corridor reaches Carcavelos with final walking included; the ferry connects Cais do Sodré and Cacilhas. All fares, durations and operating windows are invented.
-- Complete six short jobs with practical decisions and exactly-once wages. Buy and consume food, rest, shower, cook, exercise, play football, listen to music, dance and surf.
-- Complete a short course that grants an attendance/service qualification once, unlocking the kitchen job. Follow a three-step NPC neighborhood quest.
-- Manage cash/bank funds; deposit and withdraw at the bank; review recipient identity before sending virtual money, including to offline players. Both parties retain receipts.
-- See recent real presence; exchange durable venue chat and private messages; use DM permissions, blocking, local muting and reports. Messages and profiles are escaped as text.
-- Opt into eligible robbery encounters, make defensive choices and receive consistent cash-only settlement. Newcomer protection, safe venues, availability, co-location, victim protection and pair cooldowns are enforced server-side.
-- View a detected incident's NPC investigation, evidence, hearing and decision; appeal to an independent NPC or complete community service. Brief detention expires even while offline.
-- Admin accounts can look up identities, process reports, suspend accounts/activities/venues and make audited ledger corrections. There are no player-police administrative powers.
-
-No player count or chat message is invented. NPCs are labelled. No real-money payments, gambling, real banking or private account data integration exists.
-
-## Controls and a first session
-
-1. Create an account, then talk to Amélia at home.
-2. Select Arroios → Café da Esquina in the venue selector (or use **Lista**), then **Ir para aqui**.
-3. Buy a bica, talk to Rita, and **Servir às mesas** to earn €18.
-4. Visit the market for food and the school for the short course. Return to Amélia to complete the quest.
-5. Use the phone dock for work, banking, messages, your inventory and case history.
-6. For Carcavelos, follow the route one leg at a time through Baixa/Cais do Sodré and Belém. For Cacilhas, take the ferry from Cais do Sodré.
-
-Money is virtual. The first room is free, so you cannot be evicted or billed into debt while offline. Needs decay has an offline cap. A failed client request never awards money or completes an action; only the Go worker does so.
-
-## Tests and validation
-
-```sh
-python3 scripts/validate_content.py
-cd apps/web
-npm ci
-npm run generate
+npm test
 npm run typecheck
 npm run build
-cd ../../services/game
-TEST_DATABASE_URL='postgres://YOUR_USER@127.0.0.1:5432/lisboa?sslmode=disable' go test -race -v ./...
+npm start
 ```
 
-Integration tests create unique disposable PostgreSQL schemas and remove only those schemas. Without `TEST_DATABASE_URL`, integration tests skip. Use a dedicated development database; the test role needs schema creation permission.
+Or run `docker compose up --build` and open [localhost](http://localhost:3000). Root scripts delegate to `apps/web`; the lockfile lives there. Optional Google 3D imagery setup is in [docs/google-maps.md](docs/google-maps.md); no key is included or required for the open-data world.
 
-The suite covers a new-player journey, restart-safe wage completion, qualified course completion, food ownership, transport arrival, bank moves, train-to-beach and ferry travel, logout/resume, simultaneous spending, retries and conflicting idempotency keys, balanced-ledger constraints, real presence, room chat, offline DM/transfer, blocking, private records, expired sessions, forged travel, forbidden administrative requests, robbery protections/defense/settlement, NPC evidence/appeal, cooldowns, detention expiration, administrative audits, cross-midnight opening hours, CSRF and authenticated/origin-checked WebSocket recovery.
+## What is playable
 
-Browser verification and precise limitations are recorded in `docs/verification.md`.
+- **One geographic region:** central Lisbon, Cais do Sodré, Benfica, Belém and Sintra keep their real relative positions. Sintra is a separate town. Streets and buildings continue between named areas rather than forming isolated scene islands. The dataset contains 273,347 building footprints, 123,185 roads/paths and 16,377 surfaces across 83 geographic chunks. The complete deterministic gzip bundle is 19.33 MB; nearby detail loads on demand.
+- **An interactive city:** drag in Rotate or Pan mode, scroll/pinch to zoom, use camera buttons, choose Street level or Whole region, and select labelled hotspots. Walk mode moves the traveller toward a nearby selected ground location. Pedestrians and vehicles animate along mapped ways; ambient movement can be paused. Characters provides a close view of four original outfit/hair variants.
+- **Places and pins:** 17 curated landmarks have mapped coordinates and official cultural sources. Landmark search is local. Add an expanded Google Maps link containing coordinates to save your own pin, inspect it in 3D, reopen its Maps link or remove it. No Maps scraping or paid search is required.
+- **Tourist trips:** 3/5 days, a €30–€5,000 activity budget, Graça/Baixa/Alfama base, three traveller styles and four shirt colours. Nine destinations cover the home base, Alfama, Baixa, Graça, Belém, Santos, Cais do Sodré, Benfica and Sintra. Style prioritizes matching scenarios; location and time of day control availability.
+- **Choices and consequences:** 45 scenarios with two choices each across food, craft, stories, music, viewpoints and rest. Previews show cost, duration and energy. Exact-once actions keep money nonnegative, energy bounded and simulated activities from overlapping. Each scenario supplies one unique experience per run.
+- **Travel and memories:** illustrative walk/cycle/tram travel, with an intercity train option and longer walk/cycle estimates for Sintra. Tram travel is unavailable for Sintra. District passport, three optional challenges, confirmed-action journal, recap, early finish and private itinerary download remain playable. Free breaks and overnight rest provide a route forward.
+- **Saved progress:** validated same-browser save/resume, the current trip plus four earlier chapters, replay/new trip and explicit deletion. Invalid saves receive a visible message. Custom pins are separately validated and capped at 16.
+- **Accessible alternatives:** responsive layouts, native modal focus management, reduced-motion support, semantic meters, camera buttons and list-based hotspot/activity selection. Trip experiences remain available if 3D cannot load.
 
-## Configuration
+## Accuracy and privacy
 
-| Variable | Default / purpose |
-| --- | --- |
-| `DATABASE_URL` | Local development fallback: `postgres://lisboa@127.0.0.1:55432/lisboa?sslmode=disable` |
-| `PROJECT_ROOT` | `../..` when started from `services/game`; points to migrations/content |
-| `LISTEN_ADDR` | `127.0.0.1:8080`; containers use `0.0.0.0:8080` internally |
-| `APP_ORIGIN` | `http://localhost:3000`; exact allowed Origin for commands and sockets |
-| `API_INTERNAL_URL` | `http://127.0.0.1:8080` for Next proxy; set before build for a production build |
-| `COOKIE_SECURE` | `false` locally; must be `true` behind production HTTPS |
-| `BOOTSTRAP_ADMIN_HANDLE` | Optional existing handle promoted on API start by the operator |
-| `ALLOW_DEMO_SEED` | Must explicitly equal `true` for the loopback-only demo script |
+Street positions and footprints come from the bundled OpenStreetMap snapshot; terrain comes from a coarse public elevation grid. Tagged heights are used where available, storeys are converted to estimates, and untagged heights use defaults. Stylised exteriors, approximate slopes, omitted courtyard holes and simplified roads limit fidelity. NPCs and traffic are simulated, with no live people, departures or traffic information. See [docs/geography.md](docs/geography.md) for provenance, coverage, dates, limitations, attribution and refresh instructions.
 
-To bootstrap an administrator, first create a local account, then restart the Go service with `BOOTSTRAP_ADMIN_HANDLE=your_handle`. Remove that variable afterward. Being a fictional officer does not grant admin access.
+All euro costs, durations, route choices and activities are illustrative game assumptions, **not current prices, live timetables, availability or bookings**. Fictional venues and conversations are identified in their content. Cultural sources support context rather than prices or opening hours. Personal coordinate pins are unverified locations; a Maps link does not establish that a fictional venue exists.
 
-`GET /v1/health` verifies database connectivity. Go emits structured startup/worker/error logs. Back up with `pg_dump --format=custom "$DATABASE_URL" > backup.dump`; keep backups outside the repository and test restoration into a separate database. For a public release, add TLS termination, deployment secret management, account recovery, multi-instance rate limiting, abuse operations and a restore drill before exposing the service.
+The budget excludes flights and accommodation. No server stores trips. No analytics, live location, real social presence, accounts or public sharing are implemented. Downloading an itinerary creates a local text file. Clearing browser storage erases guest progress and saved pins. Opening an external Maps/source link takes the user to that provider.
 
-## Source layout
+## Source
 
-- `apps/web`: original map, venue scenes, accessible game interface and phone. Generated request/response types come from OpenAPI.
-- `services/game`: authentication, transaction boundary, commands, worker, migrations and PostgreSQL integration tests.
-- `db/migrations`: schema, relational ownership/constraints and deferred balanced-ledger checks.
-- `content/world.json`: original venues, activities, transport and researched corridor references.
-- `api/model.ts`, `api/openapi.json`: API model source and generated/shared contract. Run `npm run generate` after model changes.
-- `docs`: architecture, balancing assumptions, research, verification and backlog.
+- `apps/web/app`: Next.js/TypeScript interface and CSS.
+- `apps/web/components`: dialogs, continuous-world host and optional Google imagery renderer.
+- `apps/web/lib/content.ts` and `engine.ts`: versioned scenarios, deterministic transitions, save replay and itinerary.
+- `apps/web/lib/geography.ts`, `city-scene.js` and `characters.js`: geographic schema/projection, streamed Three.js world, original characters and resource cleanup.
+- `apps/web/lib/world-state.ts` and `google-maps.ts`: geographic focus, validated coordinate pins and optional official Google integration.
+- `apps/web/public/data`: compressed derived database; `scripts/geography-build.py` and `geography-validate.py`: acquisition and validation.
+- `apps/web/tests`: engine, geography, character and pin regression checks.
+- `docs/PRD.md`: preserved original requirements; [docs/scope.md](docs/scope.md): current scope; [docs/verification.md](docs/verification.md): checks and limits.
 
-## Known scope limits
-
-This is a compact working foundation of the first playable release. It is not the entire master brief. Configurable transport passes and departure frequencies, weather-driven gameplay, detailed NPC schedules, full character clothing customization and a content-management editor remain unfinished. Initial transport corridors operate around the clock; there are no real timetable claims. World time and night tint work, while the initial weather is fixed.
-
-The NPC court resolves its documented stages automatically and uses a bounded community-service/warning outcome rather than a full legal simulation. No player officer, lawyer or judge careers are enabled. The initial home is a free shared room; leases, furniture, recurring bills, businesses, trading, friend requests and group channels are release-two/later work. Portuguese (Portugal) and English are selectable from the header and settings, and the choice persists in the browser.
-
-Financial correctness uses a single PostgreSQL advisory lock per world. This is suitable for a small development world and deliberately trades throughput for simple correctness. Presence expires after 25 seconds. Snapshots recover missed notifications; this is not a high-throughput event streaming architecture. Load tests, automated browser regression files, email/account recovery, multi-instance shared rate limits and production security review are still needed.
+The derived OSM database is licensed under ODbL 1.0 and credited in the map. Terrain credits identify Copernicus/EU-DEM. Repository write permissions and reviewed pull requests provide the current restricted content workflow. Content changes must consider `CONTENT_VERSION` and save migration. Cross-device accounts, real social features, revocable public links, a dedicated authenticated editor, verified pricing and full accessibility/performance sign-off remain future work.
