@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -63,7 +64,14 @@ func (s *server) headers(next http.Handler) http.Handler {
 
 func decodeJSON(r *http.Request, target any) error {
 	defer r.Body.Close()
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 16<<10))
+	data, err := io.ReadAll(io.LimitReader(r.Body, (16<<10)+1))
+	if err != nil {
+		return apiError("invalid_json")
+	}
+	if len(data) > 16<<10 {
+		return apiError("payload_too_large")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return apiError("invalid_json")
@@ -92,7 +100,8 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_locale":              http.StatusBadRequest, "handle_taken": http.StatusConflict,
 			"email_taken": http.StatusConflict, "credentials": http.StatusUnauthorized,
 			"session_expired": http.StatusUnauthorized, "forbidden": http.StatusForbidden,
-			"rate_limited": http.StatusTooManyRequests,
+			"rate_limited":      http.StatusTooManyRequests,
+			"payload_too_large": http.StatusRequestEntityTooLarge,
 		}[code]
 	}
 	if status == 0 {
@@ -272,10 +281,19 @@ func (s *server) sessionUser(r *http.Request) (authUser, error) {
 	user, err := loadUser(r.Context(), s.db, `u.id=(SELECT s.user_id FROM sessions s
 		WHERE s.token_hash=$1 AND s.expires_at>now()) AND u.account_status='active'`, tokenHash(cookie.Value))
 	if err != nil {
-		return authUser{}, apiError("session_expired")
+		return authUser{}, sessionLookupError(err)
 	}
 	_, _ = s.db.Exec(r.Context(), "UPDATE sessions SET last_seen_at=$2 WHERE token_hash=$1", tokenHash(cookie.Value), s.now())
 	return user, nil
+}
+
+// A missing/expired session is an authentication result. A database failure is
+// a server error, and must retain its original cause for logging and diagnosis.
+func sessionLookupError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return apiError("session_expired")
+	}
+	return err
 }
 
 func (s *server) requireSession(next http.Handler) http.Handler {

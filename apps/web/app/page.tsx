@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import World from "../components/World";
 import AuthBoundary from "../components/AuthBoundary";
+import type { AuthUser } from "../lib/auth";
+import { accountStorageKeys } from "../lib/account-storage";
 import { interiorForHotspot, type InteriorVisit } from "../lib/interiors";
 import Dialog from "../components/Dialog";
 import JourneyPanel from "../components/JourneyPanel";
@@ -61,7 +63,6 @@ import {
   fromVenue,
   mapLinkPin,
   restorePins,
-  PIN_KEY,
   areaPlace,
   type WorldFocus,
   type WorldHotspot,
@@ -87,9 +88,9 @@ import {
   itinerary,
   memories,
   newTrip,
+  previewJourney,
   restore,
   serialize,
-  STORAGE_KEY,
   time,
   type Trip,
   type Setup,
@@ -178,7 +179,8 @@ const transitHubFor = (hotspot: WorldHotspot | null) =>
   Object.values(JOURNEY_HUBS).find(
     (hub) => hotspot?.id === `transit-${hub.id}`,
   );
-function RoamExperience() {
+function RoamExperience({ user }: { user: AuthUser }) {
+  const storage = accountStorageKeys(user.id);
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -267,7 +269,7 @@ function RoamExperience() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(PIN_KEY);
+      const raw = localStorage.getItem(storage.pins);
       if (raw) setPins(restorePins(raw));
     } catch {}
   }, []);
@@ -312,6 +314,12 @@ function RoamExperience() {
       sourceUrl: hub.sourceUrl,
     });
   }
+  function visitTransitHub(id: HubId) {
+    const currentTrip = tripRef.current;
+    if (currentTrip && currentTrip.journey.hub !== id &&
+        !command({ kind: "journey", action: "visit-hub", hub: id })) return;
+    enterTransitHub(id);
+  }
   async function addPin() {
     if (pinBusy) return;
     setPinError("");
@@ -324,7 +332,7 @@ function RoamExperience() {
       const next = [pin, ...pins.filter((p) => p.id !== pin.id)].slice(0, 16);
       setPins(next);
       try {
-        localStorage.setItem(PIN_KEY, JSON.stringify(next));
+        localStorage.setItem(storage.pins, JSON.stringify(next));
       } catch {
         notify("This pin is available now but could not be saved.");
       }
@@ -364,7 +372,7 @@ function RoamExperience() {
   }
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(storage.trips);
       if (raw) {
         const runs = JSON.parse(raw);
         if (!Array.isArray(runs) || runs.length > 5) throw new Error();
@@ -390,7 +398,7 @@ function RoamExperience() {
     if (!loaded || !trip) return;
     try {
       localStorage.setItem(
-        STORAGE_KEY,
+        storage.trips,
         JSON.stringify([trip, ...archive].slice(0, 5).map(serialize)),
       );
       setStorageError(false);
@@ -400,7 +408,7 @@ function RoamExperience() {
   }, [trip, archive, loaded]);
   useEffect(() => {
     const listener = (e: StorageEvent) => {
-      if (e.key !== STORAGE_KEY) return;
+      if (e.key !== storage.trips) return;
       try {
         const runs = e.newValue ? JSON.parse(e.newValue) : [];
         const current = runs[0] ? restore(runs[0]) : null;
@@ -457,6 +465,8 @@ function RoamExperience() {
   function begin() {
     try {
       const next = newTrip({ ...setup, startDate: calendarStart, endDate: calendarEnd }, crypto.randomUUID());
+      leaveRoom();
+      setClean(false);
       if (trip) setArchive((a) => [trip, ...a].slice(0, 4));
       tripRef.current = next;
       setTrip(next);
@@ -612,7 +622,7 @@ function RoamExperience() {
                 </span>
               </div>
               <small>
-                Free to play · No account needed · Saved on this browser
+                Free to play · Account protected · Saved on this browser
               </small>
             </section>
             <div className="scene-caption">
@@ -1064,11 +1074,14 @@ function RoamExperience() {
           {transitHubFor(mapHotspot) && (
             <button
               className="secondary full"
-              onClick={() => enterTransitHub(transitHubFor(mapHotspot)!.id)}
+              disabled={!!trip && trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
+                !!previewJourney(trip, { action: "visit-hub", hub: transitHubFor(mapHotspot)!.id }).reason}
+              onClick={() => visitTransitHub(transitHubFor(mapHotspot)!.id)}
             >
               {transitHubFor(mapHotspot)!.kind === "bus-stop"
                 ? "Stand at the bus stop"
                 : `Enter ${transitHubFor(mapHotspot)!.kind === "station" ? "train station" : "airport"}`}{" "}
+              {trip && trip.journey.hub !== transitHubFor(mapHotspot)!.id && "· 20 min · €0 "}
               <ArrowRight size={17} />
             </button>
           )}
@@ -1118,7 +1131,7 @@ function RoamExperience() {
                 const next = pins.filter((p) => p.id !== mapHotspot.id);
                 setPins(next);
                 try {
-                  localStorage.setItem(PIN_KEY, JSON.stringify(next));
+                  localStorage.setItem(storage.pins, JSON.stringify(next));
                 } catch {}
                 setPanel(null);
               }}
@@ -1792,7 +1805,7 @@ function RoamExperience() {
             onClick={() => {
               if (panel === "clear") {
                 try {
-                  localStorage.removeItem(STORAGE_KEY);
+                  localStorage.removeItem(storage.trips);
                 } catch {
                   notify(
                     "Saved trips could not be deleted. Please check your browser storage settings.",
@@ -1829,7 +1842,7 @@ function RoamExperience() {
 export default function Roam() {
   return (
     <AuthBoundary>
-      <RoamExperience />
+      {(user) => <RoamExperience key={user.id} user={user} />}
     </AuthBoundary>
   );
 }
