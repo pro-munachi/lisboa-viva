@@ -1492,6 +1492,8 @@ small {
   padding: 6px;
   box-shadow: 0 7px 35px #29294222;
   max-width: calc(100% - 38px);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .world-controls button {
   display: flex;
@@ -1992,5 +1994,13 @@ small {
   line-height: 1.5;
 }
 
-.clean-world { min-height: calc(100svh - 66px) !important; height: calc(100svh - 66px) !important; }
-@media (max-width: 600px) { .clean-world { min-height: calc(100svh - 36px) !important; height: calc(100svh - 36px) !important; } }
+.clean-world {
+  min-height: calc(100svh - 66px) !important;
+  height: calc(100svh - 66px) !important;
+}
+@media (max-width: 600px) {
+  .clean-world {
+    min-height: calc(100svh - 36px) !important;
+    height: calc(100svh - 36px) !important;
+  }
+}

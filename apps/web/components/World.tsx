@@ -13,6 +13,8 @@ import {
   Globe2,
   Users,
   X,
+  Waves,
+  Landmark,
 } from "lucide-react";
 import GoogleWorld from "./GoogleWorld";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
@@ -21,6 +23,9 @@ type CityController = {
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
   overview: () => void;
+  coast: () => void;
+  bridge: () => void;
+  waterfrontPeople: () => void;
   characters: () => void;
   people: () => void;
   setMode: (mode: string) => void;
@@ -51,7 +56,7 @@ export default function World({
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
   const [google, setGoogle] = useState(false);
-  const [gallery, setGallery] = useState(false);
+  const [gallery, setGallery] = useState<"" | "people" | "beach">("");
   const [person, setPerson] = useState<LocalPerson | null>(null);
   const [stats, setStats] = useState<{
     buildings: number;
@@ -78,7 +83,7 @@ export default function World({
             onStatus: setStatus,
             onStats: setStats,
             onPerson: (local: LocalPerson) => {
-              setGallery(false);
+              setGallery("");
               setPerson(local);
             },
           });
@@ -98,7 +103,7 @@ export default function World({
     };
   }, [google, shirt]);
   useEffect(() => {
-    setGallery(false);
+    setGallery("");
     setPerson(null);
     controller.current?.setFocus(focus);
   }, [focus]);
@@ -155,7 +160,7 @@ export default function World({
               <span>Pan</span>
             </button>
             <button
-              disabled={gallery}
+              disabled={!!gallery}
               aria-pressed={gesture === "walk"}
               onClick={() => {
                 setGesture("walk");
@@ -195,7 +200,7 @@ export default function World({
           <button
             aria-label="Street level"
             onClick={() => {
-              setGallery(false);
+              setGallery("");
               setPerson(null);
               controller.current?.setFocus(focus, true);
             }}
@@ -204,20 +209,42 @@ export default function World({
             <span>Street level</span>
           </button>
           <button
-            aria-label="Characters"
+            aria-label="People"
             onClick={() => {
-              setGallery(true);
+              setGallery("people");
               setPerson(null);
-              controller.current?.characters();
+              controller.current?.waterfrontPeople();
             }}
           >
             <PersonStanding size={17} />
-            <span>Characters</span>
+            <span>People</span>
+          </button>
+          <button
+            aria-label="Lisbon beaches and ocean"
+            onClick={() => {
+              setGallery("beach");
+              setPerson(null);
+              controller.current?.coast();
+            }}
+          >
+            <Waves size={17} />
+            <span>Beaches</span>
+          </button>
+          <button
+            aria-label="Ponte 25 de Abril Lisbon bridge"
+            onClick={() => {
+              setGallery("");
+              setPerson(null);
+              controller.current?.bridge();
+            }}
+          >
+            <Landmark size={17} />
+            <span>Lisbon bridge</span>
           </button>
           <button
             aria-label="Show nearby NPCs"
             onClick={() => {
-              setGallery(false);
+              setGallery("");
               setPerson(null);
               controller.current?.people();
             }}
@@ -228,7 +255,7 @@ export default function World({
           <button
             aria-label="Whole region"
             onClick={() => {
-              setGallery(false);
+              setGallery("");
               setPerson(null);
               controller.current?.overview();
             }}
@@ -249,9 +276,14 @@ export default function World({
           </button>
         </div>
       )}
-      {gallery && (
+      {gallery === "people" && (
         <div className="character-preview-label">
-          CHARACTER PREVIEW · ORIGINAL ROAM MODELS
+          CAIS WATERFRONT · ORIGINAL CHARACTER PREVIEW
+        </div>
+      )}
+      {gallery === "beach" && (
+        <div className="character-preview-label">
+          CARCAVELOS BEACH · ILLUSTRATIVE PREVIEW
         </div>
       )}
       {!google && !gallery && person && (
@@ -299,7 +331,7 @@ export default function World({
           <button
             onClick={() => {
               setPerson(null);
-              setGallery(false);
+              setGallery("");
               setGoogle((v) => !v);
             }}
           >
