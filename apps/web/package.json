@@ -1,5 +1,5 @@
 {
-  "name": "lisboa-viva",
+  "name": "roam-lisbon-web",
   "private": true,
   "version": "0.1.0",
   "scripts": {
@@ -7,21 +7,22 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "generate": "node ../../scripts/schema.mjs && openapi-typescript ../../api/openapi.json -o app/api.generated.ts",
-    "format": "prettier --write app next.config.ts"
+    "format": "prettier --write app components lib tests next.config.ts",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "lucide-react": "0.468.0",
     "next": "16.3.8",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "three": "0.160.0"
   },
   "devDependencies": {
     "@types/node": "22.15.30",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "openapi-typescript": "7.13.0",
     "prettier": "3.6.2",
+    "tsx": "4.20.6",
     "typescript": "5.9.3"
   }
 }

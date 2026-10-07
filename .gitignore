@@ -3,5 +3,5 @@ node_modules/
 .env
 *.log
 *.tsbuildinfo
-game
-!services/game/
+work/
+outputs/

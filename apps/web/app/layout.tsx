@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Lisboa Viva — a cidade é tua",
+  title: "ROAM — Lisbon. Your way.",
   description:
-    "Constrói uma vida em Lisboa. Encontra o teu bairro, as tuas pessoas e o teu próximo capítulo.",
+    "Try Lisbon before you go. A miniature city, a few days, and a trip that feels like you.",
 };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-PT">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );
