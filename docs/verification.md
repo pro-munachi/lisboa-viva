@@ -18,4 +18,4 @@ The development watcher reached macOS's local open-file limit (`EMFILE`). The pr
 
 ## Limits
 
-Automated state tests do not substitute for physical-device performance, screen-reader testing, a full WCAG 2.2 AA audit, or itinerary user research. Docker configuration is provided but was not built in this session. GitHub CI results should be checked on the implementation PR after upload. No production deployment or migration of legacy accounts/data has been performed.
+Automated state tests do not substitute for physical-device performance, screen-reader testing, a full WCAG 2.2 AA audit, or itinerary user research. Docker configuration is provided but was not built in this session. GitHub Actions reported `startup_failure` for both push and PR events before creating any jobs/check runs ([run](https://github.com/pro-munachi/lisboa-viva/actions/runs/37604590966)). The workflow YAML passes syntax/format validation locally. The available API did not expose the startup reason, so hosted CI has not been verified. No production deployment or migration of legacy accounts/data has been performed.
