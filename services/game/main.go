@@ -44,6 +44,10 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if env("MIGRATE_ONLY", "false") == "true" {
+		slog.Info("database migrations complete")
+		return
+	}
 
 	server := newServer(db, env("COOKIE_SECURE", "false") == "true")
 	httpServer := &http.Server{

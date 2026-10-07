@@ -1,0 +1,31 @@
+name: Staging database migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-database-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/game
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/game/go.mod
+          cache-dependency-path: services/game/go.sum
+      - run: go test ./...
+      - name: Apply checked migrations
+        run: go run .
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          MIGRATE_ONLY: "true"
+          PROJECT_ROOT: ${{ github.workspace }}

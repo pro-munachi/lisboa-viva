@@ -61,3 +61,7 @@ postgres://USER:PASSWORD@zephyr.proxy.rlwy.net:25979/DATABASE?sslmode=require
 ```
 
 The Go service applies checked, ordered migrations at startup. Rotate the staging password in Railway after sharing it through any temporary channel, and update only Render's secret `DATABASE_URL`.
+
+For a separate Render migration job, use the same Go image and set `MIGRATE_ONLY=true`. The process applies pending migrations, verifies checksums for previously applied files, and exits without opening the HTTP listener.
+
+The private GitHub repository stores the full staging URL as the encrypted Actions secret `STAGING_DATABASE_URL`. Collaborators with permission to run Actions can open **Actions → Staging database migrations → Run workflow**. The workflow tests the Go service, applies only pending checked migrations, and never prints the secret. GitHub does not allow collaborators to reveal an existing secret value; grant direct database access through the Railway project when a collaborator needs an interactive SQL connection.
