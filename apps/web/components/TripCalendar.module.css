@@ -1,0 +1,183 @@
+.calendar {
+  padding: 14px;
+  border: 1px solid var(--line, #e5e0e3);
+  border-radius: 16px;
+  background: #f6f5f0;
+  color: var(--ink, #292942);
+}
+.heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.heading h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.heading p {
+  margin: 5px 0 0;
+  color: var(--muted, #696876);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.duration {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #e7e8e1;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+}
+.fields label {
+  display: grid;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.fields input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px;
+  border: 1px solid var(--line, #e5e0e3);
+  border-radius: 10px;
+  background: var(--paper, #fffdf9);
+  font-size: 12px;
+  font-weight: 400;
+}
+.monthBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 14px 0 5px;
+}
+.monthBar strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.monthBar button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: #ffffffb3;
+  color: inherit;
+}
+.gridScroller {
+  overflow-x: auto;
+}
+.grid {
+  min-width: 308px;
+}
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(44px, 1fr));
+}
+.week [role="columnheader"] {
+  padding: 8px 0;
+  text-align: center;
+  color: var(--muted, #696876);
+  font-size: 10px;
+  font-weight: 600;
+}
+.cell {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+}
+.day {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.day:hover {
+  background: #e5e5df;
+}
+.inRange {
+  background: #e5e9e2;
+}
+.rangeStart {
+  background: linear-gradient(to right, transparent 50%, #e5e9e2 50%);
+}
+.rangeEnd {
+  background: linear-gradient(to right, #e5e9e2 50%, transparent 50%);
+}
+.rangeStart:not(.inRange),
+.rangeEnd:not(.inRange) {
+  background: transparent;
+}
+.day.endpoint,
+.day.endpoint:hover {
+  background: var(--accent, #292942);
+  color: #fff;
+  font-weight: 600;
+}
+.day[aria-current="date"] {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.calendar button:focus-visible,
+.calendar input:focus-visible {
+  outline: 2px solid #3a6487;
+  outline-offset: 2px;
+}
+.summary {
+  display: grid;
+  gap: 5px;
+  margin: 13px 0 0;
+  padding-top: 13px;
+  border-top: 1px solid #e2e3dc;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.summary strong {
+  font-weight: 600;
+}
+.summary span {
+  color: var(--muted, #696876);
+  font-size: 11px;
+}
+.error {
+  margin: 10px 0 0;
+  color: #8e3430;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.screenReader {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 420px) {
+  .calendar {
+    padding: 8px;
+  }
+  .fields {
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar button {
+    transition: none;
+    transform: none;
+  }
+}

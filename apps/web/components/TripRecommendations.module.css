@@ -1,0 +1,81 @@
+.recommendations {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #deddd2;
+}
+.recommendations header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+.kicker {
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  color: #526875;
+}
+.recommendations h3 {
+  margin: 6px 0;
+  font-size: 21px;
+}
+.recommendations header button {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #cdd6dc;
+  border-radius: 12px;
+  background: #eaf0f3;
+  color: #31576e;
+  font-size: 12px;
+}
+.items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.items button {
+  min-height: 104px;
+  text-align: left;
+  padding: 16px;
+  border-radius: 13px;
+  border: 1px solid #dfded2;
+  background: #f5f3eb;
+  color: #252b34;
+}
+.items strong {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.items span {
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 8px;
+  color: #606965;
+}
+.recommendations p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #6c706a;
+}
+.recommendations button:focus-visible {
+  outline: 3px solid #7698ae;
+  outline-offset: 3px;
+}
+.recommendations button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+@media (max-width: 540px) {
+  .recommendations header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .items {
+    grid-template-columns: 1fr;
+  }
+}

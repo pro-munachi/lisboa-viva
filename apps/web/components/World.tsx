@@ -13,11 +13,13 @@ import {
   Globe2,
   Users,
   X,
+  Clock3,
 } from "lucide-react";
 import GoogleWorld from "./GoogleWorld";
 import InteriorPanel from "./InteriorPanel";
 import { INTERIOR_ACTIVITIES, type InteriorVisit } from "../lib/interiors";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
+import { CITY, cityMinute } from "../lib/cities";
 import type { WorldFocus, WorldHotspot } from "../lib/world-state";
 type CityController = {
   ready: Promise<void>;
@@ -31,6 +33,7 @@ type CityController = {
   people: () => void;
   setMode: (mode: string) => void;
   setMotion: (value: boolean) => void;
+  setTime: (minute: number) => void;
   zoom: (multiplier: number) => void;
   rotate: (angle: number) => void;
   dispose: () => void;
@@ -43,6 +46,8 @@ export default function World({
   onHotspot,
   interior,
   onExitInterior,
+  onTransitAction,
+  minute,
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -50,13 +55,20 @@ export default function World({
   onHotspot: (h: WorldHotspot) => void;
   interior: InteriorVisit | null;
   onExitInterior: () => void;
+  onTransitAction?: (id: string) => void;
+  minute?: number;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
   const callback = useRef(onHotspot);
   callback.current = onHotspot;
-  const latest = useRef({ focus, shirt, hotspots, interior });
-  latest.current = { focus, shirt, hotspots, interior };
+  const [cityClock, setCityClock] = useState(660);
+  const [sceneTime, setSceneTime] = useState("live");
+  const sceneMinute = sceneTime === "trip" ? minute ?? cityClock :
+    sceneTime === "day" ? 720 : sceneTime === "golden" ? 1110 :
+    sceneTime === "night" ? 1260 : cityClock;
+  const latest = useRef({ focus, shirt, hotspots, interior, minute: sceneMinute });
+  latest.current = { focus, shirt, hotspots, interior, minute: sceneMinute };
   const [status, setStatus] = useState("Loading Lisbon’s streets…");
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
@@ -78,6 +90,15 @@ export default function World({
   const ui = useRef({ gesture, motion });
   ui.current = { gesture, motion };
   useEffect(() => {
+    const update = () => {
+      setCityClock(cityMinute(new Date()));
+    };
+    update();
+    const timer = setInterval(update, 60000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => { controller.current?.setTime(sceneMinute); }, [sceneMinute]);
+  useEffect(() => {
     setPerson(null);
     if (google) return;
     let cancelled = false;
@@ -87,6 +108,7 @@ export default function World({
         try {
           controller.current = createCity(host.current, {
             ...latest.current,
+            city: CITY,
             onHotspot: (h: WorldHotspot) => {
               setPerson(null);
               callback.current(h);
@@ -137,7 +159,10 @@ export default function World({
     setGallery(false);
     setPerson(null);
     controller.current?.setFocus(focus);
-  }, [focus]);
+    // A journey hub can update its map focus after entering a room. Restore
+    // the requested interior after the focus command clears the previous view.
+    controller.current?.setInterior(interior);
+  }, [focus, interior]);
   useEffect(() => {
     controller.current?.setMarkers(hotspots);
   }, [hotspots]);
@@ -149,7 +174,6 @@ export default function World({
     setActivityState("idle");
     setSelectedZone(interior ? INTERIOR_ACTIVITIES[interior.kind][0].id : null);
     if (interior) setGoogle(false);
-    controller.current?.setInterior(interior);
   }, [interior]);
   useEffect(() => {
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -181,6 +205,19 @@ export default function World({
           </p>
         )}
       </div>
+      {!google && (
+        <label className="world-time">
+          <Clock3 size={15} />
+          <select aria-label="Scene time" value={sceneTime} onChange={(e) => setSceneTime(e.target.value)}>
+            <option value="live">Live city time</option>
+            {minute !== undefined && <option value="trip">Trip time</option>}
+            <option value="day">Daylight preview</option>
+            <option value="golden">Golden hour preview</option>
+            <option value="night">Night preview</option>
+          </select>
+          <span>{String(Math.floor(sceneMinute / 60)).padStart(2, "0")}:{String(sceneMinute % 60).padStart(2, "0")}</span>
+        </label>
+      )}
       {!google && (
         <div
           className={
@@ -318,6 +355,13 @@ export default function World({
           onSelectZone={(id) => controller.current?.selectInteriorZone(id)}
           onPerform={(id) => {
             setRoomError("");
+            if (
+              ["airport", "station", "bus-stop"].includes(interior.kind) &&
+              onTransitAction
+            ) {
+              onTransitAction(id);
+              return;
+            }
             controller.current?.performInteriorAction(
               id,
               INTERIOR_ACTIVITIES[interior.kind].find((a) => a.id === id)

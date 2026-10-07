@@ -247,6 +247,20 @@ function drawRoof(ctx, random) {
 }
 
 export function createArchitecturePalette() {
+  const night = { value: 0 };
+  // Same atlas layout as drawFacade; only glass emits, including its sash gaps.
+  const windowMask = canvasTexture((ctx) => {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(89, 24, 78, 61);
+    ctx.fillRect(55, 157, 65, 69);
+    ctx.fillRect(132, 157, 65, 69);
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(125, 21, 4, 74);
+    ctx.fillRect(86, 56, 84, 4);
+    ctx.fillRect(53, 181, 149, 3);
+  }, 0);
   const textures = PALETTES.map((p, i) =>
     canvasTexture((ctx, random) => drawFacade(ctx, random, p, i), i + 101),
   );
@@ -255,11 +269,22 @@ export function createArchitecturePalette() {
       map,
       color: "#ffffff",
       roughness: 0.86,
+      emissive: "#f4b667",
+      emissiveMap: windowMask,
+      emissiveIntensity: 1.1,
     });
     material.onBeforeCompile = (shader) => {
+      shader.uniforms.roamNight = night;
       shader.fragmentShader = shader.fragmentShader.replace(
         "void main() {",
-        "float roamFacadeV(float v) { return (v < 1.0 ? 0.0 : 0.5) + fract(v) * 0.5; }\nvoid main() {",
+        "uniform float roamNight;\nfloat roamFacadeV(float v) { return (v < 1.0 ? 0.0 : 0.5) + fract(v) * 0.5; }\nvoid main() {",
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <emissivemap_fragment>",
+        THREE.ShaderChunk.emissivemap_fragment.replace(
+          "texture2D( emissiveMap, vEmissiveMapUv )",
+          "texture2D( emissiveMap, vec2(vEmissiveMapUv.x, roamFacadeV(vEmissiveMapUv.y)) )",
+        ) + "\ntotalEmissiveRadiance *= roamNight;",
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <map_fragment>",
@@ -269,7 +294,8 @@ export function createArchitecturePalette() {
         ),
       );
     };
-    material.customProgramCacheKey = () => "roam-lisbon-facade-atlas-v1";
+    material.userData.nightUniform = night;
+    material.customProgramCacheKey = () => "roam-lisbon-facade-atlas-night-v2";
     return material;
   });
   const roofTexture = canvasTexture(drawRoof, 801);
@@ -281,9 +307,15 @@ export function createArchitecturePalette() {
   return {
     wallMaterials,
     roofMaterial,
+    setNight(value) {
+      night.value = Number.isFinite(value)
+        ? Math.max(0, Math.min(1, value))
+        : 0;
+    },
     dispose() {
       textures.forEach((texture) => texture.dispose());
       roofTexture.dispose();
+      windowMask.dispose();
       wallMaterials.forEach((material) => material.dispose());
       roofMaterial.dispose();
     },

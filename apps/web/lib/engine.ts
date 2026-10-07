@@ -11,13 +11,39 @@ import {
   type Mode,
   type Choice,
 } from "./content";
+import {
+  CARD_COST,
+  JOURNEY_HUBS,
+  JOURNEY_PEOPLE,
+  JOURNEY_ROUTES,
+  initialJourney,
+  journeyFor,
+  type Persona,
+  type Arrival,
+  type JourneyState,
+  type JourneyAction,
+} from "./journey";
 export const STORAGE_KEY = "roam.lisbon.trips.v1";
+export type Interest =
+  | "food"
+  | "culture"
+  | "nature"
+  | "nightlife"
+  | "wellness"
+  | "community";
+export type Accommodation = "hotel" | "hostel" | "apartment" | "coliving";
 export type Setup = {
-  days: 3 | 5;
+  days: number;
   budget: number;
   style: Style;
   base: "Graça" | "Baixa" | "Alfama";
   shirt: string;
+  persona?: Persona;
+  arrival?: Arrival;
+  interests?: Interest[];
+  startDate?: string;
+  endDate?: string;
+  accommodation?: Accommodation;
 };
 export type Command = { key: string; revision: number } & (
   | { kind: "choice"; choiceId: string }
@@ -25,6 +51,7 @@ export type Command = { key: string; revision: number } & (
   | { kind: "rest" }
   | { kind: "night" }
   | { kind: "finish" }
+  | ({ kind: "journey" } & JourneyAction)
 );
 export type Entry = {
   command: Command;
@@ -35,7 +62,7 @@ export type Entry = {
   title: string;
   outcome: string;
   cost: number;
-  tag: Choice["tag"] | "travel" | "night" | "finish";
+  tag: Choice["tag"] | "travel" | "night" | "finish" | "journey";
   energy: number;
   inspiration: number;
   connection: number;
@@ -54,26 +81,84 @@ export type Trip = {
   revision: number;
   history: Entry[];
   complete: boolean;
+  journey: JourneyState;
 };
 export const euro = (n: number) =>
   new Intl.NumberFormat("en-IE", {
     style: "currency",
     currency: "EUR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(n);
 export const time = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 const clamp = (n: number) => Math.max(0, Math.min(100, n));
+function dateValue(value: unknown): number | null {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return null;
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(timestamp) &&
+    new Date(timestamp).toISOString().slice(0, 10) === value
+    ? timestamp
+    : null;
+}
+export function tripDateDuration(
+  startDate: string,
+  endDate: string,
+): number | null {
+  const start = dateValue(startDate),
+    end = dateValue(endDate);
+  if (start === null || end === null) return null;
+  const days = (end - start) / 86_400_000;
+  return Number.isInteger(days) && days >= 1 && days <= 30 ? days : null;
+}
 export function validSetup(s: Setup): boolean {
+  const validDates =
+    (s?.startDate === undefined && s?.endDate === undefined) ||
+    (s?.startDate !== undefined &&
+      s?.endDate !== undefined &&
+      tripDateDuration(s.startDate, s.endDate) === s.days);
   return (
     !!s &&
-    [3, 5].includes(s.days) &&
+    Number.isInteger(s.days) &&
+    s.days >= 1 &&
+    s.days <= 30 &&
     Number.isInteger(s.budget) &&
     s.budget >= 30 &&
     s.budget <= 5000 &&
     ["Budget explorer", "Foodie", "Culture seeker"].includes(s.style) &&
     ["Graça", "Baixa", "Alfama"].includes(s.base) &&
-    ["#ece7df", "#687f73", "#b47459", "#777791"].includes(s.shirt)
+    [
+      "#ece7df",
+      "#687f73",
+      "#b47459",
+      "#777791",
+      "#456a86",
+      "#ceab62",
+      "#b9828f",
+      "#454b4e",
+    ].includes(s.shirt) &&
+    (s.persona === undefined ||
+      ["tourist", "nomad", "expat"].includes(s.persona)) &&
+    (s.arrival === undefined ||
+      ["airport", "station", "bus-stop", "home"].includes(s.arrival)) &&
+    (s.accommodation === undefined ||
+      ["hotel", "hostel", "apartment", "coliving"].includes(s.accommodation)) &&
+    (s.interests === undefined ||
+      (Array.isArray(s.interests) &&
+        s.interests.length <= 6 &&
+        new Set(s.interests).size === s.interests.length &&
+        s.interests.every((interest) =>
+          [
+            "food",
+            "culture",
+            "nature",
+            "nightlife",
+            "wellness",
+            "community",
+          ].includes(interest),
+        ))) &&
+    validDates
   );
 }
 export function newTrip(setup: Setup, id: string): Trip {
@@ -82,7 +167,10 @@ export function newTrip(setup: Setup, id: string): Trip {
   return {
     id,
     version: CONTENT_VERSION,
-    setup: { ...setup },
+    setup: {
+      ...setup,
+      ...(setup.interests ? { interests: [...setup.interests] } : {}),
+    },
     day: 1,
     minute: 540,
     place: "home",
@@ -93,9 +181,11 @@ export function newTrip(setup: Setup, id: string): Trip {
     revision: 0,
     history: [],
     complete: false,
+    journey: initialJourney(setup.arrival),
   };
 }
 export function availableScenarios(t: Trip) {
+  if (journeyFor(t).phase !== "city" || journeyFor(t).hub) return [];
   const completed = new Set(
     t.history
       .filter((h) => h.command.kind === "choice")
@@ -136,6 +226,151 @@ export function blocked(
   if (t.energy + c.energy < 0) return "Rest first to restore your energy";
   return null;
 }
+export type JourneyPreview = {
+  reason: string | null;
+  title: string;
+  outcome: string;
+  cost: number;
+  minutes: number;
+  energy: number;
+  inspiration: number;
+  connection: number;
+  place: PlaceId;
+  journey: JourneyState;
+  complete: boolean;
+};
+/** The UI and ledger share this validation; previewing never mutates a trip. */
+export function previewJourney(t: Trip, action: JourneyAction): JourneyPreview {
+  const current = journeyFor(t);
+  const preview: JourneyPreview = {
+    reason: null,
+    title: "Transport encounter",
+    outcome: "",
+    cost: 0,
+    minutes: 0,
+    energy: 0,
+    inspiration: 0,
+    connection: 0,
+    place: t.place,
+    journey: {
+      ...current,
+      ticket: current.ticket ? { ...current.ticket } : null,
+      talked: [...current.talked],
+    },
+    complete: false,
+  };
+  const fail = (reason: string) => ({ ...preview, reason });
+  if (t.complete || current.phase === "departed")
+    return fail("This trip is complete.");
+  if (!action || typeof action.action !== "string")
+    return fail("Choose a transport action.");
+  if (current.ticket && action.action !== "board") {
+    // Keep the authored amounts visible while the ready ticket locks the clock.
+    if (action.action === "get-card") {
+      preview.title = "Get a simulated transport card";
+      preview.cost = CARD_COST;
+      preview.minutes = 3;
+    } else if (action.action === "book") {
+      const route = JOURNEY_ROUTES.find((route) => route.id === action.routeId);
+      if (route) {
+        preview.title =
+          route.mode === "walk" ? `Plan ${route.name}` : `Book ${route.name}`;
+        preview.cost = route.cost;
+        preview.minutes = route.mode === "flight" ? 5 : 3;
+      }
+    }
+    return fail("Board your ready ticket before continuing.");
+  }
+  if (action.action === "visit-hub") {
+    if (!Object.hasOwn(JOURNEY_HUBS, action.hub))
+      return fail("Choose a mapped transport hub.");
+    if (current.phase === "arriving")
+      return fail("Continue into Lisbon from your arrival hub first.");
+    if (current.hub === action.hub) return fail("You are already at this hub.");
+    const hub = JOURNEY_HUBS[action.hub];
+    preview.title = `Visit ${hub.name}`;
+    preview.outcome =
+      "You arrive at an original transport scene. This authored scene transfer has illustrative time and energy; it is not a real route instruction.";
+    preview.minutes = 20;
+    preview.energy = -4;
+    preview.journey.hub = action.hub;
+  } else if (action.action === "get-card") {
+    preview.title = "Get a simulated transport card";
+    preview.outcome =
+      "Your ROAM transport card is ready for the simulated public-transport journeys. No real card or travel credit has been purchased.";
+    preview.cost = CARD_COST;
+    preview.minutes = 3;
+    if (!current.hub) return fail("Visit a transport hub to get your card.");
+    if (current.card)
+      return fail("You already have your simulated transport card.");
+    preview.journey.card = true;
+  } else if (action.action === "book") {
+    const route = JOURNEY_ROUTES.find((route) => route.id === action.routeId);
+    if (!route) return fail("Choose a simulated route.");
+    preview.title =
+      route.mode === "walk" ? `Plan ${route.name}` : `Book ${route.name}`;
+    preview.cost = route.cost;
+    preview.minutes = route.mode === "flight" ? 5 : 3;
+    preview.outcome =
+      route.mode === "flight"
+        ? `A simulated flight ticket is ready. ${euro(route.cost)} was charged to your game budget. No airline reservation or real flight exists.`
+        : route.mode === "walk"
+          ? "Your walking continuation is ready. Confirm it to begin your city chapter."
+          : "One simulated ticket is ready. The game fare is charged now; board to apply the travel time and destination.";
+    if (current.hub !== route.from)
+      return fail("Book this route at its departure hub.");
+    if (route.departure && current.phase === "arriving")
+      return fail("Continue into Lisbon before booking a departure.");
+    if (route.requiresCard && !current.card)
+      return fail("Get your simulated transport card first.");
+    const boardingReason = blocked(t, {
+      cost: preview.cost,
+      minutes: preview.minutes + route.minutes,
+      energy: route.energy,
+    });
+    if (boardingReason) return fail(boardingReason);
+    preview.journey.ticket = { routeId: route.id };
+  } else if (action.action === "board") {
+    const route = JOURNEY_ROUTES.find(
+      (route) => route.id === current.ticket?.routeId,
+    );
+    if (!route) return fail("Book a simulated journey before boarding.");
+    preview.title =
+      route.mode === "walk" ? `Continue: ${route.name}` : `Board ${route.name}`;
+    preview.minutes = route.minutes;
+    preview.energy = route.energy;
+    preview.outcome = route.departure
+      ? "You board the imagined departure flight. Your simulated Lisbon chapter is complete; no real flight has been booked."
+      : `You arrive in ${places[route.toPlace].district}. The journey and its duration are simulated.`;
+    if (current.hub !== route.from)
+      return fail("Your ticket belongs to another departure hub.");
+    if (route.requiresCard && !current.card)
+      return fail("Get your simulated transport card first.");
+    preview.place = route.toPlace;
+    preview.inspiration = 2;
+    preview.connection = 1;
+    preview.journey.ticket = null;
+    preview.journey.hub = null;
+    preview.journey.phase = route.departure ? "departed" : "city";
+    preview.complete = !!route.departure;
+  } else if (action.action === "talk") {
+    const person = JOURNEY_PEOPLE.find(
+      (person) => person.id === action.personId,
+    );
+    if (!person || person.hub !== current.hub)
+      return fail("Meet this person at their transport hub.");
+    preview.title = `Talk with ${person.name} · fictional ${person.role}`;
+    preview.outcome = person.responses[t.setup.persona || "tourist"];
+    preview.minutes = 6;
+    preview.connection = 6;
+    preview.inspiration = 2;
+    if (current.talked.includes(person.id))
+      return fail("You have already shared this conversation.");
+    preview.journey.talked.push(person.id);
+  } else return fail("Choose a transport action.");
+  preview.reason = blocked(t, preview);
+  return preview;
+}
 export function apply(t: Trip, cmd: Command): { trip: Trip; error?: string } {
   const fail = (error: string) => ({ trip: t, error });
   if (!cmd || typeof cmd.key !== "string" || !cmd.key || cmd.key.length > 100)
@@ -151,13 +386,35 @@ export function apply(t: Trip, cmd: Command): { trip: Trip; error?: string } {
         (previous.kind === "travel" &&
           previous.place === cmd.place &&
           previous.mode === cmd.mode));
-    return same
+    const sameJourney =
+      cmd.kind !== "journey" ||
+      (previous.kind === "journey" &&
+        previous.action === cmd.action &&
+        (cmd.action !== "visit-hub" ||
+          (previous.action === "visit-hub" && previous.hub === cmd.hub)) &&
+        (cmd.action !== "book" ||
+          (previous.action === "book" && previous.routeId === cmd.routeId)) &&
+        (cmd.action !== "talk" ||
+          (previous.action === "talk" && previous.personId === cmd.personId)));
+    return same && sameJourney
       ? { trip: t }
       : fail("This action key was already used for another choice.");
   }
   if (cmd.revision !== t.revision)
     return fail("Your trip has changed. Choose again.");
   if (t.complete) return fail("This trip is complete.");
+  const currentJourney = journeyFor(t);
+  if (
+    currentJourney.ticket &&
+    cmd.kind !== "finish" &&
+    !(cmd.kind === "journey" && cmd.action === "board")
+  )
+    return fail("Board your ready ticket before continuing.");
+  if (
+    currentJourney.phase === "arriving" &&
+    (cmd.kind === "choice" || cmd.kind === "travel" || cmd.kind === "night")
+  )
+    return fail("Continue into Lisbon from your arrival hub first.");
   let title = "",
     outcome = "",
     cost = 0,
@@ -169,8 +426,25 @@ export function apply(t: Trip, cmd: Command): { trip: Trip; error?: string } {
     place = t.place,
     day = t.day,
     minute = t.minute,
-    complete = false;
-  if (cmd.kind === "choice") {
+    complete = false,
+    journey = currentJourney;
+  if (cmd.kind === "journey") {
+    const preview = previewJourney(t, cmd);
+    if (preview.reason) return fail(preview.reason);
+    ({
+      title,
+      outcome,
+      cost,
+      minutes,
+      energy,
+      inspiration,
+      connection,
+      place,
+      journey,
+      complete,
+    } = preview);
+    tag = "journey";
+  } else if (cmd.kind === "choice") {
     const found = choiceIndex.get(cmd.choiceId);
     if (
       !found ||
@@ -193,6 +467,7 @@ export function apply(t: Trip, cmd: Command): { trip: Trip; error?: string } {
       );
     ({ cost, minutes, energy } = route);
     place = cmd.place;
+    journey = { ...currentJourney, hub: null };
     tag = "travel";
     title = `${route.title} to ${places[place].name}`;
     outcome = `You arrive in ${places[place].district}. Travel cost and duration are illustrative.`;
@@ -215,6 +490,7 @@ export function apply(t: Trip, cmd: Command): { trip: Trip; error?: string } {
     complete = t.day === t.setup.days;
     energy = 85 - t.energy;
     place = "home";
+    journey = { ...currentJourney, hub: null };
     if (!complete) {
       day++;
       minute = 540;
@@ -254,6 +530,7 @@ export function apply(t: Trip, cmd: Command): { trip: Trip; error?: string } {
       revision: t.revision + 1,
       history: [...t.history, entry],
       complete,
+      journey,
     },
   };
 }
@@ -319,7 +596,16 @@ export function itinerary(t: Trip): string {
     "ROAM · YOUR SIMULATED LISBON ITINERARY",
     `${t.setup.days}-day ${t.setup.style.toLowerCase()} trip · Home base: ${t.setup.base}`,
     `Simulated spend ${euro(t.spent)} / ${euro(t.setup.budget)} activity budget`,
-    "Flights and accommodation excluded. All costs/times illustrative. Nothing booked or confirmed.",
+    t.history.some((h) => {
+      const command = h.command;
+      return (
+        command.kind === "journey" &&
+        command.action === "book" &&
+        JOURNEY_ROUTES.find((route) => route.id === command.routeId)?.departure
+      );
+    })
+      ? "Simulated departure flight charges are included in the game spend. Accommodation is excluded. All costs/times illustrative. Nothing booked or confirmed."
+      : "Flights and accommodation excluded. All costs/times illustrative. Nothing booked or confirmed.",
     "Fictional venues are ideas to research, not real booking recommendations.",
     "",
     ...t.history

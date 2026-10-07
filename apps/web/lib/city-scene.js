@@ -12,7 +12,8 @@ import {
   createArchitecturePalette,
   buildingArchitecture,
 } from "./city-architecture";
-import { createLandscape } from "./city-landscape";
+import { createLandscape, setLandscapeNight } from "./city-landscape";
+import { lightingForMinute, nearestLampAnchors } from "./city-lighting";
 import { createLandmarks, isLandmarkBuilding } from "./city-landmarks";
 import { createCityAtmosphere } from "./city-atmosphere";
 import { coastRegions } from "./city-water";
@@ -46,7 +47,8 @@ export function createCity(host, options) {
   const scene = new THREE.Scene();
   const atmosphere = createCityAtmosphere(renderer, scene);
   const architecture = createArchitecturePalette();
-  scene.add(new THREE.HemisphereLight("#e4f1ff", "#ae9c78", 1.65));
+  const hemisphere = new THREE.HemisphereLight("#e4f1ff", "#ae9c78", 1.65);
+  scene.add(hemisphere);
   const sun = new THREE.DirectionalLight("#fff0d8", 3.1);
   sun.position.set(-150, 400, 180);
   sun.castShadow = true;
@@ -60,6 +62,17 @@ export function createCity(host, options) {
   sun.shadow.bias = -0.00015;
   scene.add(sun);
   scene.add(sun.target);
+  // A fixed six-light pool illuminates only nearby lanterns; all other pools
+  // of light are batched with their owned, terrain-draped landscape geometry.
+  const lampLights = Array.from({ length: 6 }, () => {
+    const light = new THREE.PointLight("#ffd293", 0, 18, 2);
+    light.visible = false;
+    scene.add(light);
+    return light;
+  });
+  let exteriorLighting = lightingForMinute(options.minute ?? 660),
+    lightingKey = "";
+  const interiorLighting = lightingForMinute(660);
   const camera = new THREE.PerspectiveCamera(43, 1, 0.3, 90000);
   camera.position.set(200, 160, 200);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -172,6 +185,52 @@ export function createCity(host, options) {
     onZone: options.onInteriorZone,
     onActivity: options.onInteriorActivity,
   });
+  function syncLighting() {
+    const exterior = !indoor.active && !characterGallery;
+    const state = exterior ? exteriorLighting : interiorLighting;
+    const key = `${exterior}:${state.minute}`;
+    if (key !== lightingKey) {
+      lightingKey = key;
+      atmosphere.setLighting(state, exterior);
+      hemisphere.color.set(state.hemisphereSky);
+      hemisphere.groundColor.set(state.hemisphereGround);
+      hemisphere.intensity = state.hemisphereIntensity;
+      sun.color.set(state.sunColor);
+      sun.intensity = state.sunIntensity;
+      architecture.setNight(exterior ? state.night : 0);
+    }
+    const target = controls.target;
+    sun.position.set(
+      target.x + state.sunOffset.x,
+      target.y + state.sunOffset.y,
+      target.z + state.sunOffset.z,
+    );
+    sun.target.position.copy(target);
+    const anchors = [];
+    for (const group of chunkGroups.values()) {
+      for (const child of group.children) {
+        if (!child.userData.lighting) continue;
+        setLandscapeNight(child, exterior ? state.night : 0);
+        if (exterior && group.visible && child.visible)
+          anchors.push(...child.userData.lighting.lampAnchors);
+      }
+    }
+    const closeLamps =
+      exterior && state.night > 0.01 && camera.position.distanceTo(target) < 600
+        ? nearestLampAnchors(anchors, target)
+        : [];
+    lampLights.forEach((light, index) => {
+      const point = closeLamps[index];
+      light.visible = !!point;
+      light.intensity = point ? state.night * 110 : 0;
+      if (point) light.position.copy(point);
+    });
+  }
+  function setTime(minute) {
+    if (destroyed) return;
+    exteriorLighting = lightingForMinute(minute);
+    syncLighting();
+  }
   let pendingVenue = null;
   function flatPolygonGeometry(ring, holes = [], height = 0.06) {
     const toPath = (points, path) => {
@@ -624,6 +683,7 @@ export function createCity(host, options) {
       geoY,
       focusPoint: unprojectGeo(controls.target.x, controls.target.z),
     });
+    setLandscapeNight(dressing, exteriorLighting.night);
     dressing.userData.streetDetail = true;
     group.add(dressing);
     const storefronts = createVenueDecorations(
@@ -950,7 +1010,7 @@ export function createCity(host, options) {
     indoor.clear();
     city.visible = true;
     population.visible = true;
-    scene.background = new THREE.Color(atmosphere.horizon);
+    scene.background = new THREE.Color(exteriorLighting.horizon);
     atmosphere.sky.visible = true;
   }
   function setFocus(next, street = false) {
@@ -986,7 +1046,7 @@ export function createCity(host, options) {
     overviewLoading = true;
     try {
       const data = await geographyFile(
-        "/data/lisbon-overview.json.gz",
+        options.city?.data.overview || "/data/lisbon-overview.json.gz",
         abort.signal,
       );
       if (destroyed) return;
@@ -1174,13 +1234,6 @@ export function createCity(host, options) {
       dt,
       motion && !characterGallery && !indoor.active,
     );
-    const lightTarget = controls.target;
-    sun.position.set(
-      lightTarget.x - 260,
-      lightTarget.y + 460,
-      lightTarget.z + 280,
-    );
-    sun.target.position.copy(lightTarget);
     const shadowRange = Math.max(80, Math.min(420, range * 0.75));
     sun.shadow.camera.left = sun.shadow.camera.bottom = -shadowRange;
     sun.shadow.camera.right = sun.shadow.camera.top = shadowRange;
@@ -1194,6 +1247,7 @@ export function createCity(host, options) {
         if (child.userData.streetDetail) child.visible = range < 2300;
     }
     if (overviewMesh) overviewMesh.visible = range > 2200 && !characterGallery;
+    syncLighting();
     badges.update(camera, {
       width: host.clientWidth,
       height: host.clientHeight,
@@ -1210,10 +1264,14 @@ export function createCity(host, options) {
   frame = requestAnimationFrame(animate);
   status("Loading real Lisbon geography…");
   const ready = Promise.all([
-    geographyFile("/data/lisbon-manifest.json.gz", abort.signal),
-    geographyFile("/data/lisbon-terrain.json.gz", abort.signal).catch(
-      () => null,
+    geographyFile(
+      options.city?.data.manifest || "/data/lisbon-manifest.json.gz",
+      abort.signal,
     ),
+    geographyFile(
+      options.city?.data.terrain || "/data/lisbon-terrain.json.gz",
+      abort.signal,
+    ).catch(() => null),
   ])
     .then(async ([data, dem]) => {
       if (destroyed) return;
@@ -1390,6 +1448,7 @@ export function createCity(host, options) {
   return {
     ready,
     setFocus,
+    setTime,
     setMarkers,
     overview,
     characters,
@@ -1428,6 +1487,7 @@ export function createCity(host, options) {
       controls.dispose();
       badges.dispose();
       indoor.dispose();
+      lampLights.forEach((light) => light.dispose());
       renderer.domElement.removeEventListener("pointerdown", pointerDown);
       renderer.domElement.removeEventListener("pointerup", pointerUp);
       disposeGroup(scene);

@@ -51,9 +51,20 @@ const ICONS = {
     "M9 17V5l11-2v12M9 17a3 3 0 1 1-3-3c2 0 3 1 3 3Zm11-2a3 3 0 1 1-3-3c2 0 3 1 3 3ZM9 8l11-2",
   ],
   lounge: ["M5 11V5h14v6M3 11h5v5h8v-5h5v9H3ZM6 20v2m12-2v2"],
+  card: ["M3 5h18v14H3ZM3 9h18M6 14h4m5 1h3"],
+  "check-in": [
+    "M8 5h8v16H8ZM10 5V2h4v3M2 12h5m-2-2 2 2-2 2M17 12h5m-2-2 2 2-2 2M10 17h4",
+  ],
+  gate: ["M4 21V3h16v18M7 21h10M8 10l4-3 4 3M12 7v8m-2-2 2 2 2-2"],
+  tickets: [
+    "M3 5h18v4a3 3 0 0 0 0 6v4H3v-4a3 3 0 0 0 0-6ZM15 6v2m0 3v2m0 3v2M7 9h4m-4 5h4",
+  ],
+  timetable: ["M4 3h16v18H4ZM7 7h6m-6 4h4m-4 4h6M16 8v5l2 1"],
+  board: ["M3 12h11m-4-4 4 4-4 4M17 3h4v18h-4M17 6h4m-4 12h4"],
 };
 ICONS.espresso = ICONS.cafe;
 ICONS.weights = ICONS.gym;
+ICONS.platform = [...ICONS.transport, "M2 23h20"];
 
 const TONES = {
   cafe: "ochre",
@@ -77,6 +88,9 @@ const TONES = {
   counter: "rose",
   market: "ochre",
   street: "rose",
+  card: "ochre",
+  "check-in": "ochre",
+  board: "sage",
 };
 
 /** Project a world anchor into CSS pixels. Call after camera matrices update. */

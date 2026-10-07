@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { lightingForMinute } from "./city-lighting";
 
 function textureCanvas(size, draw) {
   const canvas = document.createElement("canvas");
@@ -25,13 +26,19 @@ export function createCityAtmosphere(renderer, scene) {
       top: { value: new THREE.Color("#80b8d0") },
       horizon: { value: new THREE.Color(horizon) },
       sunDirection: { value: new THREE.Vector3(-0.32, 0.66, 0.5).normalize() },
+      night: { value: 0 },
+      sunGlow: { value: new THREE.Color("#24190b") },
     },
     vertexShader: `varying vec3 direction;
       void main(){direction=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader: `uniform vec3 top;uniform vec3 horizon;uniform vec3 sunDirection;varying vec3 direction;
+    fragmentShader: `uniform vec3 top;uniform vec3 horizon;uniform vec3 sunDirection;uniform vec3 sunGlow;uniform float night;varying vec3 direction;
       void main(){vec3 d=normalize(direction);float gradient=pow(max(d.y,0.),.48);
         vec3 color=mix(horizon,top,gradient);float glow=pow(max(dot(d,sunDirection),0.),18.);
-        color+=vec3(.14,.10,.045)*glow;
+        color+=sunGlow*glow;
+        vec2 starUV=vec2(atan(d.z,d.x),asin(clamp(d.y,-1.,1.)))*220.;
+        float seed=fract(sin(dot(floor(starUV),vec2(127.1,311.7)))*43758.5453);
+        float star=(1.-smoothstep(.025,.095,length(fract(starUV)-.5)))*step(.999,seed)*smoothstep(.1,.4,d.y);
+        color+=vec3(.64,.72,.9)*star*night;
         gl_FragColor=vec4(color,1.);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -110,6 +117,8 @@ export function createCityAtmosphere(renderer, scene) {
         time: { value: 0 },
         deep: { value: new THREE.Color("#4b8292") },
         shallow: { value: new THREE.Color("#76b0b9") },
+        reflection: { value: new THREE.Color("#96bfc4") },
+        night: { value: 0 },
       },
     ]),
     vertexShader: `varying vec3 worldPosition;
@@ -118,7 +127,7 @@ export function createCityAtmosphere(renderer, scene) {
         vec4 mvPosition=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mvPosition;
         #include <fog_vertex>
       }`,
-    fragmentShader: `uniform float time;uniform vec3 deep;uniform vec3 shallow;varying vec3 worldPosition;
+    fragmentShader: `uniform float time;uniform vec3 deep;uniform vec3 shallow;uniform vec3 reflection;uniform float night;varying vec3 worldPosition;
       #include <fog_pars_fragment>
       void main(){vec2 p=worldPosition.xz;
         float broad=sin(p.x*.024+p.y*.047+time*.34)*.5+.5;
@@ -127,8 +136,8 @@ export function createCityAtmosphere(renderer, scene) {
         vec3 direction=normalize(cameraPosition-worldPosition);
         float fresnel=pow(1.-max(direction.y,0.),3.);
         vec3 color=mix(deep,shallow,.28+broad*.28);
-        color=mix(color,vec3(.59,.75,.77),fresnel*.4);
-        color+=vec3(.19,.21,.16)*ripple*(.12+broad*.26);
+        color=mix(color,reflection,fresnel*.4);
+        color+=vec3(.19,.21,.16)*ripple*(.12+broad*.26)*(1.-night*.65);
         gl_FragColor=vec4(color,1.);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -146,6 +155,24 @@ export function createCityAtmosphere(renderer, scene) {
     water,
   ];
   let elapsed = 0;
+  function setLighting(state, exterior = true) {
+    renderer.toneMappingExposure = state.exposure;
+    if (!exterior) return;
+    skyMaterial.uniforms.top.value.set(state.skyTop);
+    skyMaterial.uniforms.horizon.value.set(state.horizon);
+    skyMaterial.uniforms.night.value = state.night;
+    skyMaterial.uniforms.sunDirection.value.copy(state.sunOffset).normalize();
+    skyMaterial.uniforms.sunGlow.value
+      .set(state.sunColor)
+      .multiplyScalar(0.16 * (1 - state.night) + 0.035 * state.night);
+    water.uniforms.deep.value.set(state.waterDeep);
+    water.uniforms.shallow.value.set(state.waterShallow);
+    water.uniforms.reflection.value.set(state.waterReflection);
+    water.uniforms.night.value = state.night;
+    scene.background?.set(state.horizon);
+    scene.fog?.color.set(state.horizon);
+  }
+  setLighting(lightingForMinute(660));
   return {
     materials,
     horizon,
@@ -157,6 +184,7 @@ export function createCityAtmosphere(renderer, scene) {
     steel,
     lane,
     path,
+    setLighting,
     roadMaterial(kind) {
       return ["rail", "tram"].includes(kind)
         ? rail

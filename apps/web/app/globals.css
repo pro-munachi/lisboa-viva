@@ -730,6 +730,49 @@ small {
 .setup-form .primary {
   margin-top: 0;
 }
+.setup-form > label {
+  display: grid;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.setup-form > label select {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  font-size: 14px;
+}
+.interest-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.interest-options button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.accommodation-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+.swatches {
+  flex-wrap: wrap;
+}
+.swatches button {
+  width: 44px;
+  height: 44px;
+}
+@media (max-width: 540px) {
+  .interest-options,
+  .accommodation-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .destinations {
   display: grid;
   grid-template-columns: 1fr 1fr;

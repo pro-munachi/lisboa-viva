@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createCharacter, animateCharacter } from "./characters";
+import { createTransitScene } from "./city-transit-scenes";
 
 // Original illustrative Lisbon interiors. None reproduces a surveyed business
 // floor plan or imports artwork, furniture, textures or reference-game assets.
@@ -140,6 +141,8 @@ function label(text, color = "#335e63", cream = "#f1e5ca") {
  * All returned resources belong to group and can use the city scene's teardown.
  */
 export function createInteriorScene(requestedKind, { shirt = "#e6a253" } = {}) {
+  if (["airport", "station", "bus-stop"].includes(requestedKind))
+    return createTransitScene(requestedKind, { shirt });
   const kind =
     requestedKind === "restaurant"
       ? "cafe"
