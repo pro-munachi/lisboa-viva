@@ -1,10 +1,16 @@
 import { GEO_BOUNDS, containsGeo, type GeographicHotspot } from "./geography";
 import type { PlaceId } from "./content";
 import { parseGoogleMapsLink, type GoogleHotspot } from "./google-maps";
+import { venueMapsUrl, type MappedVenue, type VenueCategory } from "./venues";
 export type WorldHotspot = GoogleHotspot & {
   area?: string;
   sourceUrl?: string;
   custom?: boolean;
+  category?: VenueCategory;
+  description?: string;
+  address?: string;
+  mapVenue?: boolean;
+  mapLocation?: boolean;
 };
 export type WorldFocus = {
   lat: number;
@@ -81,5 +87,21 @@ export function fromGeographic(h: GeographicHotspot): WorldHotspot {
     area: h.area,
     sourceUrl: h.culturalSource,
     mapsUrl: h.mapsUrl,
+  };
+}
+
+export function fromVenue(venue: MappedVenue): WorldHotspot {
+  return {
+    id: venue.id,
+    name: venue.name,
+    lng: venue.point[0],
+    lat: venue.point[1],
+    category: venue.category,
+    mapVenue: true,
+    area: venue.city || "Lisbon region",
+    address: venue.street,
+    description: `A mapped ${venue.category === "gym" ? "gym or fitness studio" : venue.category} in the Lisbon region. Venue details are from OpenStreetMap; opening status and services have not been verified.`,
+    sourceUrl: venue.sourceUrl,
+    mapsUrl: venueMapsUrl(venue),
   };
 }

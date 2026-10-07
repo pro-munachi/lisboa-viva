@@ -11,6 +11,8 @@ import {
   RotateCcw,
   RotateCw,
   Globe2,
+  Users,
+  X,
 } from "lucide-react";
 import GoogleWorld from "./GoogleWorld";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
@@ -20,12 +22,14 @@ type CityController = {
   setMarkers: (h: WorldHotspot[]) => void;
   overview: () => void;
   characters: () => void;
+  people: () => void;
   setMode: (mode: string) => void;
   setMotion: (value: boolean) => void;
   zoom: (multiplier: number) => void;
   rotate: (angle: number) => void;
   dispose: () => void;
 };
+type LocalPerson = { name: string; label: string };
 export default function World({
   focus,
   shirt,
@@ -47,15 +51,18 @@ export default function World({
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
   const [google, setGoogle] = useState(false);
-  const [gallery,setGallery]=useState(false);
+  const [gallery, setGallery] = useState(false);
+  const [person, setPerson] = useState<LocalPerson | null>(null);
   const [stats, setStats] = useState<{
     buildings: number;
     roads: number;
     terrain: boolean;
+    people?: number;
   } | null>(null);
   const ui = useRef({ gesture, motion });
   ui.current = { gesture, motion };
   useEffect(() => {
+    setPerson(null);
     if (google) return;
     let cancelled = false;
     import("../lib/city-scene.js")
@@ -64,9 +71,16 @@ export default function World({
         try {
           controller.current = createCity(host.current, {
             ...latest.current,
-            onHotspot: (h: WorldHotspot) => callback.current(h),
+            onHotspot: (h: WorldHotspot) => {
+              setPerson(null);
+              callback.current(h);
+            },
             onStatus: setStatus,
             onStats: setStats,
+            onPerson: (local: LocalPerson) => {
+              setGallery(false);
+              setPerson(local);
+            },
           });
           controller.current?.setMode(ui.current.gesture);
           controller.current?.setMotion(ui.current.motion);
@@ -84,7 +98,9 @@ export default function World({
     };
   }, [google, shirt]);
   useEffect(() => {
-    setGallery(false);controller.current?.setFocus(focus);
+    setGallery(false);
+    setPerson(null);
+    controller.current?.setFocus(focus);
   }, [focus]);
   useEffect(() => {
     controller.current?.setMarkers(hotspots);
@@ -139,7 +155,8 @@ export default function World({
               <span>Pan</span>
             </button>
             <button
-              disabled={gallery} aria-pressed={gesture === "walk"}
+              disabled={gallery}
+              aria-pressed={gesture === "walk"}
               onClick={() => {
                 setGesture("walk");
                 controller.current?.setMode("walk");
@@ -177,21 +194,44 @@ export default function World({
           </div>
           <button
             aria-label="Street level"
-            onClick={() => {setGallery(false);controller.current?.setFocus(focus, true);}}
+            onClick={() => {
+              setGallery(false);
+              setPerson(null);
+              controller.current?.setFocus(focus, true);
+            }}
           >
             <PersonStanding size={17} />
             <span>Street level</span>
           </button>
           <button
             aria-label="Characters"
-            onClick={() => {setGallery(true);controller.current?.characters();}}
+            onClick={() => {
+              setGallery(true);
+              setPerson(null);
+              controller.current?.characters();
+            }}
           >
             <PersonStanding size={17} />
             <span>Characters</span>
           </button>
           <button
+            aria-label="Show nearby NPCs"
+            onClick={() => {
+              setGallery(false);
+              setPerson(null);
+              controller.current?.people();
+            }}
+          >
+            <Users size={17} />
+            <span>Locals</span>
+          </button>
+          <button
             aria-label="Whole region"
-            onClick={() => {setGallery(false);controller.current?.overview();}}
+            onClick={() => {
+              setGallery(false);
+              setPerson(null);
+              controller.current?.overview();
+            }}
           >
             <Globe2 size={17} />
             <span>Whole region</span>
@@ -209,7 +249,33 @@ export default function World({
           </button>
         </div>
       )}
-      {gallery&&<div className="character-preview-label">CHARACTER PREVIEW · ORIGINAL ROAM MODELS</div>}
+      {gallery && (
+        <div className="character-preview-label">
+          CHARACTER PREVIEW · ORIGINAL ROAM MODELS
+        </div>
+      )}
+      {!google && !gallery && person && (
+        <aside className="local-card" aria-label="Simulated local conversation">
+          <div className="local-card-header">
+            <div>
+              <span className="local-card-kicker">Simulated local</span>
+              <strong>{person.name}</strong>
+            </div>
+            <button
+              className="local-card-close"
+              aria-label="Dismiss local conversation"
+              onClick={() => setPerson(null)}
+            >
+              <X size={17} />
+            </button>
+          </div>
+          <span className="local-card-label">{person.label}</span>
+          <p>
+            Olá! I’m out for a walk. Take your time and explore the streets
+            around you.
+          </p>
+        </aside>
+      )}
       <div className="map-credits">
         <a
           href="https://www.openstreetmap.org/copyright"
@@ -226,8 +292,17 @@ export default function World({
         {stats && (
           <span>{stats.buildings.toLocaleString()} footprints loaded</span>
         )}
+        {!google && stats?.people !== undefined && (
+          <span>{stats.people} simulated locals</span>
+        )}
         {isGoogleMapsConfigured && (
-          <button onClick={() => setGoogle((v) => !v)}>
+          <button
+            onClick={() => {
+              setPerson(null);
+              setGallery(false);
+              setGoogle((v) => !v);
+            }}
+          >
             {google ? "Open-data simulation" : "Google 3D imagery"}
           </button>
         )}

@@ -31,11 +31,19 @@ import {
 } from "lucide-react";
 import World from "../components/World";
 import Dialog from "../components/Dialog";
+import { searchMapLocations } from "../lib/map-locations";
+import { resolveGoogleMapsLink } from "../lib/map-link";
 import { GEOGRAPHIC_HOTSPOTS } from "../lib/geography";
+import {
+  VENUES,
+  VENUE_CATEGORY_LABELS,
+  type VenueCategory,
+} from "../lib/venues";
 import {
   focusFor,
   placeFocus,
   fromGeographic,
+  fromVenue,
   mapLinkPin,
   restorePins,
   PIN_KEY,
@@ -110,13 +118,70 @@ export default function Roam() {
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
   const [search, setSearch] = useState("");
+  const [venueFilter, setVenueFilter] = useState<
+    VenueCategory | "all" | "landmarks"
+  >("all");
+  const [locationEntry, setLocationEntry] = useState<"search" | "link">(
+    "search",
+  );
   const [pinUrl, setPinUrl] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState("");
   const [pinName, setPinName] = useState("");
   const [clean, setClean] = useState(false);
   const worldHotspots = useMemo(
-    () => [...GEOGRAPHIC_HOTSPOTS.map(fromGeographic), ...pins],
-    [pins],
+    () => [
+      ...GEOGRAPHIC_HOTSPOTS.map(fromGeographic),
+      ...VENUES.map(fromVenue),
+      ...pins,
+      ...(mapHotspot?.mapLocation ? [mapHotspot] : []),
+    ],
+    [pins, mapHotspot?.mapLocation ? mapHotspot.id : null],
   );
+  const matches = useMemo(() => {
+    const normalize = (s: string) =>
+      s
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    const words = normalize(search).trim().split(/\s+/).filter(Boolean);
+    const distance = (h: WorldHotspot) =>
+      Math.hypot((h.lng - mapFocus.lng) * 0.78, h.lat - mapFocus.lat);
+    const found = worldHotspots.filter(
+      (h) =>
+        (venueFilter === "all" ||
+          (venueFilter === "landmarks"
+            ? !h.mapVenue && !h.mapLocation
+            : h.category === venueFilter)) &&
+        words.every((word) =>
+          normalize(`${h.name} ${h.area || ""} ${h.address || ""}`).includes(
+            word,
+          ),
+        ),
+    );
+    if (venueFilter === "all") {
+      for (const h of searchMapLocations(search, 60, [
+        mapFocus.lng,
+        mapFocus.lat,
+      ])) {
+        if (!found.some((v) => v.id === h.id))
+          found.push({
+            ...h,
+            mapLocation: true,
+            area: areaPlace[h.name] ? h.name : h.area,
+          });
+      }
+    }
+    const exact = (h: WorldHotspot) =>
+      normalize(h.name) === normalize(search).trim()
+        ? 0
+        : normalize(h.name).includes(normalize(search).trim())
+          ? 1
+          : 2;
+    return found.sort(
+      (a, b) => exact(a) - exact(b) || distance(a) - distance(b),
+    );
+  }, [worldHotspots, venueFilter, search, mapFocus]);
   const [trip, setTrip] = useState<Trip | null>(null);
   const tripRef = useRef<Trip | null>(null);
   tripRef.current = trip;
@@ -145,24 +210,34 @@ export default function Roam() {
     setMapFocus({ ...h, range: 140 });
     setPanel("hotspot");
   }
-  function addPin() {
-    const pin = mapLinkPin(pinUrl, pinName);
-    if (!pin) {
-      notify(
-        "Paste a full Google Maps link with coordinates inside the Lisbon–Sintra region. Expand short links in Google Maps first.",
-      );
-      return;
-    }
-    const next = [pin, ...pins.filter((p) => p.id !== pin.id)].slice(0, 16);
-    setPins(next);
+  async function addPin() {
+    if (pinBusy) return;
+    setPinError("");
+    setPinBusy(true);
     try {
-      localStorage.setItem(PIN_KEY, JSON.stringify(next));
-    } catch {
-      notify("This pin is available now but could not be saved.");
+      const resolved = await resolveGoogleMapsLink(pinUrl);
+      const pin = mapLinkPin(resolved.mapsUrl!, pinName);
+      if (!pin)
+        throw new Error("Choose a location inside the Lisbon–Sintra map.");
+      const next = [pin, ...pins.filter((p) => p.id !== pin.id)].slice(0, 16);
+      setPins(next);
+      try {
+        localStorage.setItem(PIN_KEY, JSON.stringify(next));
+      } catch {
+        notify("This pin is available now but could not be saved.");
+      }
+      setPinUrl("");
+      setPinName("");
+      pickHotspot(pin);
+    } catch (error) {
+      setPinError(
+        error instanceof Error
+          ? error.message
+          : "The map link could not be opened. Try again.",
+      );
+    } finally {
+      setPinBusy(false);
     }
-    setPinUrl("");
-    setPinName("");
-    pickHotspot(pin);
   }
   function route(mode: Mode) {
     return trip && destination
@@ -636,69 +711,135 @@ export default function Roam() {
       {panel === "map-search" && (
         <Dialog title="Find your Lisbon." onClose={() => setPanel(null)} wide>
           <p className="lede">
-            Real landmarks in one connected region. Or bring your own map pin.
+            Landmarks, cafés, gyms and local spots across one connected Lisbon
+            region.
           </p>
-          <label className="map-input-label">
-            Search landmarks
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Sintra, Cais do Sodré, Benfica…"
-            />
-          </label>
-          <div className="hotspot-list">
-            {worldHotspots
-              .filter((h) =>
-                (h.name + " " + h.area)
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-              )
-              .map((h) => (
-                <button key={h.id} onClick={() => pickHotspot(h)}>
-                  <MapPin size={17} />
-                  <span>
-                    <strong>{h.name}</strong>
-                    <small>{h.custom ? "Your saved pin" : h.area}</small>
-                  </span>
-                  <ArrowUpRight size={15} />
-                </button>
-              ))}
-          </div>
-          <form
-            className="pin-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              addPin();
-            }}
+          <div
+            className="location-entry-tabs"
+            aria-label="Choose a location method"
           >
-            <h3>Add a Google Maps pin</h3>
-            <label className="map-input-label">
-              Full Maps link
-              <input
-                required
-                type="url"
-                value={pinUrl}
-                onChange={(e) => setPinUrl(e.target.value)}
-                placeholder="https://www.google.com/maps/place/…"
-              />
-            </label>
-            <label className="map-input-label">
-              Your label (optional)
-              <input
-                value={pinName}
-                onChange={(e) => setPinName(e.target.value)}
-                maxLength={60}
-                placeholder="My Lisbon stop"
-              />
-            </label>
-            <button className="primary" type="submit">
-              Add & explore <MapPin size={16} />
+            <button
+              aria-pressed={locationEntry === "search"}
+              onClick={() => setLocationEntry("search")}
+            >
+              <Search size={16} /> Type a location
             </button>
-            <p className="quiet">
-              Use an expanded link with coordinates. No Google API key needed. A
-              saved pin is your map location; venue details are not verified.
-            </p>
-          </form>
+            <button
+              aria-pressed={locationEntry === "link"}
+              onClick={() => setLocationEntry("link")}
+            >
+              <MapPin size={16} /> Google Maps link
+            </button>
+          </div>
+          {locationEntry === "search" && (
+            <>
+              <div className="venue-filters" aria-label="Place categories">
+                {(
+                  [
+                    "all",
+                    "landmarks",
+                    "cafe",
+                    "gym",
+                    "restaurant",
+                    "bar",
+                    "shop",
+                    "culture",
+                  ] as const
+                ).map((category) => (
+                  <button
+                    key={category}
+                    aria-pressed={venueFilter === category}
+                    onClick={() => setVenueFilter(category)}
+                  >
+                    {category === "all"
+                      ? "All places"
+                      : category === "landmarks"
+                        ? "Landmarks"
+                        : VENUE_CATEGORY_LABELS[category]}
+                  </button>
+                ))}
+              </div>
+              <label className="map-input-label">
+                Place, neighbourhood or street
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && matches[0])
+                      pickHotspot(matches[0]);
+                  }}
+                  placeholder="Café Janis, Benfica, Rua Nova do Carvalho…"
+                />
+              </label>
+              <div className="hotspot-list">
+                {matches.slice(0, 60).map((h) => (
+                  <button key={h.id} onClick={() => pickHotspot(h)}>
+                    <MapPin size={17} />
+                    <span>
+                      <strong>{h.name}</strong>
+                      <small>
+                        {h.custom
+                          ? "Your saved pin"
+                          : h.category
+                            ? `${VENUE_CATEGORY_LABELS[h.category]} · ${h.address || h.area}`
+                            : h.area}
+                      </small>
+                    </span>
+                    <ArrowUpRight size={15} />
+                  </button>
+                ))}
+              </div>
+              <p className="quiet">
+                {matches.length
+                  ? `${Math.min(60, matches.length)} of ${matches.length} places shown. Search a name or street to narrow the map.`
+                  : "No matching places. Try another name or category."}
+              </p>
+            </>
+          )}
+          {locationEntry === "link" && (
+            <form
+              className="pin-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                addPin();
+              }}
+            >
+              <h3>Add a Google Maps pin</h3>
+              <label className="map-input-label">
+                Google Maps link
+                <input
+                  required
+                  type="url"
+                  value={pinUrl}
+                  onChange={(e) => setPinUrl(e.target.value)}
+                  placeholder="https://www.google.com/maps/place/…"
+                />
+              </label>
+              <label className="map-input-label">
+                Your label (optional)
+                <input
+                  value={pinName}
+                  onChange={(e) => setPinName(e.target.value)}
+                  maxLength={60}
+                  placeholder="My Lisbon stop"
+                />
+              </label>
+              <button className="primary" type="submit" disabled={pinBusy}>
+                {pinBusy ? "Opening location…" : "Add & explore"}{" "}
+                <MapPin size={16} />
+              </button>
+              {pinError && (
+                <p className="pin-error" role="alert">
+                  {pinError}
+                </p>
+              )}
+              <p className="quiet">
+                Paste a shared Google Maps link to save a spot in Lisbon or
+                Sintra. If the link does not include a location, open it in Maps
+                and copy the full address.
+              </p>
+            </form>
+          )}
         </Dialog>
       )}
       {panel === "hotspot" && mapHotspot && (
@@ -711,7 +852,8 @@ export default function Roam() {
           <p className="lede">
             {mapHotspot.custom
               ? "A location you picked from a Maps link."
-              : GEOGRAPHIC_HOTSPOTS.find((h) => h.id === mapHotspot.id)
+              : mapHotspot.description ||
+                GEOGRAPHIC_HOTSPOTS.find((h) => h.id === mapHotspot.id)
                   ?.description}
           </p>
           <div className="hotspot-coordinates">
@@ -755,7 +897,10 @@ export default function Roam() {
             )}
             {mapHotspot.sourceUrl && (
               <a target="_blank" rel="noreferrer" href={mapHotspot.sourceUrl}>
-                Official cultural context <ArrowUpRight size={13} />
+                {mapHotspot.mapVenue || mapHotspot.mapLocation
+                  ? "View the map source"
+                  : "Official cultural context"}{" "}
+                <ArrowUpRight size={13} />
               </a>
             )}
           </div>
