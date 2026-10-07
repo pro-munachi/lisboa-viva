@@ -988,6 +988,7 @@ export function createCity(host, options) {
       mode = next;
       controls.mouseButtons.LEFT =
         next === "pan" ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+      controls.touches.ONE = next === "pan" ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     },
     setMotion(value) {
       motion = value;
