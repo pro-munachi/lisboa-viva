@@ -7,28 +7,18 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { AuthUser } from "./auth";
 import type { CharacterAppearance } from "./appearance";
-
-export type MultiplayerPeer = {
-  id: string;
-  handle: string;
-  userType: "tourist" | "local";
-  latitude: number;
-  longitude: number;
-  area: string;
-  distanceMetres: number;
-  lastSeenAt: string;
-  appearance: CharacterAppearance;
-};
-
-type PresenceLocation = {
-  latitude: number;
-  longitude: number;
-  area: string;
-};
+import {
+  createPresenceClient,
+  validPresenceLocation,
+  type MultiplayerPeer,
+  type PresenceLocation,
+} from "./presence-client";
+export type { MultiplayerPeer } from "./presence-client";
 
 type MultiplayerState = {
   peers: MultiplayerPeer[];
@@ -48,7 +38,7 @@ export function MultiplayerProvider({
   user: AuthUser;
   children: ReactNode;
 }) {
-  const [location, setLocationState] = useState<PresenceLocation>({
+  const location = useRef<PresenceLocation>({
     latitude: 38.7061,
     longitude: -9.1459,
     area: "Cais do Sodré",
@@ -56,71 +46,53 @@ export function MultiplayerProvider({
   const [peers, setPeers] = useState<MultiplayerPeer[]>([]);
   const [status, setStatus] =
     useState<MultiplayerState["status"]>("connecting");
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabledState] = useState(true);
+  const joined = useRef(true);
+  const client = useRef<ReturnType<typeof createPresenceClient> | null>(null);
 
   const setLocation = useCallback((next: PresenceLocation) => {
-    setLocationState((current) =>
-      current.latitude === next.latitude &&
-      current.longitude === next.longitude &&
-      current.area === next.area
-        ? current
-        : next,
-    );
+    if (!validPresenceLocation(next)) return;
+    location.current = next;
+    client.current?.setLocation(next);
+  }, []);
+  const setEnabled = useCallback((next: boolean) => {
+    joined.current = next;
+    setEnabledState(next);
+    client.current?.setEnabled(next);
   }, []);
 
   useEffect(() => {
-    let active = true;
-    if (!enabled) {
-      setStatus("hidden");
-      setPeers([]);
-      fetch("/api/multiplayer/presence", { method: "DELETE" }).catch(
-        () => null,
-      );
-      return () => {
-        active = false;
-      };
-    }
-
-    async function sync() {
-      try {
-        const presence = await fetch("/api/multiplayer/presence", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(location),
-        });
-        if (!presence.ok) throw new Error("presence");
-        const query = new URLSearchParams({
-          latitude: String(location.latitude),
-          longitude: String(location.longitude),
-          radius: "25000",
-        });
-        const response = await fetch(`/api/multiplayer/nearby?${query}`, {
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error("nearby");
-        const body = (await response.json()) as { players?: MultiplayerPeer[] };
-        if (active) {
-          setPeers(Array.isArray(body.players) ? body.players : []);
-          setStatus("online");
-        }
-      } catch {
-        if (active) setStatus("reconnecting");
-      }
-    }
-
-    setStatus("connecting");
-    void sync();
-    const interval = window.setInterval(sync, 10_000);
+    const session = createPresenceClient({
+      location: location.current,
+      enabled: joined.current,
+      onUpdate(next) {
+        setPeers(next.peers);
+        setStatus(next.status);
+      },
+    });
+    client.current = session;
+    setPeers([]);
+    setStatus(joined.current ? "connecting" : "hidden");
+    void session.sync();
+    const interval = window.setInterval(() => {
+      void session.sync();
+    }, 10_000);
+    const expiry = window.setInterval(() => session.expire(), 1000);
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void sync();
+      if (document.visibilityState === "visible") {
+        session.expire();
+        void session.sync();
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      active = false;
+      session.dispose();
+      if (client.current === session) client.current = null;
       window.clearInterval(interval);
+      window.clearInterval(expiry);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [enabled, location, user.id]);
+  }, [user.id]);
 
   const value = useMemo(
     () => ({

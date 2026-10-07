@@ -4,6 +4,7 @@ import { useId } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
+  Bus,
   Check,
   Coffee,
   DoorOpen,
@@ -13,7 +14,9 @@ import {
   Landmark,
   Pause,
   Play,
+  PlaneTakeoff,
   ShoppingBag,
+  TrainFront,
   Wine,
 } from "lucide-react";
 import {
@@ -22,6 +25,7 @@ import {
   type InteriorVisit,
 } from "../lib/interiors";
 import styles from "./InteriorPanel.module.css";
+import ClubMusic from "./ClubMusic";
 
 export type InteriorPanelProps = {
   visit: InteriorVisit;
@@ -41,6 +45,9 @@ const roomIcons = {
   shop: ShoppingBag,
   museum: Landmark,
   bar: Wine,
+  airport: PlaneTakeoff,
+  station: TrainFront,
+  "bus-stop": Bus,
 };
 
 export default function InteriorPanel({
@@ -62,6 +69,7 @@ export default function InteriorPanel({
     completed.includes(activity.id),
   ).length;
   const busy = activityState !== "idle";
+  const transit = ["airport", "station", "bus-stop"].includes(visit.kind);
   const done = !busy && completed.includes(selected.id);
   const RoomIcon = roomIcons[visit.kind];
   const status =
@@ -97,7 +105,7 @@ export default function InteriorPanel({
       <div className={styles.topline}>
         <span className={styles.badge}>
           <DoorOpen size={13} aria-hidden="true" />
-          Original ROAM interior
+          {transit ? "Original ROAM transit scene" : "Original ROAM interior"}
         </span>
         <button
           type="button"
@@ -114,19 +122,30 @@ export default function InteriorPanel({
         <span className={styles.kind}>
           <RoomIcon size={14} aria-hidden="true" />
           {INTERIOR_LABELS[visit.kind]}
-          <span aria-hidden="true">·</span>Explore freely
+          <span aria-hidden="true">·</span>
+          {transit ? "Plan your journey" : "Explore freely"}
         </span>
       </header>
 
       <div className={styles.zoneHeading}>
-        <span>Choose a corner</span>
+        <span>{transit ? "Choose a travel point" : "Choose a corner"}</span>
         <span
-          aria-label={`${explored} of ${activities.length} corners explored`}
+          aria-label={
+            transit
+              ? `${activities.length} travel points`
+              : `${explored} of ${activities.length} corners explored`
+          }
         >
-          {explored}/{activities.length} explored
+          {transit
+            ? `${activities.length} travel points`
+            : `${explored}/${activities.length} explored`}
         </span>
       </div>
-      <div className={styles.zones} role="group" aria-label="Room corners">
+      <div
+        className={styles.zones}
+        role="group"
+        aria-label={transit ? "Travel points" : "Room corners"}
+      >
         {activities.map((activity, index) => {
           const visited = completed.includes(activity.id);
           return (
@@ -193,11 +212,21 @@ export default function InteriorPanel({
         )}
       </div>
 
+      {visit.kind === "bar" && (
+        <div className={styles.activity}>
+          <ClubMusic key={visit.id} enabled={motion} compact />
+        </div>
+      )}
+
       <footer className={styles.footer}>
         <p>
           {visit.kind === "home"
             ? "Your ROAM home is an original imagined space."
-            : "This is an original imagined room. The venue’s actual layout and services may differ."}
+            : transit
+              ? "This is an original imagined transit scene. The real facility’s layout and services may differ."
+              : visit.kind === "bar"
+                ? "This room and its synthesized club mix are original ROAM creations. The venue’s actual layout and services may differ."
+                : "This is an original imagined room. The venue’s actual layout and services may differ."}
         </p>
         {sourceUrl && (
           <a

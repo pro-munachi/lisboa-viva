@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createInteriorScene } from "../lib/city-interiors.js";
+import {
+  createInteriorScene,
+  interiorLightingForMinute,
+} from "../lib/city-interiors.js";
 import { findRoomRoute } from "../lib/city-room-navigation.js";
 const { Box3 } = require("three");
 
@@ -38,7 +41,9 @@ test("all six original rooms have finite detailed geometry, clickable props and 
   for (const kind of kinds) {
     const room = createInteriorScene(kind, { shirt: "#c58951" });
     try {
-      const bounds = new Box3().setFromObject(room.group);
+      // The moving cone meshes need vertex bounds rather than the conservative
+      // transformed AABB, which can extend above the actual fixture.
+      const bounds = new Box3().setFromObject(room.group, true);
       assert.ok(bounds.min.x >= -9.2 && bounds.max.x <= 9.2);
       assert.ok(bounds.min.z >= -7.2 && bounds.max.z <= 7.2);
       assert.ok(bounds.max.y < 4);
@@ -82,6 +87,7 @@ test("all six original rooms have finite detailed geometry, clickable props and 
       assert.ok(room.residents.length >= 1 && room.residents.length <= 2);
       assert.equal(room.group.userData.room.approximate, true);
     } finally {
+      room.dispose();
       dispose(room.group);
     }
   }
@@ -122,6 +128,7 @@ test("all eighteen activity targets and transitions are reachable around actual 
         assert.ok(zone.seat.height > 0.4 && zone.seat.height < 1);
       }
     } finally {
+      room.dispose();
       dispose(room.group);
     }
   }
@@ -146,8 +153,63 @@ test("room updates animate residents and selected-zone poses while reduced motio
     assert.equal(ring.visible, false);
     const restaurant = createInteriorScene("restaurant");
     assert.equal(restaurant.group.userData.room.kind, "cafe");
+    restaurant.dispose();
     dispose(restaurant.group);
   } finally {
+    room.dispose();
     dispose(room.group);
   }
+});
+
+test("all nine rooms receive bounded warm night lamps while the city-time bar palette stays subdued and readable", () => {
+  for (const kind of [...kinds, "airport", "station", "bus-stop"]) {
+    const room = createInteriorScene(kind);
+    try {
+      const lamps: any[] = [];
+      room.group.traverse((node: any) => {
+        if (node.userData.interiorLamp) lamps.push(node);
+      });
+      assert.equal(lamps.length, 2);
+      const dayIntensity = lamps[0].intensity;
+      room.setNight(1);
+      assert.ok(lamps.every((lamp) => lamp.intensity > dayIntensity));
+      assert.ok(
+        lamps.every((lamp) => lamp.intensity <= 27 && !lamp.castShadow),
+      );
+      assert.ok(lamps.every((lamp) => lamp.color.r > lamp.color.b));
+      room.setNight(Infinity);
+      assert.equal(lamps[0].intensity, dayIntensity);
+      const day = interiorLightingForMinute(660, kind),
+        night = interiorLightingForMinute(60, kind);
+      assert.equal(day.night, 0);
+      assert.equal(night.night, 1);
+      assert.equal(night.minute, 60);
+      assert.ok(day.sunIntensity > night.sunIntensity);
+      assert.ok(night.hemisphereIntensity >= 0.7);
+      assert.ok(
+        [day.exposure, night.exposure, night.sunIntensity].every(
+          Number.isFinite,
+        ),
+      );
+      if (kind === "bar") {
+        assert.ok(
+          day.sunIntensity <
+            interiorLightingForMinute(660, "home").sunIntensity,
+        );
+        assert.ok(
+          room.group.children.some((node: any) => node.userData.clubLighting),
+        );
+      } else {
+        assert.ok(
+          !room.group.children.some((node: any) => node.userData.clubLighting),
+        );
+        assert.notEqual(day.hemisphereSky, night.hemisphereSky);
+      }
+    } finally {
+      room.dispose();
+      dispose(room.group);
+    }
+  }
+  assert.equal(interiorLightingForMinute(-1, "bar").minute, 1439);
+  assert.equal(interiorLightingForMinute(NaN).minute, 660);
 });

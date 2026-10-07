@@ -1,7 +1,16 @@
 import { GEOGRAPHIC_HOTSPOTS } from "./geography";
 import type { WorldHotspot } from "./world-state";
 
-export type InteriorKind = "home" | "cafe" | "gym" | "shop" | "museum" | "bar";
+export type InteriorKind =
+  | "home"
+  | "cafe"
+  | "gym"
+  | "shop"
+  | "museum"
+  | "bar"
+  | "airport"
+  | "station"
+  | "bus-stop";
 
 export type InteriorVisit = {
   id: string;
@@ -27,6 +36,9 @@ export const INTERIOR_LABELS: Record<InteriorKind, string> = {
   shop: "Shop scene",
   museum: "Gallery scene",
   bar: "Bar scene",
+  airport: "Airport scene",
+  station: "Train station scene",
+  "bus-stop": "Bus stop scene",
 };
 
 const authoredMuseums = new Set(
@@ -235,6 +247,94 @@ export const INTERIOR_ACTIVITIES: Record<
       description: "Find a seat in the lounge area and relax for a moment.",
       result: "You found a place to unwind.",
       durationMs: 4500,
+    },
+  ],
+  airport: [
+    {
+      id: "card",
+      label: "Travel-card machine",
+      actionLabel: "Get a travel card",
+      description:
+        "Visit the machine to choose a travel card for your ROAM trip.",
+      result: "You reached the travel-card machine and looked at its options.",
+      durationMs: 3000,
+    },
+    {
+      id: "check-in",
+      label: "Flight desk",
+      actionLabel: "Book a flight",
+      description:
+        "Visit the flight desk to plan an arrival or departure for this ROAM trip.",
+      result: "You reached the flight desk and reviewed the next journey.",
+      durationMs: 3800,
+    },
+    {
+      id: "gate",
+      label: "Departure gate",
+      actionLabel: "Go to your gate",
+      description:
+        "Walk to the departure gate and its waiting area in this original terminal.",
+      result:
+        "You reached the departure gate and looked around the waiting area.",
+      durationMs: 3500,
+    },
+  ],
+  station: [
+    {
+      id: "card",
+      label: "Travel-card machine",
+      actionLabel: "Get a travel card",
+      description:
+        "Find the card machine beside the station entrance and review your ROAM options.",
+      result: "You reached the station card machine and checked its options.",
+      durationMs: 3000,
+    },
+    {
+      id: "tickets",
+      label: "Ticket machines",
+      actionLabel: "Book a train",
+      description:
+        "Visit the ticket machines to plan the next train journey in your ROAM trip.",
+      result: "You reached the ticket machines and reviewed your next journey.",
+      durationMs: 3800,
+    },
+    {
+      id: "platform",
+      label: "Platform",
+      actionLabel: "Go to the platform",
+      description:
+        "Walk beside the parked train to the waiting point on this imagined platform.",
+      result: "You reached the platform waiting point beside the parked train.",
+      durationMs: 3500,
+    },
+  ],
+  "bus-stop": [
+    {
+      id: "card",
+      label: "Travel-card point",
+      actionLabel: "Get a travel card",
+      description:
+        "Visit the card point beside this original ROAM bus stop to review your options.",
+      result: "You reached the card point and checked the travel options.",
+      durationMs: 3000,
+    },
+    {
+      id: "timetable",
+      label: "Route information",
+      actionLabel: "Read the timetable",
+      description:
+        "Stand by the route display and review the bus choices for your ROAM trip.",
+      result: "You reached the route display and looked at the travel choices.",
+      durationMs: 3500,
+    },
+    {
+      id: "board",
+      label: "Bus entrance",
+      actionLabel: "Board the bus",
+      description:
+        "Walk to the boarding point beside the parked bus for your next ROAM journey.",
+      result: "You reached the boarding point beside the original parked bus.",
+      durationMs: 3500,
     },
   ],
 };

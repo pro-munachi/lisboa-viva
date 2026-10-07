@@ -7,7 +7,8 @@ export type VenueCategory =
   | "restaurant"
   | "bar"
   | "shop"
-  | "culture";
+  | "culture"
+  | "beach";
 
 /** An actual named OpenStreetMap feature, not an invented simulated business. */
 export interface MappedVenue {
@@ -41,6 +42,7 @@ export const VENUE_CATEGORY_LABELS: Record<VenueCategory, string> = {
   bar: "Bars & nightlife",
   shop: "Shops",
   culture: "Culture",
+  beach: "Beaches",
 };
 
 export function venueMapsUrl(venue: MappedVenue): string {

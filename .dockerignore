@@ -4,3 +4,6 @@
 **/*.tsbuildinfo
 work
 outputs
+**/.env
+**/.env.*
+!**/.env.example

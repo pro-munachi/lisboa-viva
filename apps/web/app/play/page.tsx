@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
+  Plane,
+  Ticket,
   Armchair,
   BookOpen,
   Camera,
@@ -16,6 +18,7 @@ import {
   Home,
   Map,
   MapPin,
+  MessageCircle,
   Search,
   Eye,
   EyeOff,
@@ -31,9 +34,32 @@ import {
 } from "lucide-react";
 import World from "../../components/World";
 import AuthBoundary from "../../components/AuthBoundary";
+import type { AuthUser } from "../../lib/auth";
+import { accountStorageKeys } from "../../lib/account-storage";
+import { TRAVELLER_COLOURS } from "../../lib/traveller-colours";
 import MultiplayerDock from "../../components/MultiplayerDock";
 import { interiorForHotspot, type InteriorVisit } from "../../lib/interiors";
 import Dialog from "../../components/Dialog";
+import JourneyPanel from "../../components/JourneyPanel";
+import TripCalendar from "../../components/TripCalendar";
+import TripRecommendations from "../../components/TripRecommendations";
+import ChatPanel from "../../components/ChatPanel";
+import { chatPlaceFor } from "../../lib/chat-rooms";
+import {
+  TravelCompletionGate,
+  arrivalTravel,
+  commandTravel,
+  tripFocus,
+  type TravelSequence,
+} from "../../lib/travel-sequence";
+import {
+  JOURNEY_HUBS,
+  JOURNEY_PERSONAS,
+  type Arrival,
+  type HubId,
+  type JourneyAction,
+  type Persona,
+} from "../../lib/journey";
 import { searchMapLocations } from "../../lib/map-locations";
 import { resolveGoogleMapsLink } from "../../lib/map-link";
 import { GEOGRAPHIC_HOTSPOTS } from "../../lib/geography";
@@ -49,7 +75,6 @@ import {
   fromVenue,
   mapLinkPin,
   restorePins,
-  PIN_KEY,
   areaPlace,
   type WorldFocus,
   type WorldHotspot,
@@ -75,16 +100,36 @@ import {
   itinerary,
   memories,
   newTrip,
+  previewJourney,
   restore,
   serialize,
-  STORAGE_KEY,
   time,
   type Trip,
   type Setup,
   type Command,
+  type Interest,
+  type Accommodation,
 } from "../../lib/engine";
 import { useMultiplayer } from "../../lib/multiplayer";
-const colors = ["#ece7df", "#687f73", "#b47459", "#777791"];
+const colors = TRAVELLER_COLOURS.map((colour) => colour.value);
+const interests: { id: Interest; name: string }[] = [
+  { id: "food", name: "Food & cafés" },
+  { id: "culture", name: "Art & culture" },
+  { id: "nature", name: "Nature & views" },
+  { id: "nightlife", name: "Music & nightlife" },
+  { id: "wellness", name: "Wellness" },
+  { id: "community", name: "Local life" },
+];
+const accommodations: { id: Accommodation; name: string; detail: string }[] = [
+  { id: "hotel", name: "Hotel", detail: "A comfortable landing" },
+  { id: "hostel", name: "Hostel", detail: "A social starting point" },
+  { id: "apartment", name: "Apartment", detail: "Your own everyday rhythm" },
+  {
+    id: "coliving",
+    name: "Coliving",
+    detail: "A shared base for a longer stay",
+  },
+];
 const styles: Style[] = ["Budget explorer", "Foodie", "Culture seeker"];
 const initial: Setup = {
   days: 3,
@@ -92,12 +137,17 @@ const initial: Setup = {
   style: "Culture seeker",
   base: "Graça",
   shirt: colors[0],
+  persona: "tourist",
+  arrival: "airport",
+  interests: ["culture", "food"],
+  accommodation: "apartment",
 };
 type Panel =
   | "hotspot"
   | "map-search"
   | "setup"
   | "travel"
+  | "journey"
   | "journal"
   | "pocket"
   | "recap"
@@ -117,7 +167,24 @@ const iconFor = (id: PlaceId) =>
     benfica: Home,
     sintra: Camera,
   })[id];
-function RoamExperience() {
+const transitHotspots = () =>
+  Object.values(JOURNEY_HUBS).map((hub) => ({
+    id: `transit-${hub.id}`,
+    name: hub.name,
+    lat: hub.lat,
+    lng: hub.lng,
+    area: "Lisbon transport",
+    category: "transport" as const,
+    description: hub.description,
+    mapsUrl: hub.mapsUrl,
+    sourceUrl: hub.sourceUrl,
+  }));
+const transitHubFor = (hotspot: WorldHotspot | null) =>
+  Object.values(JOURNEY_HUBS).find(
+    (hub) => hotspot?.id === `transit-${hub.id}`,
+  );
+function RoamExperience({ user }: { user: AuthUser }) {
+  const storage = accountStorageKeys(user.id);
   const { peers, setLocation, appearance } = useMultiplayer();
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
@@ -134,11 +201,14 @@ function RoamExperience() {
   const [pinError, setPinError] = useState("");
   const [pinName, setPinName] = useState("");
   const [clean, setClean] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatTrigger = useRef<HTMLButtonElement>(null);
   const [interior, setInterior] = useState<InteriorVisit | null>(null);
   const beforeInterior = useRef(false);
-  const worldHotspots = useMemo(
+  const worldHotspots = useMemo<WorldHotspot[]>(
     () => [
       ...GEOGRAPHIC_HOTSPOTS.map(fromGeographic),
+      ...transitHotspots(),
       ...VENUES.map(fromVenue),
       ...pins,
       ...(mapHotspot?.mapLocation ? [mapHotspot] : []),
@@ -190,11 +260,20 @@ function RoamExperience() {
     );
   }, [worldHotspots, venueFilter, search, mapFocus]);
   const [trip, setTrip] = useState<Trip | null>(null);
+  const [travelSequence, setTravelSequence] = useState<TravelSequence | null>(
+    null,
+  );
+  const travelGate = useRef(new TravelCompletionGate());
   const tripRef = useRef<Trip | null>(null);
   tripRef.current = trip;
   const [loaded, setLoaded] = useState(false);
   const [archive, setArchive] = useState<Trip[]>([]);
   const [setup, setSetup] = useState<Setup>(initial);
+  const travellerAppearance = useMemo(
+    () => ({ ...appearance, topColor: trip?.setup.shirt || setup.shirt }),
+    [appearance, trip?.setup.shirt, setup.shirt],
+  );
+  const [calendarValid, setCalendarValid] = useState(true);
   const [panel, setPanel] = useState<Panel>(null);
   const [destination, setDestination] = useState<PlaceId | null>(null);
   const [mode, setMode] = useState<Mode>("walk");
@@ -205,14 +284,55 @@ function RoamExperience() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(PIN_KEY);
+      const raw = localStorage.getItem(storage.pins);
       if (raw) setPins(restorePins(raw));
     } catch {}
   }, []);
   useEffect(() => {
-    if (trip) setMapFocus(focusFor(trip.place, trip.setup.base));
-  }, [trip?.place, trip?.setup.base]);
+    if (!trip || travelSequence) return;
+    setMapFocus(tripFocus(trip));
+  }, [trip?.place, trip?.setup.base, trip?.journey.hub, travelSequence?.id]);
   useEffect(() => {
+    if (travelGate.current.pending && !travelGate.current.matches(trip))
+      cancelTravelPreview();
+  }, [trip?.id, trip?.revision]);
+  useEffect(() => () => travelGate.current.cancel(), [user.id]);
+  function cancelTravelPreview() {
+    travelGate.current.cancel();
+    setTravelSequence(null);
+  }
+  function startTravelPreview(
+    sequence: TravelSequence,
+    next: Trip,
+    afterPanel: "journey" | "recap" | null,
+    outcome: string,
+  ) {
+    travelGate.current.start({
+      sequence,
+      tripId: next.id,
+      revision: next.revision,
+      panel: afterPanel,
+      outcome,
+    });
+    setTravelSequence(sequence);
+    setPanel(null);
+    setChatOpen(false);
+    setMapHotspot(null);
+    setNotice("");
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    leaveRoom();
+    setClean(false);
+  }
+  function completeTravelPreview(id: string) {
+    const completion = travelGate.current.take(id, tripRef.current);
+    if (!completion) return;
+    setTravelSequence(null);
+    setMapFocus(completion.sequence.to);
+    setPanel(completion.panel);
+    notify(completion.outcome);
+  }
+  useEffect(() => {
+    if (travelSequence) return;
     setLocation({
       latitude: mapFocus.lat,
       longitude: mapFocus.lng,
@@ -223,9 +343,11 @@ function RoamExperience() {
     mapFocus.lng,
     mapFocus.name,
     mapFocus.presenceArea,
+    travelSequence?.id,
     setLocation,
   ]);
   function pickHotspot(h: WorldHotspot) {
+    if (travelGate.current.pending) return;
     setInterior(null);
     setMapHotspot(h);
     setMapFocus({ ...h, range: 140 });
@@ -246,8 +368,28 @@ function RoamExperience() {
     enterRoom({
       id: "home",
       kind: "home",
-      name: `Your Lisbon home · ${trip?.setup.base || setup.base}`,
+      name: `Your ${trip?.setup.accommodation || setup.accommodation || "apartment"} · ${trip?.setup.base || setup.base}`,
     });
+  }
+  function enterTransitHub(id: HubId) {
+    const hub = JOURNEY_HUBS[id];
+    setMapFocus({ ...hub, range: 140 });
+    enterRoom({
+      id: `transit-${id}`,
+      kind: hub.kind,
+      name: hub.name,
+      sourceUrl: hub.sourceUrl,
+    });
+  }
+  function visitTransitHub(id: HubId) {
+    const currentTrip = tripRef.current;
+    if (
+      currentTrip &&
+      currentTrip.journey.hub !== id &&
+      !command({ kind: "journey", action: "visit-hub", hub: id })
+    )
+      return;
+    enterTransitHub(id);
   }
   async function addPin() {
     if (pinBusy) return;
@@ -261,7 +403,7 @@ function RoamExperience() {
       const next = [pin, ...pins.filter((p) => p.id !== pin.id)].slice(0, 16);
       setPins(next);
       try {
-        localStorage.setItem(PIN_KEY, JSON.stringify(next));
+        localStorage.setItem(storage.pins, JSON.stringify(next));
       } catch {
         notify("This pin is available now but could not be saved.");
       }
@@ -284,6 +426,12 @@ function RoamExperience() {
       : transport[mode];
   }
   function routeReason(mode: Mode) {
+    if (trip?.journey.phase === "arriving")
+      return "Continue into the city from your arrival hub first.";
+    if (trip?.journey.ticket)
+      return "Board your ready ticket before continuing.";
+    if (trip && destination === trip.place)
+      return "You are already in this chapter.";
     const r = route(mode);
     return !r
       ? "This mode does not serve this trip"
@@ -298,7 +446,7 @@ function RoamExperience() {
   }
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(storage.trips);
       if (raw) {
         const runs = JSON.parse(raw);
         if (!Array.isArray(runs) || runs.length > 5) throw new Error();
@@ -324,7 +472,7 @@ function RoamExperience() {
     if (!loaded || !trip) return;
     try {
       localStorage.setItem(
-        STORAGE_KEY,
+        storage.trips,
         JSON.stringify([trip, ...archive].slice(0, 5).map(serialize)),
       );
       setStorageError(false);
@@ -334,7 +482,8 @@ function RoamExperience() {
   }, [trip, archive, loaded]);
   useEffect(() => {
     const listener = (e: StorageEvent) => {
-      if (e.key !== STORAGE_KEY) return;
+      if (e.key !== storage.trips) return;
+      cancelTravelPreview();
       try {
         const runs = e.newValue ? JSON.parse(e.newValue) : [];
         const current = runs[0] ? restore(runs[0]) : null;
@@ -361,37 +510,76 @@ function RoamExperience() {
     action:
       | Omit<Extract<Command, { kind: "travel" }>, "key" | "revision">
       | Omit<Extract<Command, { kind: "choice" }>, "key" | "revision">
+      | ({ kind: "journey" } & JourneyAction)
       | { kind: "rest" | "night" | "finish" },
   ) {
     const current = tripRef.current;
-    if (!current) return;
-    const result = apply(current, {
+    if (!current) return false;
+    if (travelGate.current.pending) return false;
+    const appliedCommand = {
       ...action,
       key: crypto.randomUUID(),
-      revision: trip?.revision ?? -1,
-    } as Command);
+      revision: current.revision,
+    } as Command;
+    const result = apply(current, appliedCommand);
     if (result.error) {
       notify(result.error);
-      return;
+      return false;
     }
     tripRef.current = result.trip;
     setTrip(result.trip);
     setPending(null);
     setSelected("");
-    notify(result.trip.history.at(-1)?.outcome || "Your trip is updated.");
-    if (result.trip.complete) setPanel("recap");
+    const outcome =
+      result.trip.history.at(-1)?.outcome || "Your trip is updated.";
+    const sequence = commandTravel(current, result.trip, appliedCommand);
+    if (sequence) {
+      startTravelPreview(
+        sequence,
+        result.trip,
+        result.trip.complete ? "recap" : null,
+        outcome,
+      );
+    } else {
+      notify(outcome);
+    }
+    if (!sequence && action.kind === "journey" && action.action === "board") {
+      leaveRoom();
+      setClean(false);
+      setPanel(null);
+    }
+    if (!sequence && result.trip.complete) setPanel("recap");
+    return true;
   }
   function begin() {
+    if (travelGate.current.pending) return;
     try {
-      const next = newTrip(setup, crypto.randomUUID());
+      const next = newTrip(
+        { ...setup, startDate: calendarStart, endDate: calendarEnd },
+        crypto.randomUUID(),
+      );
+      leaveRoom();
+      setClean(false);
       if (trip) setArchive((a) => [trip, ...a].slice(0, 4));
       tripRef.current = next;
       setTrip(next);
-      setPanel(null);
       setSelected("");
-      notify("Welcome to your little Lisbon. Make it yours.");
+      const sequence = arrivalTravel(next);
+      if (sequence) {
+        startTravelPreview(
+          sequence,
+          next,
+          "journey",
+          "Welcome to Lisbon. Your arrival hub is ready to explore.",
+        );
+      } else {
+        setPanel(null);
+        notify("Welcome to your little Lisbon. Make it yours.");
+      }
     } catch {
-      notify("Choose a budget between €30 and €5,000.");
+      notify(
+        "Check your calendar range and choose a budget between €30 and €5,000.",
+      );
     }
   }
   function download() {
@@ -419,6 +607,10 @@ function RoamExperience() {
         : "Feeling good"
     : "Your next chapter";
   const openTravel = () => {
+    if (trip?.journey.phase === "arriving" || trip?.journey.ticket) {
+      setPanel("journey");
+      return;
+    }
     setDestination(null);
     setPanel("travel");
   };
@@ -426,348 +618,457 @@ function RoamExperience() {
   const visited = trip
     ? new Set(memories(trip).map((h) => h.place))
     : new Set<PlaceId>();
+  const calendarStart =
+    setup.startDate || new Date().toISOString().slice(0, 10);
+  const calendarEnd =
+    setup.endDate ||
+    new Date(Date.parse(`${calendarStart}T00:00:00Z`) + setup.days * 86400000)
+      .toISOString()
+      .slice(0, 10);
+  const chatPlace = chatPlaceFor(
+    interior
+      ? interior.id
+      : mapHotspot?.id ||
+          (trip?.journey.hub ? `transit-${trip.journey.hub}` : undefined),
+  );
   return (
     <main className="app-shell">
-      <div className={clean ? "game clean-world" : "game"}>
+      <div className={clean || travelSequence ? "game clean-world" : "game"}>
         <World
           focus={mapFocus}
           shirt={trip?.setup.shirt || setup.shirt}
-          appearance={appearance}
+          appearance={travellerAppearance}
           hotspots={worldHotspots}
           onHotspot={pickHotspot}
           interior={interior}
+          minute={trip?.minute}
+          travelSequence={travelSequence}
+          onTravelComplete={completeTravelPreview}
           onExitInterior={leaveRoom}
+          onTransitAction={() => {
+            if (trip) setPanel("journey");
+            else setPanel("setup");
+          }}
           peers={peers}
         />
-        <MultiplayerDock
-          onSelect={(peer) =>
-            setMapFocus({
-              lat: peer.latitude,
-              lng: peer.longitude,
-              name: `@${peer.handle} · ${peer.area}`,
-              range: 18,
-              peerId: peer.id,
-              presenceArea: peer.area,
-            })
-          }
-        />
-        <div className="map-tools">
-          <button onClick={() => setPanel("map-search")}>
-            <Search size={16} /> Find a hotspot
-          </button>
-          <button onClick={enterHome}>
-            <Home size={16} /> Your home
-          </button>
-          {!interior && (
-            <button onClick={() => setClean((v) => !v)}>
-              {clean ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
-              {clean ? "Show trip" : "Clean screen"}
+        {!travelSequence && !clean && (
+          <MultiplayerDock
+            onSelect={(peer) => {
+              setInterior(null);
+              setMapHotspot(null);
+              setMapFocus({
+                lat: peer.latitude,
+                lng: peer.longitude,
+                name: `@${peer.handle} · ${peer.area}`,
+                range: 18,
+                peerId: peer.id,
+                presenceArea: peer.area,
+              });
+            }}
+          />
+        )}
+        {!travelSequence && (
+          <div className="map-tools">
+            <button onClick={() => setPanel(trip ? "journey" : "setup")}>
+              <Ticket size={16} /> {trip ? "Your journey" : "Arrive in Lisbon"}
             </button>
-          )}
-          <span>
-            {interior
-              ? `INSIDE ${interior.name.toUpperCase()}`
-              : `VIEWING ${mapFocus.name.toUpperCase()}`}
-          </span>
-        </div>
-        <header className="topbar">
-          <a className="brand" href="/" aria-label="ROAM home">
-            ROAM<span>LISBON. YOUR WAY.</span>
-          </a>
-          {trip ? (
-            <div className="clock">
-              <Sun size={18} />
-              <span>
-                DAY {String(trip.day).padStart(2, "0")} <b>·</b>{" "}
-                {time(trip.minute)}
-              </span>
-              <span className="mood">
-                {trip.complete ? "Your chapter, complete" : mood}
-              </span>
-            </div>
-          ) : (
-            <div className="clock intro-clock">
-              <Sun size={18} />
-              <span>A CITY TO TRY BEFORE YOU GO</span>
-            </div>
-          )}
-          <button className="wallet" onClick={() => setPanel("pocket")}>
-            <Wallet size={18} />
-            <span>
-              {trip ? euro(trip.setup.budget - trip.spent) : "Meet ROAM"}
-            </span>
-          </button>
-        </header>
-        {!trip ? (
-          <>
-            <div className="arrival-note">
-              <span className="eyebrow">A CONNECTED LISBON WORLD</span>
-              <span>
-                <MapPin size={14} /> Cais do Sodré, Lisbon
-              </span>
-            </div>
-            <section className="welcome card">
-              <span className="eyebrow">A SMALL WORLD. A REAL FEELING.</span>
-              <h1>
-                A little Lisbon.
-                <br />A lot of possibility.
-              </h1>
-              <p>
-                Try the city before you go. Find your favourite corners, make a
-                few memories, and discover a trip that feels like you.
-              </p>
-              <button
-                className="primary"
-                disabled={!loaded}
-                onClick={() => setPanel("setup")}
-              >
-                Start your Lisbon chapter <ArrowRight size={18} />
+            <button onClick={() => setPanel("map-search")}>
+              <Search size={16} /> Find a hotspot
+            </button>
+            <button onClick={enterHome}>
+              <Home size={16} /> Your home
+            </button>
+            <button
+              ref={chatTrigger}
+              aria-expanded={chatOpen}
+              aria-controls={chatOpen ? "roam-chat" : undefined}
+              onClick={() => {
+                setPanel(null);
+                setChatOpen((open) => !open);
+              }}
+            >
+              <MessageCircle size={16} /> City chat
+            </button>
+            {!interior && (
+              <button onClick={() => setClean((v) => !v)}>
+                {clean ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
+                {clean ? "Show trip" : "Clean screen"}
               </button>
-              <div className="welcome-details">
+            )}
+            <span>
+              {interior
+                ? `INSIDE ${interior.name.toUpperCase()}`
+                : `VIEWING ${mapFocus.name.toUpperCase()}`}
+            </span>
+          </div>
+        )}
+        {!travelSequence && (
+          <header className="topbar">
+            <a className="brand" href="/" aria-label="ROAM home">
+              ROAM<span>EVERY CITY. YOUR STORY.</span>
+            </a>
+            {trip ? (
+              <div className="clock">
+                <Sun size={18} />
                 <span>
-                  <Compass size={15} /> 3 or 5 days
+                  DAY {String(trip.day).padStart(2, "0")} <b>·</b>{" "}
+                  {time(trip.minute)}
                 </span>
-                <span>
-                  <Heart size={15} /> Your pace
+                <span className="mood">
+                  {travelSequence
+                    ? "In transit"
+                    : trip.complete
+                      ? "Your chapter, complete"
+                      : mood}
                 </span>
               </div>
-              <small>
-                Free to play · No account needed · Saved on this browser
-              </small>
-            </section>
-            <div className="scene-caption">
-              <span>STREETS. HILLS. EVERYDAY LIFE.</span>
-              <p>Drag, rotate, and find your own Lisbon.</p>
-            </div>
-          </>
-        ) : (
-          <>
-            <aside className="missions card">
-              <div className="mission-symbol">
-                <Compass size={20} />
+            ) : (
+              <div className="clock intro-clock">
+                <Sun size={18} />
+                <span>A CITY TO TRY BEFORE YOU GO</span>
               </div>
-              <div>
-                <strong>
-                  {trip.complete
-                    ? "A chapter worth keeping"
-                    : "Find your own Lisbon"}
-                </strong>
+            )}
+            <button
+              className="wallet"
+              disabled={Boolean(travelSequence)}
+              onClick={() => setPanel("pocket")}
+            >
+              <Wallet size={18} />
+              <span>
+                {trip ? euro(trip.setup.budget - trip.spent) : "Meet ROAM"}
+              </span>
+            </button>
+          </header>
+        )}
+        {!travelSequence &&
+          (!trip ? (
+            <>
+              <div className="arrival-note">
+                <span className="eyebrow">A CONNECTED LISBON WORLD</span>
+                <span>
+                  <MapPin size={14} /> Cais do Sodré, Lisbon
+                </span>
+              </div>
+              <section className="welcome card">
+                <span className="eyebrow">A SMALL WORLD. A REAL FEELING.</span>
+                <h1>
+                  A little Lisbon.
+                  <br />A lot of possibility.
+                </h1>
                 <p>
-                  {trip.complete
-                    ? `${memories(trip).length} memories in your journal`
-                    : "Explore, pause, and collect a few memories."}
+                  Try the city before you go. Find your favourite corners, make
+                  a few memories, and discover a trip that feels like you.
                 </p>
                 <button
-                  className="text-button"
-                  onClick={() => setPanel("journal")}
+                  className="primary"
+                  disabled={!loaded}
+                  onClick={() => setPanel("setup")}
                 >
-                  Your district passport <ChevronRight size={13} />
+                  Start your Lisbon chapter <ArrowRight size={18} />
                 </button>
-              </div>
-            </aside>
-            <div className="place-pill">
-              <span className="live-dot" />
-              <PlaceIcon size={14} />
-              <span>
-                {places[place].name} <b>·</b> {placeDistrict}
-              </span>
-            </div>
-            <nav className="nav card" aria-label="Game navigation">
-              <button
-                onClick={() => {
-                  if (place === "home") setPanel(null);
-                  else {
-                    setDestination("home");
-                    setPanel("travel");
-                  }
-                }}
-                aria-pressed={place === "home" && !panel}
-              >
-                <Home />
-                <span>Home</span>
-              </button>
-              <button onClick={openTravel} aria-pressed={panel === "travel"}>
-                <Map />
-                <span>Travel</span>
-              </button>
-              <button
-                onClick={() => setPanel("journal")}
-                aria-pressed={panel === "journal"}
-              >
-                <BookOpen />
-                <span>Journal</span>
-              </button>
-              <button
-                onClick={() => setPanel("pocket")}
-                aria-pressed={panel === "pocket"}
-              >
-                <Settings />
-                <span>Pocket</span>
-              </button>
-            </nav>
-            <section
-              className="interaction card"
-              aria-label="Available experiences"
-            >
-              {trip.complete ? (
-                <>
-                  <span className="eyebrow">UNTIL NEXT TIME, LISBON</span>
-                  <h2>Your little chapter.</h2>
-                  <p>
-                    You made time for {memories(trip).length} memories. Keep
-                    them, or try a different kind of trip.
-                  </p>
-                  <button className="primary" onClick={() => setPanel("recap")}>
-                    Open your recap <BookOpen size={16} />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div className="object-heading">
-                    <span className="object-icon">
-                      <PlaceIcon size={19} />
-                    </span>
-                    <div>
-                      <span className="eyebrow">
-                        {stageAt(trip.minute).toUpperCase()} IN{" "}
-                        {placeDistrict.toUpperCase()}
-                      </span>
-                      <h2>{current?.title || "A little breathing room"}</h2>
-                    </div>
-                  </div>
-                  <p>
-                    {current?.description ||
-                      "You have explored the available experiences here. Try another corner, or simply take a pause."}
-                  </p>
-                  <div className="choices">
-                    {current?.choices.map((c, i) => (
-                      <button
-                        key={c.id}
-                        className={i === 0 ? "choice featured" : "choice"}
-                        disabled={!!blocked(trip, c)}
-                        onClick={() => setPending(c)}
-                      >
-                        <strong>
-                          {c.title}
-                          <ArrowUpRight size={15} />
-                        </strong>
-                        <span>
-                          {euro(c.cost)} · {c.minutes} min ·{" "}
-                          {c.energy >= 0 ? "+" : ""}
-                          {c.energy} energy
-                        </span>
-                        {blocked(trip, c) && <small>{blocked(trip, c)}</small>}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="scenario-tabs" aria-label="More experiences">
-                    {available.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => setSelected(s.id)}
-                        aria-pressed={current?.id === s.id}
-                      >
-                        {s.title}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="pause-row">
-                    <button
-                      disabled={
-                        !!blocked(trip, { cost: 0, minutes: 30, energy: 20 })
-                      }
-                      onClick={() => command({ kind: "rest" })}
-                    >
-                      <Armchair size={15} /> Take a pause{" "}
-                      <span>Free · +20 energy</span>
-                    </button>
-                    <button onClick={() => command({ kind: "night" })}>
-                      <Moon size={15} />
-                      {trip.day === trip.setup.days
-                        ? "Finish the day"
-                        : "Next morning"}
-                    </button>
-                  </div>
-                  {trip.minute > 1290 && (
-                    <p className="quiet">
-                      Your evening is winding down. Rest overnight to continue.
-                    </p>
-                  )}
-                </>
-              )}
-            </section>
-            <section className="needs card" aria-label="Your traveller">
-              <div className="traveller">
-                <span className="face" style={{ background: trip.setup.shirt }}>
-                  ✦
-                </span>
-                <div>
-                  <strong>You, in Lisbon</strong>
-                  <small>
-                    {trip.setup.style} · {trip.setup.days} days
-                  </small>
+                <div className="welcome-details">
+                  <span>
+                    <Compass size={15} /> Your dates, your pace
+                  </span>
+                  <span>
+                    <Heart size={15} /> Your pace
+                  </span>
                 </div>
+                <small>
+                  Free to play · Account protected · Saved on this browser
+                </small>
+              </section>
+              <div className="scene-caption">
+                <span>STREETS. HILLS. EVERYDAY LIFE.</span>
+                <p>Drag, rotate, and find your own Lisbon.</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <aside className="missions card">
+                <div className="mission-symbol">
+                  <Compass size={20} />
+                </div>
+                <div>
+                  <strong>
+                    {trip.complete
+                      ? "A chapter worth keeping"
+                      : "Find your own Lisbon"}
+                  </strong>
+                  <p>
+                    {trip.complete
+                      ? `${memories(trip).length} memories in your journal`
+                      : trip.journey.phase === "arriving"
+                        ? "You have landed. Your first city journey starts here."
+                        : JOURNEY_PERSONAS[trip.setup.persona || "tourist"]
+                            .missions[0].detail}
+                  </p>
+                  <button
+                    className="text-button"
+                    onClick={() => setPanel("journal")}
+                  >
+                    Your district passport <ChevronRight size={13} />
+                  </button>
+                </div>
+              </aside>
+              <div className="place-pill">
+                <span className="live-dot" />
+                <PlaceIcon size={14} />
+                <span>
+                  {trip.journey.hub
+                    ? JOURNEY_HUBS[trip.journey.hub].name
+                    : places[place].name}{" "}
+                  <b>·</b> {trip.journey.hub ? "Transport hub" : placeDistrict}
+                </span>
+              </div>
+              <nav className="nav card" aria-label="Game navigation">
                 <button
-                  className="icon-button"
-                  onClick={() => setPanel("pocket")}
-                  aria-label="Trip settings"
+                  onClick={() => {
+                    if (place === "home") setPanel(null);
+                    else {
+                      setDestination("home");
+                      setPanel("travel");
+                    }
+                  }}
+                  aria-pressed={place === "home" && !panel}
                 >
-                  <ChevronRight size={16} />
+                  <Home />
+                  <span>Home</span>
                 </button>
-              </div>
-              <div className="meters">
-                {[
-                  ["Energy", trip.energy, Zap],
-                  ["Inspiration", trip.inspiration, Sparkles],
-                  ["Connection", trip.connection, Heart],
-                ].map(([label, value, Icon]) => {
-                  const MeterIcon = Icon as typeof Zap;
-                  return (
-                    <div key={label as string} className="meter">
+                <button onClick={openTravel} aria-pressed={panel === "travel"}>
+                  <Map />
+                  <span>Travel</span>
+                </button>
+                <button
+                  onClick={() => setPanel("journal")}
+                  aria-pressed={panel === "journal"}
+                >
+                  <BookOpen />
+                  <span>Journal</span>
+                </button>
+                <button
+                  onClick={() => setPanel("pocket")}
+                  aria-pressed={panel === "pocket"}
+                >
+                  <Settings />
+                  <span>Pocket</span>
+                </button>
+              </nav>
+              <section
+                className="interaction card"
+                aria-label="Available experiences"
+              >
+                {(trip.journey.phase === "arriving" || trip.journey.ticket) &&
+                !trip.complete ? (
+                  <>
+                    <span className="eyebrow">YOUR ARRIVAL CHAPTER</span>
+                    <h2>
+                      {trip.journey.ticket
+                        ? "Your ticket is ready."
+                        : "Welcome to Lisbon."}
+                    </h2>
+                    <p>
+                      {trip.journey.ticket
+                        ? "Your fare is already covered. Board from your travel hub to continue your journey."
+                        : "Get your transport card, choose your first journey, and find your way into the city."}
+                    </p>
+                    <button
+                      className="primary"
+                      onClick={() => setPanel("journey")}
+                    >
+                      {trip.journey.ticket
+                        ? "Return to boarding"
+                        : "Continue your arrival"}{" "}
+                      <Plane size={17} />
+                    </button>
+                  </>
+                ) : trip.complete ? (
+                  <>
+                    <span className="eyebrow">UNTIL NEXT TIME, LISBON</span>
+                    <h2>Your little chapter.</h2>
+                    <p>
+                      You made time for {memories(trip).length} memories. Keep
+                      them, or try a different kind of trip.
+                    </p>
+                    <button
+                      className="primary"
+                      onClick={() => setPanel("recap")}
+                    >
+                      Open your recap <BookOpen size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="object-heading">
+                      <span className="object-icon">
+                        <PlaceIcon size={19} />
+                      </span>
                       <div>
-                        <span>
-                          <MeterIcon size={12} />
-                          {label as string}
+                        <span className="eyebrow">
+                          {stageAt(trip.minute).toUpperCase()} IN{" "}
+                          {placeDistrict.toUpperCase()}
                         </span>
-                        <span>{value as number}%</span>
+                        <h2>{current?.title || "A little breathing room"}</h2>
                       </div>
-                      <meter
-                        min={0}
-                        max={100}
-                        value={value as number}
-                        aria-label={label as string}
-                      />
                     </div>
-                  );
-                })}
+                    <p>
+                      {current?.description ||
+                        "You have explored the available experiences here. Try another corner, or simply take a pause."}
+                    </p>
+                    <div className="choices">
+                      {current?.choices.map((c, i) => (
+                        <button
+                          key={c.id}
+                          className={i === 0 ? "choice featured" : "choice"}
+                          disabled={!!blocked(trip, c)}
+                          onClick={() => setPending(c)}
+                        >
+                          <strong>
+                            {c.title}
+                            <ArrowUpRight size={15} />
+                          </strong>
+                          <span>
+                            {euro(c.cost)} · {c.minutes} min ·{" "}
+                            {c.energy >= 0 ? "+" : ""}
+                            {c.energy} energy
+                          </span>
+                          {blocked(trip, c) && (
+                            <small>{blocked(trip, c)}</small>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    <div
+                      className="scenario-tabs"
+                      aria-label="More experiences"
+                    >
+                      {available.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => setSelected(s.id)}
+                          aria-pressed={current?.id === s.id}
+                        >
+                          {s.title}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="pause-row">
+                      <button
+                        disabled={
+                          !!blocked(trip, { cost: 0, minutes: 30, energy: 20 })
+                        }
+                        onClick={() => command({ kind: "rest" })}
+                      >
+                        <Armchair size={15} /> Take a pause{" "}
+                        <span>Free · +20 energy</span>
+                      </button>
+                      <button onClick={() => command({ kind: "night" })}>
+                        <Moon size={15} />
+                        {trip.day === trip.setup.days
+                          ? "Finish the day"
+                          : "Next morning"}
+                      </button>
+                    </div>
+                    {trip.minute > 1290 && (
+                      <p className="quiet">
+                        Your evening is winding down. Rest overnight to
+                        continue.
+                      </p>
+                    )}
+                  </>
+                )}
+              </section>
+              <section className="needs card" aria-label="Your traveller">
+                <div className="traveller">
+                  <span
+                    className="face"
+                    style={{ background: trip.setup.shirt }}
+                  >
+                    ✦
+                  </span>
+                  <div>
+                    <strong>
+                      {JOURNEY_PERSONAS[trip.setup.persona || "tourist"].name},
+                      in Lisbon
+                    </strong>
+                    <small>
+                      {trip.setup.style} · {trip.setup.days} days
+                    </small>
+                  </div>
+                  <button
+                    className="icon-button"
+                    onClick={() => setPanel("pocket")}
+                    aria-label="Trip settings"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+                <div className="meters">
+                  {[
+                    ["Energy", trip.energy, Zap],
+                    ["Inspiration", trip.inspiration, Sparkles],
+                    ["Connection", trip.connection, Heart],
+                  ].map(([label, value, Icon]) => {
+                    const MeterIcon = Icon as typeof Zap;
+                    return (
+                      <div key={label as string} className="meter">
+                        <div>
+                          <span>
+                            <MeterIcon size={12} />
+                            {label as string}
+                          </span>
+                          <span>{value as number}%</span>
+                        </div>
+                        <meter
+                          min={0}
+                          max={100}
+                          value={value as number}
+                          aria-label={label as string}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+              <div className="world-tip">
+                Drag to rotate · Scroll to zoom.
+                <br />
+                Tap an icon to explore a place.
               </div>
-            </section>
-            <div className="world-tip">
-              Drag to rotate · Scroll to zoom.
-              <br />
-              Click a hotspot to explore.
-            </div>
-          </>
-        )}
+            </>
+          ))}
         <footer className="game-footnote">
           ROAM · SIMULATED TRIPS & FICTIONAL CHARACTERS
         </footer>
-        {storageError && (
+        {storageError && !travelSequence && (
           <div className="save-warning" role="alert">
             {trip
               ? "Saving is unavailable. Keep this tab open and download your itinerary before leaving."
               : "Your previous save needs attention. A new trip will replace it."}
           </div>
         )}
-        <div
-          className="toast"
-          role="status"
-          aria-live="polite"
-          hidden={!notice}
-        >
-          {notice}
-        </div>
+        {!travelSequence && (
+          <div
+            className="toast"
+            role="status"
+            aria-live="polite"
+            hidden={!notice}
+          >
+            {notice}
+          </div>
+        )}
       </div>
+      {chatOpen && (
+        <ChatPanel
+          user={user}
+          cityId="lisbon"
+          place={chatPlace}
+          onClose={() => {
+            setChatOpen(false);
+            chatTrigger.current?.focus();
+          }}
+        />
+      )}
       <div className="below-game">
         <span>Try a city. Find your rhythm.</span>
         <span>Lisbon pilot · Illustrative costs · Europe/Lisbon time</span>
@@ -775,8 +1076,8 @@ function RoamExperience() {
       {panel === "map-search" && (
         <Dialog title="Find your Lisbon." onClose={() => setPanel(null)} wide>
           <p className="lede">
-            Landmarks, cafés, gyms and local spots across one connected Lisbon
-            region.
+            Landmarks, cafés, beaches and local spots across one connected
+            Lisbon region.
           </p>
           <div
             className="location-entry-tabs"
@@ -808,6 +1109,7 @@ function RoamExperience() {
                     "bar",
                     "shop",
                     "culture",
+                    "beach",
                   ] as const
                 ).map((category) => (
                   <button
@@ -838,14 +1140,20 @@ function RoamExperience() {
               <div className="hotspot-list">
                 {matches.slice(0, 60).map((h) => (
                   <button key={h.id} onClick={() => pickHotspot(h)}>
-                    <MapPin size={17} />
+                    {h.category === "beach" ? (
+                      <Waves size={17} />
+                    ) : (
+                      <MapPin size={17} />
+                    )}
                     <span>
                       <strong>{h.name}</strong>
                       <small>
                         {h.custom
                           ? "Your saved pin"
-                          : h.category
-                            ? `${VENUE_CATEGORY_LABELS[h.category]} · ${h.address || h.area}`
+                          : h.mapVenue &&
+                              h.category &&
+                              Object.hasOwn(VENUE_CATEGORY_LABELS, h.category)
+                            ? `${VENUE_CATEGORY_LABELS[h.category as VenueCategory]} · ${h.address || h.area}`
                             : h.area}
                       </small>
                     </span>
@@ -954,6 +1262,28 @@ function RoamExperience() {
               <ArrowRight size={17} />
             </button>
           )}
+          {transitHubFor(mapHotspot) && (
+            <button
+              className="secondary full"
+              disabled={
+                !!trip &&
+                trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
+                !!previewJourney(trip, {
+                  action: "visit-hub",
+                  hub: transitHubFor(mapHotspot)!.id,
+                }).reason
+              }
+              onClick={() => visitTransitHub(transitHubFor(mapHotspot)!.id)}
+            >
+              {transitHubFor(mapHotspot)!.kind === "bus-stop"
+                ? "Stand at the bus stop"
+                : `Enter ${transitHubFor(mapHotspot)!.kind === "station" ? "train station" : "airport"}`}{" "}
+              {trip &&
+                trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
+                "· 20 min · €0 "}
+              <ArrowRight size={17} />
+            </button>
+          )}
           {trip &&
             !trip.complete &&
             mapHotspot.area &&
@@ -962,6 +1292,13 @@ function RoamExperience() {
               <button
                 className="secondary full"
                 onClick={() => {
+                  if (
+                    trip.journey.phase === "arriving" ||
+                    trip.journey.ticket
+                  ) {
+                    setPanel("journey");
+                    return;
+                  }
                   setDestination(areaPlace[mapHotspot.area!]);
                   setMode(mapHotspot.area === "Sintra" ? "train" : "walk");
                   setPanel("travel");
@@ -996,7 +1333,7 @@ function RoamExperience() {
                 const next = pins.filter((p) => p.id !== mapHotspot.id);
                 setPins(next);
                 try {
-                  localStorage.setItem(PIN_KEY, JSON.stringify(next));
+                  localStorage.setItem(storage.pins, JSON.stringify(next));
                 } catch {}
                 setPanel(null);
               }}
@@ -1055,26 +1392,102 @@ function RoamExperience() {
           >
             <p className="lede">A few choices to shape your little chapter.</p>
             <fieldset>
-              <legend>How long are you staying?</legend>
-              <div className="segments">
-                {([3, 5] as const).map((days) => (
+              <legend>What brings you to Lisbon?</legend>
+              <div className="segments styles">
+                {(
+                  Object.entries(JOURNEY_PERSONAS) as [
+                    Persona,
+                    (typeof JOURNEY_PERSONAS)[Persona],
+                  ][]
+                ).map(([id, persona]) => (
                   <button
                     type="button"
-                    key={days}
-                    aria-pressed={setup.days === days}
-                    onClick={() => setSetup((s) => ({ ...s, days }))}
+                    key={id}
+                    aria-pressed={(setup.persona || "tourist") === id}
+                    onClick={() => setSetup((s) => ({ ...s, persona: id }))}
                   >
-                    {days} days{" "}
-                    <small>
-                      {days === 3 ? "A little escape" : "Room to wander"}
-                    </small>
+                    {persona.name}
+                    <small>{persona.description}</small>
                   </button>
                 ))}
               </div>
             </fieldset>
+            <label>
+              Where does your story begin?
+              <select
+                value={setup.arrival || "home"}
+                onChange={(e) =>
+                  setSetup((s) => ({
+                    ...s,
+                    arrival: e.target.value as Arrival,
+                  }))
+                }
+              >
+                <option value="airport">Landing at Lisbon Airport</option>
+                <option value="station">Arriving at Rossio station</option>
+                <option value="bus-stop">At a Cais do Sodré bus stop</option>
+                <option value="home">Already settled at home</option>
+              </select>
+            </label>
+            <fieldset>
+              <legend>When are you staying?</legend>
+              <TripCalendar
+                start={calendarStart}
+                end={calendarEnd}
+                onValidityChange={setCalendarValid}
+                onChange={(startDate, endDate, days) =>
+                  setSetup((s) => ({ ...s, startDate, endDate, days }))
+                }
+              />
+            </fieldset>
+            <fieldset>
+              <legend>What would you like to discover?</legend>
+              <div className="segments interest-options">
+                {interests.map(({ id, name }) => (
+                  <button
+                    type="button"
+                    key={id}
+                    aria-pressed={setup.interests?.includes(id) || false}
+                    onClick={() =>
+                      setSetup((s) => ({
+                        ...s,
+                        interests: s.interests?.includes(id)
+                          ? s.interests.filter((v) => v !== id)
+                          : [...(s.interests || []), id],
+                      }))
+                    }
+                  >
+                    {name}
+                    {setup.interests?.includes(id) && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Your accommodation style</legend>
+              <div className="segments accommodation-options">
+                {accommodations.map(({ id, name, detail }) => (
+                  <button
+                    type="button"
+                    key={id}
+                    aria-pressed={(setup.accommodation || "apartment") === id}
+                    onClick={() =>
+                      setSetup((s) => ({ ...s, accommodation: id }))
+                    }
+                  >
+                    {name}
+                    <small>{detail}</small>
+                  </button>
+                ))}
+              </div>
+              <small className="quiet">
+                Choose the kind of base you would like to try. Accommodation is
+                imagined; no room is reserved.
+              </small>
+            </fieldset>
             <div className="form-grid">
               <label>
-                Your activity budget (€)
+                Your journey budget (€)
                 <input
                   required
                   type="number"
@@ -1105,9 +1518,10 @@ function RoamExperience() {
               </label>
             </div>
             <p className="quiet">
-              Food, local transport, and experiences. Flights and accommodation
-              are excluded. Your fictional loft is your base in {setup.base};
-              travel estimates are simplified.
+              Food, transport, experiences and any simulated departure ticket.
+              Your arrival flight and accommodation are outside this budget.
+              Your imagined home is in {setup.base}. Costs and travel times are
+              game estimates.
             </p>
             <fieldset>
               <legend>What draws you to the city?</legend>
@@ -1138,8 +1552,13 @@ function RoamExperience() {
                   <button
                     type="button"
                     key={shirt}
-                    style={{ background: shirt }}
-                    aria-label={["Cream", "Sage", "Terracotta", "Slate"][i]}
+                    style={{
+                      background: shirt,
+                      color: ["#42b894", "#ffce45", "#fff9ed"].includes(shirt)
+                        ? "#172546"
+                        : "#ffffff",
+                    }}
+                    aria-label={TRAVELLER_COLOURS[i].name}
                     aria-pressed={setup.shirt === shirt}
                     onClick={() => setSetup((s) => ({ ...s, shirt }))}
                   >
@@ -1148,7 +1567,11 @@ function RoamExperience() {
                 ))}
               </div>
             </fieldset>
-            <button className="primary full" type="submit">
+            <button
+              className="primary full"
+              type="submit"
+              disabled={!calendarValid}
+            >
               Let’s roam <ArrowRight size={18} />
             </button>
             <small className="quiet">
@@ -1156,6 +1579,42 @@ function RoamExperience() {
               your trips.
             </small>
           </form>
+        </Dialog>
+      )}
+      {panel === "journey" && trip && (
+        <Dialog
+          title={
+            trip.journey.phase === "arriving"
+              ? "Your first steps in Lisbon."
+              : "Your Lisbon journey."
+          }
+          onClose={() => setPanel(null)}
+          wide
+        >
+          <JourneyPanel
+            trip={trip}
+            onCommand={(action) => command({ kind: "journey", ...action })}
+            onEnterHub={enterTransitHub}
+          />
+          <TripRecommendations
+            setup={trip.setup}
+            onChoose={(id) => {
+              leaveRoom();
+              setMapFocus(focusFor(id, trip.setup.base));
+              if (
+                trip.journey.phase !== "arriving" &&
+                !trip.journey.ticket &&
+                !trip.complete &&
+                id !== trip.place
+              ) {
+                setDestination(id);
+                setMode(
+                  id === "sintra" || trip.place === "sintra" ? "train" : "walk",
+                );
+                setPanel("travel");
+              } else setPanel(null);
+            }}
+          />
         </Dialog>
       )}
       {panel === "travel" && trip && (
@@ -1169,6 +1628,12 @@ function RoamExperience() {
               <p className="lede">
                 One connected region. Real positions, your own rhythm.
               </p>
+              <button
+                className="secondary full"
+                onClick={() => setPanel("journey")}
+              >
+                <Ticket size={17} /> Stations, bus stops & airport
+              </button>
               <div className="destinations">
                 {(Object.keys(places) as PlaceId[]).map((id) => {
                   const p = places[id];
@@ -1477,7 +1942,9 @@ function RoamExperience() {
             </span>
             <span>
               Current trip and up to four earlier trips stay on this browser. No
-              account, tracking, location collection, or server trip storage.
+              automatic location tracking or cross-device trip storage. Your
+              account uses a protected session; trips and pins stay in this
+              browser, scoped to that account.
             </span>
           </div>
           {archive.length > 0 && (
@@ -1494,6 +1961,7 @@ function RoamExperience() {
                         .slice(0, 4),
                     );
                     tripRef.current = a;
+                    cancelTravelPreview();
                     setTrip(a);
                     setPanel("recap");
                   }}
@@ -1537,7 +2005,7 @@ function RoamExperience() {
             onClick={() => {
               if (panel === "clear") {
                 try {
-                  localStorage.removeItem(STORAGE_KEY);
+                  localStorage.removeItem(storage.trips);
                 } catch {
                   notify(
                     "Saved trips could not be deleted. Please check your browser storage settings.",
@@ -1545,6 +2013,7 @@ function RoamExperience() {
                   return;
                 }
                 tripRef.current = null;
+                cancelTravelPreview();
                 setTrip(null);
                 setArchive([]);
                 setStorageError(false);
@@ -1574,7 +2043,7 @@ function RoamExperience() {
 export default function Roam() {
   return (
     <AuthBoundary>
-      <RoamExperience />
+      {(user) => <RoamExperience key={user.id} user={user} />}
     </AuthBoundary>
   );
 }

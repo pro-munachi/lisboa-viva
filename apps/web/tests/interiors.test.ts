@@ -16,7 +16,11 @@ import {
   type WorldHotspot,
 } from "../lib/world-state";
 
-const expectedZones: Record<InteriorKind, readonly string[]> = {
+type OriginalInteriorKind = Exclude<
+  InteriorKind,
+  "airport" | "station" | "bus-stop"
+>;
+const expectedZones: Record<OriginalInteriorKind, readonly string[]> = {
   home: ["rest", "kitchen", "plan"],
   cafe: ["espresso", "pastry", "table"],
   gym: ["treadmill", "weights", "stretch"],
@@ -24,7 +28,7 @@ const expectedZones: Record<InteriorKind, readonly string[]> = {
   museum: ["gallery", "tiles", "bench"],
   bar: ["listen", "counter", "lounge"],
 };
-const kinds = Object.keys(expectedZones) as InteriorKind[];
+const kinds = Object.keys(expectedZones) as OriginalInteriorKind[];
 
 function disposeRoom(group: any) {
   const geometries = new Set<any>();
@@ -47,8 +51,11 @@ function disposeRoom(group: any) {
 }
 
 test("all eighteen catalog actions resolve to actual clickable room zones", () => {
-  assert.deepEqual(Object.keys(INTERIOR_ACTIVITIES), kinds);
-  assert.equal(Object.values(INTERIOR_ACTIVITIES).flat().length, 18);
+  assert.deepEqual(
+    Object.keys(INTERIOR_ACTIVITIES).filter((kind) => kind in expectedZones),
+    kinds,
+  );
+  assert.equal(kinds.flatMap((kind) => INTERIOR_ACTIVITIES[kind]).length, 18);
   for (const kind of kinds) {
     const activities = INTERIOR_ACTIVITIES[kind];
     assert.deepEqual(
@@ -119,14 +126,15 @@ test("room actions have distinct concrete CTAs, descriptions, results and short 
   }
 });
 
-test("actual mapped OSM venue categories select their corresponding original rooms", () => {
-  const expected: Record<VenueCategory, InteriorKind> = {
+test("actual mapped OSM venue categories select their corresponding original rooms while beaches stay outdoors", () => {
+  const expected: Record<VenueCategory, InteriorKind | null> = {
     cafe: "cafe",
     restaurant: "cafe",
     gym: "gym",
     shop: "shop",
     culture: "museum",
     bar: "bar",
+    beach: null,
   };
   for (const [category, kind] of Object.entries(expected)) {
     const venue = VENUES.find((item) => item.category === category);

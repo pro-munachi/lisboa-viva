@@ -55,7 +55,13 @@ export default function MultiplayerDock({
           )}
         </>
       ) : (
-        <p>You are hidden. Join again whenever you want.</p>
+        <p>
+          {status === "hidden"
+            ? "You are hidden. Join again whenever you want."
+            : status === "reconnecting"
+              ? "Could not confirm you are hidden. Retrying…"
+              : "Leaving multiplayer…"}
+        </p>
       )}
     </aside>
   );

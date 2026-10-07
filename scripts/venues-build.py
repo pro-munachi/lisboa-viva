@@ -20,6 +20,7 @@ import osmium
 BOUNDS = [-9.435, 38.683, -9.085, 38.832]
 CATEGORIES = ("cafe", "gym", "restaurant", "bar", "shop", "culture")
 QUOTAS = {"cafe": 160, "gym": 80, "restaurant": 160, "bar": 90, "shop": 70, "culture": 40}
+BEACH_LIMIT = 64
 CELL = 0.0125
 
 
@@ -29,6 +30,8 @@ def inside(point):
 
 def category(tags):
     amenity, leisure = tags.get("amenity"), tags.get("leisure")
+    if tags.get("natural") == "beach":
+        return "beach"
     if amenity == "cafe":
         return "cafe"
     if leisure in ("fitness_centre", "dance") or amenity == "gym" or (
@@ -109,7 +112,7 @@ class VenueExtract(osmium.SimpleHandler):
         if website:
             venue["website"] = website
         # Preserve the mapped subcategory for UI labels and provenance.
-        venue["osmCategory"] = tags.get("amenity") or tags.get("leisure") or tags.get("shop") or tags.get("tourism") or tags.get("sport")
+        venue["osmCategory"] = tags.get("natural") if kind == "beach" else tags.get("amenity") or tags.get("leisure") or tags.get("shop") or tags.get("tourism") or tags.get("sport")
         self.venues.append(venue)
 
     def node(self, node):
@@ -154,7 +157,13 @@ def select(venues, limit):
     for venue in sorted(venues, key=lambda v: (v["osmType"] != "node", v["id"])):
         key = (venue["name"].casefold(), venue["category"])
         lng, lat = venue["point"]
-        if any(abs(lng - p[0]) < 0.0002 and abs(lat - p[1]) < 0.00018 for p in lookup[key]):
+        duplicate = any(
+            math.hypot((lng - p[0]) * 111320 * math.cos(math.radians(lat)), (lat - p[1]) * 111320) < 500
+            if venue["category"] == "beach"
+            else abs(lng - p[0]) < 0.0002 and abs(lat - p[1]) < 0.00018
+            for p in lookup[key]
+        )
+        if duplicate:
             continue
         lookup[key].append(venue["point"])
         unique.append(venue)
@@ -169,7 +178,11 @@ def select(venues, limit):
         for kind in CATEGORIES:
             if remaining[kind] and len(selected) < limit:
                 selected.append(remaining[kind].popleft())
-    return sorted(selected[:limit], key=lambda v: (v["category"], v["name"].casefold(), v["id"])), unique
+    # Beach polygons can have several adjacent parts with the same name. Keep
+    # one sourced polygon focus per beach; append the named coastal directory
+    # without displacing any of the existing sampled business identities.
+    beaches = distributed([v for v in unique if v["category"] == "beach"])[:BEACH_LIMIT]
+    return sorted(selected[:limit] + beaches, key=lambda v: (v["category"], v["name"].casefold(), v["id"])), unique
 
 
 def build(pbf, output, limit):
@@ -191,14 +204,15 @@ def build(pbf, output, limit):
             "availableByCategory": dict(sorted(Counter(v["category"] for v in available).items())),
             "selectedByCategory": dict(sorted(Counter(v["category"] for v in venues).items()))},
         "selection": {
-            "limit": limit, "cellDegrees": CELL,
-            "method": "Category quotas followed by geographic-cell round-robin; duplicate same-name/category node/way features within approximately 20m omitted.",
+            "limit": limit, "additionalBeachLimit": BEACH_LIMIT, "cellDegrees": CELL,
+            "method": "Business category quotas followed by geographic-cell round-robin; up to 64 named beaches added without displacing businesses. Duplicate same-name/category businesses within approximately 20m and beach polygon parts within 500m omitted.",
         },
         "limitations": [
             "Named venues and coordinates are from the OSM snapshot; mapping can be incomplete or outdated.",
             "Way coordinates are approximate polygon centroids, not surveyed entrances; node coordinates retain mapped point locations.",
             "The directory is a geographically distributed sample, not a complete listing or recommendation.",
             "Website URLs retain HTTPS addresses tagged in OSM; current ownership and opening hours are not verified.",
+            "Beach entries are named natural=beach map features inside the world bounds, not bathing-water recommendations or evidence of current safe swimming conditions. Beach focuses are approximate polygon centroids, not surveyed beach entrances.",
         ],
         "venues": venues,
     }

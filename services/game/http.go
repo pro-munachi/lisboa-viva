@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -52,6 +53,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("DELETE /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.clearPresence)))
 	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
 	mux.Handle("GET /v1/admin/users", s.requireRole("admin", http.HandlerFunc(s.adminUsers)))
+	s.registerChatRoutes(mux)
 	return s.headers(mux)
 }
 
@@ -67,7 +69,14 @@ func (s *server) headers(next http.Handler) http.Handler {
 
 func decodeJSON(r *http.Request, target any) error {
 	defer r.Body.Close()
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 16<<10))
+	data, err := io.ReadAll(io.LimitReader(r.Body, (16<<10)+1))
+	if err != nil {
+		return apiError("invalid_json")
+	}
+	if len(data) > 16<<10 {
+		return apiError("payload_too_large")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return apiError("invalid_json")
@@ -99,6 +108,8 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_presence":   http.StatusBadRequest,
 			"invalid_appearance": http.StatusBadRequest,
 			"rate_limited":       http.StatusTooManyRequests,
+			"payload_too_large":  http.StatusRequestEntityTooLarge,
+			"nonce_conflict":     http.StatusConflict,
 		}[code]
 	}
 	if status == 0 {
@@ -232,6 +243,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRow(r.Context(), `SELECT u.id::text,p.password_hash FROM users u
 		JOIN password_credentials p ON p.user_id=u.id
 		WHERE (u.handle=$1 OR lower(u.email)=$1) AND u.account_status='active'`, input.Identity).Scan(&id, &passwordHash)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		fail(w, err)
+		return
+	}
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(input.Password)) != nil {
 		fail(w, apiError("credentials"))
 		return
@@ -267,9 +282,26 @@ func clientIP(r *http.Request) string {
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookie); err == nil {
-		_, _ = s.db.Exec(r.Context(), `DELETE FROM player_presence WHERE user_id=(
-			SELECT user_id FROM sessions WHERE token_hash=$1)`, tokenHash(cookie.Value))
-		_, _ = s.db.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", tokenHash(cookie.Value))
+		tx, err := s.db.Begin(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		defer tx.Rollback(r.Context())
+		// Either both the heartbeat and session are removed, or neither is.
+		// Keep the browser cookie until database revocation commits successfully.
+		if _, err = tx.Exec(r.Context(), `DELETE FROM player_presence WHERE user_id=(
+			SELECT user_id FROM sessions WHERE token_hash=$1)`, tokenHash(cookie.Value)); err == nil {
+			_, err = tx.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", tokenHash(cookie.Value))
+		}
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if err = tx.Commit(r.Context()); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(1, 0)})
 	respond(w, http.StatusOK, map[string]bool{"ok": true})
@@ -287,10 +319,19 @@ func (s *server) sessionUser(r *http.Request) (authUser, error) {
 	user, err := loadUser(r.Context(), s.db, `u.id=(SELECT s.user_id FROM sessions s
 		WHERE s.token_hash=$1 AND s.expires_at>now()) AND u.account_status='active'`, tokenHash(cookie.Value))
 	if err != nil {
-		return authUser{}, apiError("session_expired")
+		return authUser{}, sessionLookupError(err)
 	}
 	_, _ = s.db.Exec(r.Context(), "UPDATE sessions SET last_seen_at=$2 WHERE token_hash=$1", tokenHash(cookie.Value), s.now())
 	return user, nil
+}
+
+// A missing/expired session is an authentication result. A database failure is
+// a server error, and must retain its original cause for logging and diagnosis.
+func sessionLookupError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return apiError("session_expired")
+	}
+	return err
 }
 
 func (s *server) requireSession(next http.Handler) http.Handler {

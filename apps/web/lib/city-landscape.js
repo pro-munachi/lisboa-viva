@@ -13,6 +13,14 @@ const WALKING_STREETS = new Set([
   "tertiary",
 ]);
 
+export function setLandscapeNight(group, value) {
+  const lighting = group?.userData.lighting;
+  if (!lighting) return;
+  const night = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+  lighting.glass.emissiveIntensity = 0.06 + night * 1.65;
+  lighting.groundStrength.value = night * 0.32;
+}
+
 function randomFor(value) {
   let seed = 2166136261;
   for (const c of String(value))
@@ -550,6 +558,7 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
     group.add(mesh);
+    return mesh;
   }
   const material = (hex, extra = {}) =>
     new THREE.MeshStandardMaterial({ color: hex, roughness: 0.87, ...extra });
@@ -575,8 +584,8 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
     (tree, c) =>
       c.setHSL(
         0.22 + tree.tint * 0.055,
-        0.22 + tree.tint * 0.12,
-        0.3 + tree.tint * 0.07,
+        0.42 + tree.tint * 0.18,
+        0.26 + tree.tint * 0.09,
       ),
   );
   batch(
@@ -589,13 +598,13 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
       obj.scale.setScalar(tree.scale);
     },
     (tree, c) =>
-      c.setHSL(0.29, 0.25 + tree.tint * 0.08, 0.23 + tree.tint * 0.07),
+      c.setHSL(0.29, 0.4 + tree.tint * 0.12, 0.23 + tree.tint * 0.07),
   );
   batch(
     "Riverside palm crowns",
     trees.filter((tree) => tree.type === "palm"),
     palmFronds(),
-    material("#597e47", { side: THREE.DoubleSide }),
+    material("#2b7859", { side: THREE.DoubleSide }),
     (tree, obj, ground) => {
       obj.position.y = ground + 6.5 * tree.scale;
       obj.scale.setScalar(tree.scale);
@@ -607,12 +616,77 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
     lampIron(),
     material("#263d3b", { metalness: 0.45 }),
   );
+  const lanternGlass = material("#fff0ba", {
+    emissive: "#ffd293",
+    emissiveIntensity: 0.06,
+  });
   batch(
     "Warm lantern glass",
     lamps,
     box(0.32, 0.32, 0.32, 0.76, 4.59),
-    material("#fff0ba", { emissive: "#d4ad60", emissiveIntensity: 0.25 }),
+    lanternGlass,
   );
+  const lampAnchors = lamps.map((lamp) => ({
+    x: lamp.x + Math.cos(lamp.turn) * 0.76,
+    y: geoY(toGeo(lamp)) + 0.12 + 4.59,
+    z: lamp.z - Math.sin(lamp.turn) * 0.76,
+  }));
+  const groundStrength = { value: 0 };
+  if (lampAnchors.length) {
+    // One terrain-draped mesh for every pool of warm light in this chunk.
+    const positions = [],
+      uvs = [];
+    for (const lamp of lampAnchors) {
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU,
+          b = ((i + 1) / 12) * TAU;
+        for (const offset of [
+          [0, 0],
+          [Math.cos(b), Math.sin(b)],
+          [Math.cos(a), Math.sin(a)],
+        ]) {
+          const point = {
+            x: lamp.x + offset[0] * 4.2,
+            z: lamp.z + offset[1] * 4.2,
+          };
+          positions.push(point.x, geoY(toGeo(point)) + 0.2, point.z);
+          uvs.push(0.5 + offset[0] * 0.5, 0.5 + offset[1] * 0.5);
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.computeBoundingSphere();
+    const groundMaterial = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        strength: groundStrength,
+        color: { value: new THREE.Color("#ffcc82") },
+      },
+      vertexShader: `varying vec2 glowUV;void main(){glowUV=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+      fragmentShader: `uniform float strength;uniform vec3 color;varying vec2 glowUV;
+        void main(){float radius=length(glowUV-.5)*2.;float fade=pow(max(0.,1.-radius),1.5);
+          gl_FragColor=vec4(color,strength*fade);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    });
+    const glow = new THREE.Mesh(geometry, groundMaterial);
+    glow.name = "Terrain-draped lantern pools";
+    glow.renderOrder = 1;
+    group.add(glow);
+    group.userData.lighting = {
+      glass: lanternGlass,
+      groundStrength,
+      lampAnchors,
+    };
+  }
   batch("Wooden promenade benches", benches, benchWood(), material("#ae7f4d"));
   batch(
     "Bench ironwork",

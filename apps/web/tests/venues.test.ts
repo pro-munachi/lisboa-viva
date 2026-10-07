@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import {
   VENUES,
   VENUE_COUNTS,
@@ -9,7 +11,9 @@ import {
   venueDistanceMetres,
   venueMapsUrl,
 } from "../lib/venues";
-import { containsGeo, GEO_BOUNDS } from "../lib/geography";
+import { containsGeo, GEO_BOUNDS, projectGeo } from "../lib/geography";
+import { fromVenue } from "../lib/world-state";
+import { interiorForHotspot } from "../lib/interiors";
 
 test("bundled venues retain unique mapped identities, finite positions and exact OSM source links", () => {
   assert.equal(VENUE_SOURCE.osmTimestamp, "2026-10-02T23:00:00Z");
@@ -98,4 +102,85 @@ test("nearby results sort by metre distance and Google links keep mapped coordin
     maps.searchParams.get("query"),
     `${venue.point[1]},${venue.point[0]} (${venue.name})`,
   );
+});
+
+test("beach discovery finds real coastal destinations by accent-insensitive names without assigning business interiors", () => {
+  for (const [query, sourceId] of [
+    ["conceicao", "way:544205149"],
+    ["tamariz", "way:23847961"],
+    ["paco arcos", "way:98821052"],
+    ["santo amaro", "way:180126358"],
+  ]) {
+    const found = searchVenues(query, "beach", 40);
+    assert.ok(found.some((venue) => venue.id === sourceId));
+    assert.ok(found.every((venue) => venue.category === "beach"));
+  }
+  const beaches = VENUES.filter((venue) => venue.category === "beach");
+  assert.equal(beaches.length, VENUE_COUNTS.selectedByCategory.beach);
+  assert.ok(beaches.length >= 20);
+  for (const beach of beaches) {
+    assert.equal(beach.osmCategory, "beach");
+    assert.equal(beach.positionSource, "way-centroid");
+    const hotspot = fromVenue(beach);
+    assert.equal(hotspot.category, "beach");
+    assert.equal(hotspot.sourceUrl, beach.sourceUrl);
+    assert.equal(interiorForHotspot(hotspot), null);
+    assert.deepEqual(
+      nearbyVenues(beach.point, 1, 1, "beach").map((venue) => venue.id),
+      [beach.id],
+    );
+  }
+  assert.equal(
+    searchVenues("tamariz", "cafe", 40).some(
+      (venue) => venue.category === "beach",
+    ),
+    false,
+  );
+  assert.equal(
+    searchVenues("carcavelos", "beach").length,
+    0,
+    "outside-world beaches are not moved inside the map",
+  );
+});
+
+test("every bundled beach focus stays inside the real world bounds and close to its mapped coast", () => {
+  const manifest = JSON.parse(
+    gunzipSync(
+      readFileSync(
+        new URL("../public/data/lisbon-manifest.json.gz", import.meta.url),
+      ),
+    ).toString("utf8"),
+  );
+  const coast = manifest.coastlines.map((line: any) =>
+    line.points.map(projectGeo),
+  );
+  for (const beach of VENUES.filter((venue) => venue.category === "beach")) {
+    assert.ok(containsGeo(GEO_BOUNDS, beach.point));
+    const point = projectGeo(beach.point);
+    let nearest = Infinity;
+    for (const line of coast) {
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1],
+          b = line[i];
+        const dx = b.x - a.x,
+          dz = b.z - a.z;
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((point.x - a.x) * dx + (point.z - a.z) * dz) /
+              (dx * dx + dz * dz || 1),
+          ),
+        );
+        nearest = Math.min(
+          nearest,
+          Math.hypot(point.x - a.x - t * dx, point.z - a.z - t * dz),
+        );
+      }
+    }
+    assert.ok(
+      nearest < 100,
+      `${beach.name} must remain on its sourced coast, not an inland district`,
+    );
+  }
 });

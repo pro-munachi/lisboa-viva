@@ -2,15 +2,26 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createInteriorRuntime } from "../lib/city-interior-runtime.js";
 import { INTERIOR_ACTIVITIES, type InteriorKind } from "../lib/interiors";
+import { createHotspotBadgeLayer } from "../lib/city-hotspot-badges.js";
 
 const THREE = require("three");
 type ActivityEvent = { state: string; zoneId: string | null; error?: string };
 const kinds: InteriorKind[] = ["home", "cafe", "gym", "shop", "museum", "bar"];
 
-function harness() {
+function harness(
+  badgeHost?: any,
+  lighting?: { night?: number; reducedMotion?: boolean },
+) {
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(43, 1.6, 0.3, 90000),
-    controls = { target: new THREE.Vector3(), update() {} },
+    controls = {
+      target: new THREE.Vector3(),
+      update() {
+        camera.lookAt(this.target);
+        camera.updateMatrixWorld();
+        camera.updateProjectionMatrix();
+      },
+    },
     events: ActivityEvent[] = [],
     zones: string[] = [],
     disposed: {
@@ -62,6 +73,8 @@ function harness() {
     shirt: "#c58e59",
     onZone: (id: string) => zones.push(id),
     onActivity: (event: ActivityEvent) => events.push({ ...event }),
+    badgeHost,
+    ...lighting,
   });
   const group = () => {
     const result = scene.children.find((node: any) => node.userData.room);
@@ -349,5 +362,452 @@ test("switching rooms or exiting cancels previous completion and releases the re
     } finally {
       h.runtime.clear();
     }
+  }
+});
+
+test("bar fixtures follow translated floors, freeze during pause and dispose once before generic room cleanup", () => {
+  const h = harness(undefined, { night: 1 });
+  h.enter("bar");
+  const group = h.group(),
+    fixtures = group.children.find((node: any) => node.userData.clubLighting)!;
+  assert.ok(fixtures);
+  const geometries = new Set<any>(),
+    materials = new Set<any>(),
+    lamps: any[] = [];
+  let geometryDisposals = 0,
+    materialDisposals = 0;
+  fixtures.traverse((node: any) => {
+    if (node.geometry) geometries.add(node.geometry);
+    if (node.material) materials.add(node.material);
+  });
+  group.traverse((node: any) => {
+    if (node.userData.interiorLamp) lamps.push(node);
+  });
+  geometries.forEach((geometry) =>
+    geometry.addEventListener("dispose", () => geometryDisposals++),
+  );
+  materials.forEach((material) =>
+    material.addEventListener("dispose", () => materialDisposals++),
+  );
+  const snapshot = () => {
+    const states: any[] = [];
+    fixtures.traverse((node: any) =>
+      states.push([
+        node.position.toArray(),
+        node.rotation.toArray(),
+        node.isLight ? node.intensity : null,
+      ]),
+    );
+    return states;
+  };
+  try {
+    assert.ok(lamps.every((lamp) => lamp.intensity === 9));
+    h.runtime.update(0.05, true);
+    fixtures.traverse((node: any) => {
+      if (node.geometry?.type === "ConeGeometry") {
+        const plane = node.material.clippingPlanes[0];
+        assert.equal(plane.normal.y, 1);
+        assert.ok(Math.abs(plane.constant + group.position.y + 0.02) < 1e-8);
+      }
+    });
+    const moving = snapshot();
+    h.runtime.update(0.05, true);
+    assert.notDeepEqual(snapshot(), moving);
+    const frozen = snapshot();
+    for (let i = 0; i < 100; i++) h.runtime.update(1, false);
+    assert.deepEqual(snapshot(), frozen);
+    h.runtime.setLighting(0);
+    assert.ok(lamps.every((lamp) => lamp.intensity === 4));
+    assert.deepEqual(
+      snapshot(),
+      frozen,
+      "changing city time leaves the paused fixture phase alone",
+    );
+    h.enter("home");
+    assert.equal(fixtures.parent, null);
+    assert.equal(fixtures.children.length, 0);
+    assert.equal(geometryDisposals, geometries.size);
+    assert.equal(materialDisposals, materials.size);
+    h.runtime.dispose();
+    h.runtime.dispose();
+    assert.equal(geometryDisposals, geometries.size);
+    assert.equal(materialDisposals, materials.size);
+    assert.equal(h.disposed.length, 2);
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
+test("reduced-motion bar fixtures remain steady even when room exploration is enabled", () => {
+  const h = harness(undefined, { reducedMotion: true });
+  try {
+    h.enter("bar");
+    const fixtures = h
+      .group()
+      .children.find((node: any) => node.userData.clubLighting)!;
+    const lights: any[] = [],
+      ball = fixtures.children.find(
+        (node: any) => node.geometry?.type === "IcosahedronGeometry",
+      )!;
+    fixtures.traverse((node: any) => {
+      if (node.isLight) lights.push(node);
+    });
+    for (let i = 0; i < 500; i++) h.runtime.update(0.05, true);
+    assert.ok(lights.every((light) => light.intensity === 6.5));
+    assert.equal(ball.rotation.y, 0);
+    assert.equal(ball.rotation.z, 0);
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
+type FakeDocument = {
+  activeElement: FakeElement | null;
+  listeners: Map<string, Set<(event: any) => void>>;
+  createElement(tag: string): FakeElement;
+  createElementNS(namespace: string, tag: string): FakeElement;
+  addEventListener(
+    type: string,
+    listener: (event: any) => void,
+    capture?: boolean,
+  ): void;
+  removeEventListener(
+    type: string,
+    listener: (event: any) => void,
+    capture?: boolean,
+  ): void;
+  dispatch(type: string, details?: Record<string, unknown>): any;
+};
+
+function fakeEvent(
+  type: string,
+  target: any,
+  details: Record<string, unknown> = {},
+) {
+  return {
+    type,
+    target,
+    currentTarget: target,
+    defaultPrevented: false,
+    propagationStopped: false,
+    ...details,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    stopPropagation() {
+      this.propagationStopped = true;
+    },
+  };
+}
+
+/** The badge layer uses this host's document; room textures keep their no-DOM path. */
+class FakeElement {
+  children: FakeElement[] = [];
+  parentElement: FakeElement | null = null;
+  style: any = {};
+  dataset: Record<string, string> = {};
+  attributes = new Map<string, string>();
+  listeners = new Map<string, Set<(event: any) => void>>();
+  className = "";
+  textContent = "";
+  hidden = false;
+  disabled = false;
+  clientWidth = 960;
+  clientHeight = 600;
+  constructor(
+    readonly tagName: string,
+    readonly ownerDocument: FakeDocument,
+  ) {}
+  appendChild(child: FakeElement) {
+    child.remove();
+    child.parentElement = this;
+    this.children.push(child);
+    return child;
+  }
+  append(...children: FakeElement[]) {
+    children.forEach((child) => this.appendChild(child));
+  }
+  replaceChildren(...children: FakeElement[]) {
+    [...this.children].forEach((child) => child.remove());
+    this.append(...children);
+  }
+  remove() {
+    if (!this.parentElement) return;
+    const children = this.parentElement.children;
+    children.splice(children.indexOf(this), 1);
+    this.parentElement = null;
+  }
+  setAttribute(key: string, value: string) {
+    this.attributes.set(key, String(value));
+    if (key.startsWith("data-"))
+      this.dataset[
+        key.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+      ] = String(value);
+  }
+  getAttribute(key: string) {
+    return this.attributes.get(key) ?? null;
+  }
+  removeAttribute(key: string) {
+    this.attributes.delete(key);
+  }
+  addEventListener(type: string, listener: (event: any) => void) {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type)!.add(listener);
+  }
+  removeEventListener(type: string, listener: (event: any) => void) {
+    this.listeners.get(type)?.delete(listener);
+  }
+  dispatch(type: string, details: Record<string, unknown> = {}) {
+    const event = fakeEvent(type, this, details);
+    for (const listener of this.listeners.get(type) || []) listener(event);
+    return event;
+  }
+  click() {
+    if (!this.disabled) this.dispatch("click", { detail: 0 });
+  }
+  focus() {
+    this.ownerDocument.activeElement = this;
+  }
+}
+
+function badgeHost() {
+  const ownerDocument: FakeDocument = {
+    activeElement: null,
+    listeners: new Map(),
+    createElement: (tag) => new FakeElement(tag.toUpperCase(), ownerDocument),
+    createElementNS: (_, tag) =>
+      new FakeElement(tag.toUpperCase(), ownerDocument),
+    addEventListener(type, listener) {
+      if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+      this.listeners.get(type)!.add(listener);
+    },
+    removeEventListener(type, listener) {
+      this.listeners.get(type)?.delete(listener);
+    },
+    dispatch(type, details = {}) {
+      const event = fakeEvent(type, this.activeElement, details);
+      event.currentTarget = this;
+      for (const listener of this.listeners.get(type) || []) listener(event);
+      return event;
+    },
+  };
+  return ownerDocument.createElement("div");
+}
+
+function badgeButtons(host: FakeElement): FakeElement[] {
+  return host.children.flatMap((child) => [
+    ...(child.tagName === "BUTTON" ? [child] : []),
+    ...badgeButtons(child),
+  ]);
+}
+
+function badgeWithId(host: FakeElement, id: string) {
+  const button = badgeButtons(host).find(
+    (item) => item.dataset.hotspotId === id,
+  );
+  assert.ok(button, `the room exposes its ${id} activity badge`);
+  return button;
+}
+
+test("all eighteen room badges select their actual activity without starting it, and stay selected while busy", () => {
+  const host = badgeHost(),
+    h = harness(host);
+  try {
+    for (const kind of kinds) {
+      h.enter(kind);
+      h.runtime.update(0, false);
+      const expectedIds = INTERIOR_ACTIVITIES[kind].map(
+        (activity) => activity.id,
+      );
+      assert.deepEqual(
+        badgeButtons(host)
+          .map((button) => button.dataset.hotspotId)
+          .sort(),
+        [...expectedIds].sort(),
+      );
+      const firstZone = h
+          .group()
+          .userData.zones.find((zone: any) => zone.id === expectedIds[0]),
+        worldPoint = h
+          .group()
+          .position.clone()
+          .add(new THREE.Vector3(firstZone.point.x, 2.4, firstZone.point.z)),
+        projected = worldPoint.project(h.camera),
+        anchor = badgeWithId(host, expectedIds[0]).parentElement!;
+      assert.equal(anchor.hidden, false);
+      assert.equal(
+        anchor.style.transform,
+        `translate3d(${(((projected.x + 1) / 2) * host.clientWidth - 22).toFixed(2)}px, ${(((1 - projected.y) / 2) * host.clientHeight - 22).toFixed(2)}px, 0)`,
+        "the selected badge is anchored to the actual prop, its room origin and its 2.4-metre height",
+      );
+      const actor = h.actor(),
+        position = actor.position.toArray(),
+        count = h.events.length;
+      for (const id of expectedIds) {
+        badgeWithId(host, id).dispatch("click");
+        assert.equal(h.zones.at(-1), id);
+        assert.equal(
+          badgeWithId(host, id).getAttribute("aria-pressed"),
+          "true",
+        );
+        assert.equal(
+          h.events.length,
+          count,
+          "selection keeps the explicit Begin CTA",
+        );
+        assert.deepEqual(actor.position.toArray(), position);
+      }
+      h.runtime.perform(expectedIds[0], 3000);
+      const selections = h.zones.length,
+        actionCount = h.events.length;
+      assert.ok(badgeButtons(host).every((button) => button.disabled));
+      badgeWithId(host, expectedIds[1]).dispatch("click");
+      assert.equal(h.zones.length, selections);
+      assert.equal(h.events.length, actionCount);
+      assert.equal(
+        badgeWithId(host, expectedIds[0]).getAttribute("aria-pressed"),
+        "true",
+      );
+      assert.equal(
+        badgeWithId(host, expectedIds[1]).getAttribute("aria-pressed"),
+        "false",
+      );
+    }
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
+test("paused rooms keep badges projected when the camera or viewport moves without advancing the activity", () => {
+  const host = badgeHost(),
+    h = harness(host);
+  try {
+    h.enter("cafe", new THREE.Vector3(-500, 45, 900));
+    h.runtime.perform("espresso", 3000);
+    h.runtime.update(0, false);
+    const button = badgeWithId(host, "espresso"),
+      anchor = button.parentElement!,
+      transform = anchor.style.transform,
+      position = h.actor().position.toArray(),
+      count = h.events.length;
+    assert.ok(transform && !transform.includes("NaN"));
+    h.camera.position.x += 5;
+    h.controls.update();
+    h.runtime.update(1, false);
+    assert.notEqual(anchor.style.transform, transform);
+    const moved = anchor.style.transform;
+    host.clientWidth = 700;
+    host.clientHeight = 450;
+    h.runtime.update(1, false);
+    assert.notEqual(anchor.style.transform, moved);
+    assert.deepEqual(h.actor().position.toArray(), position);
+    assert.equal(h.events.length, count);
+    assert.equal(button.getAttribute("aria-pressed"), "true");
+    assert.equal(button.disabled, true);
+    reach(h, "complete", "espresso");
+    assert.ok(badgeButtons(host).every((item) => !item.disabled));
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
+test("exit clears old room badges, re-entry is reusable, and final disposal removes the layer and prevents stale callbacks", () => {
+  const host = badgeHost(),
+    h = harness(host);
+  h.enter("bar");
+  const oldBadge = badgeWithId(host, "counter"),
+    oldSelections = h.zones.length;
+  h.runtime.clear();
+  assert.equal(badgeButtons(host).length, 0);
+  oldBadge.dispatch("click");
+  assert.equal(h.zones.length, oldSelections);
+  h.enter("shop");
+  assert.equal(badgeButtons(host).length, 3);
+  const nextBadge = badgeWithId(host, "counter"),
+    selections = h.zones.length;
+  oldBadge.dispatch("click");
+  assert.equal(
+    h.zones.length,
+    selections,
+    "a detached badge cannot select the same activity ID in a different room",
+  );
+  h.runtime.dispose();
+  assert.equal(host.children.length, 0);
+  assert.equal(h.runtime.active, false);
+  assert.equal(h.disposed.length, 2);
+  nextBadge.dispatch("click");
+  assert.equal(h.zones.length, selections);
+  h.runtime.dispose();
+  h.runtime.clear();
+  h.enter("cafe");
+  h.runtime.update(1, true);
+  assert.equal(host.children.length, 0);
+  assert.equal(h.disposed.length, 2);
+  assert.deepEqual(h.scene.children, [h.exterior]);
+});
+
+test("keyboard badge activation selects once and consumes repeat/release after focus moves to a dialog close button", () => {
+  for (const key of ["Enter", " "]) {
+    const host = badgeHost(),
+      doc = host.ownerDocument,
+      close = doc.createElement("button"),
+      selections: string[] = [];
+    let closeClicks = 0;
+    close.addEventListener("click", () => closeClicks++);
+    const layer = createHotspotBadgeLayer(host, {
+      onSelect(value: string) {
+        selections.push(value);
+        close.focus();
+      },
+    });
+    try {
+      layer.setItems([
+        {
+          id: "cafe",
+          name: "Mapped café",
+          category: "cafe",
+          position: new THREE.Vector3(0, 2.4, -8),
+          value: "open-cafe",
+        },
+      ]);
+      const button = badgeWithId(host, "cafe");
+      button.focus();
+      const activation = button.dispatch("keydown", { key, repeat: false });
+      assert.equal(activation.defaultPrevented, true);
+      assert.equal(activation.propagationStopped, true);
+      assert.deepEqual(selections, ["open-cafe"]);
+      assert.equal(doc.activeElement, close);
+
+      for (const [type, repeat] of [
+        ["keydown", true],
+        ["keyup", false],
+      ] as const) {
+        const event = doc.dispatch(type, { key, repeat });
+        // A native key's default can activate the newly focused dialog target.
+        // This proxy makes a missed document capture guard observable.
+        if (!event.propagationStopped) close.dispatch(type, { key, repeat });
+        if (!event.defaultPrevented) close.click();
+        assert.equal(
+          event.defaultPrevented,
+          true,
+          `${key} ${type} is consumed`,
+        );
+        assert.equal(event.propagationStopped, true);
+        assert.equal(closeClicks, 0);
+        assert.deepEqual(selections, ["open-cafe"]);
+      }
+      const freshPress = doc.dispatch("keydown", { key, repeat: false });
+      assert.equal(
+        freshPress.defaultPrevented,
+        false,
+        "a new intentional dialog keypress remains usable",
+      );
+      assert.equal(freshPress.propagationStopped, false);
+    } finally {
+      layer.dispose();
+    }
+    assert.equal(doc.listeners.get("keydown")?.size, 0);
+    assert.equal(doc.listeners.get("keyup")?.size, 0);
+    assert.equal(host.children.length, 0);
   }
 });

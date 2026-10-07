@@ -11,14 +11,21 @@ import { createCharacter, animateCharacter } from "./characters";
 import {
   createArchitecturePalette,
   buildingArchitecture,
+  createBuildingDetails,
 } from "./city-architecture";
-import { createLandscape } from "./city-landscape";
+import { createBuildingOverview } from "./city-overview";
+import { createTravelRuntime } from "./city-travel";
+import { createLandscape, setLandscapeNight } from "./city-landscape";
+import { lightingForMinute, nearestLampAnchors } from "./city-lighting";
 import { createLandmarks, isLandmarkBuilding } from "./city-landmarks";
 import { createCityAtmosphere } from "./city-atmosphere";
 import { coastRegions } from "./city-water";
+import { beachCameraView } from "./city-beach-camera";
 import { drapedPolygonGeometry } from "./city-surfaces";
 import { createVenueDecorations } from "./city-venues";
 import { createInteriorRuntime } from "./city-interior-runtime";
+import { interiorLightingForMinute } from "./city-interiors";
+import { createHotspotBadgeLayer } from "./city-hotspot-badges";
 import {
   createLocalWalkerProfiles,
   advanceLocalWalker,
@@ -38,6 +45,7 @@ export function createCity(host, options) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.localClippingEnabled = true;
   renderer.setClearColor("#dae5e0");
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -45,7 +53,8 @@ export function createCity(host, options) {
   const scene = new THREE.Scene();
   const atmosphere = createCityAtmosphere(renderer, scene);
   const architecture = createArchitecturePalette();
-  scene.add(new THREE.HemisphereLight("#e4f1ff", "#ae9c78", 1.65));
+  const hemisphere = new THREE.HemisphereLight("#e4f1ff", "#ae9c78", 1.65);
+  scene.add(hemisphere);
   const sun = new THREE.DirectionalLight("#fff0d8", 3.1);
   sun.position.set(-150, 400, 180);
   sun.castShadow = true;
@@ -59,6 +68,17 @@ export function createCity(host, options) {
   sun.shadow.bias = -0.00015;
   scene.add(sun);
   scene.add(sun.target);
+  // A fixed six-light pool illuminates only nearby lanterns; all other pools
+  // of light are batched with their owned, terrain-draped landscape geometry.
+  const lampLights = Array.from({ length: 6 }, () => {
+    const light = new THREE.PointLight("#ffd293", 0, 18, 2);
+    light.visible = false;
+    scene.add(light);
+    return light;
+  });
+  let exteriorLighting = lightingForMinute(options.minute ?? 660),
+    lightingKey = "";
+  const galleryLighting = lightingForMinute(660);
   const camera = new THREE.PerspectiveCamera(43, 1, 0.3, 90000);
   camera.position.set(200, 160, 200);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -100,18 +120,16 @@ export function createCity(host, options) {
   const chunkGroups = new Map(),
     chunkCache = new Map(),
     roadPaths = [],
-    markerMeshes = [],
     venueMeshes = [],
     personMeshes = [],
-    peerMeshes = [],
-    labels = [];
+    peerMeshes = [];
+  let selectedHotspotId = null;
+  const badgeItems = [];
   let markerSelection = "",
     populationCentre = null,
     venueCentre = null;
   const city = new THREE.Group();
   scene.add(city);
-  const markers = new THREE.Group();
-  scene.add(markers);
   const population = new THREE.Group();
   scene.add(population);
   let peerPopulation = new THREE.Group();
@@ -119,7 +137,8 @@ export function createCity(host, options) {
   const materials = new Map();
   const sharedMaterials = new Set([
     ...architecture.wallMaterials,
-    architecture.roofMaterial,
+    ...architecture.roofMaterials,
+    architecture.detailMaterial,
     ...atmosphere.materials,
   ]);
   function mat(c) {
@@ -162,16 +181,138 @@ export function createCity(host, options) {
     group.removeFromParent();
     group.clear();
   }
+  function selectHotspot(hotspot) {
+    if (travel.active) return;
+    selectedHotspotId = hotspot.id;
+    options.onHotspot?.(hotspot);
+  }
+  const badges = createHotspotBadgeLayer(host, { onSelect: selectHotspot });
   const indoor = createInteriorRuntime({
     scene,
     camera,
     controls,
     disposeGroup,
+    badgeHost: host,
     shirt: options.appearance?.topColor || options.shirt,
     appearance: options.appearance,
     onZone: options.onInteriorZone,
     onActivity: options.onInteriorActivity,
+    reducedMotion: reduce,
+    night: exteriorLighting.night,
   });
+  let travelPhase = null;
+  const travel = createTravelRuntime({
+    scene,
+    camera,
+    controls,
+    projectGeo,
+    geoY,
+    reducedMotion: reduce,
+    onPhase(event) {
+      travelPhase = event.phase;
+      // The last shot returns to the actual mapped destination from the
+      // original transport tableau. Its local chunks started loading before
+      // boarding, so the reveal keeps the real city geography.
+      if (event.phase === "arriving") {
+        city.visible = true;
+        population.visible = true;
+        peerPopulation.visible = true;
+      }
+      options.onTravelPhase?.(event);
+    },
+    onFinish(event) {
+      travelPhase = null;
+      restoreCity();
+      setFocus(event.to);
+      options.onTravelComplete?.(event);
+    },
+  });
+  function cancelTravel() {
+    if (!travel.active) return;
+    travel.cancel();
+    travelPhase = null;
+    restoreCity();
+  }
+  function startTravel(sequence) {
+    if (
+      destroyed ||
+      !sequence?.from ||
+      !sequence?.to ||
+      ![
+        sequence.from.lat,
+        sequence.from.lng,
+        sequence.to.lat,
+        sequence.to.lng,
+      ].every(Number.isFinite)
+    )
+      return false;
+    cancelTravel();
+    setFocus(sequence.to);
+    city.visible = population.visible = peerPopulation.visible = false;
+    if (overviewMesh) overviewMesh.visible = false;
+    badges.update(camera, {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      visible: false,
+    });
+    if (!travel.start(sequence)) {
+      restoreCity();
+      return false;
+    }
+    status("");
+    return true;
+  }
+  function syncLighting() {
+    const exterior = !indoor.active && !characterGallery;
+    const state = exterior
+      ? exteriorLighting
+      : indoor.active
+        ? interiorLightingForMinute(exteriorLighting.minute, indoor.kind)
+        : galleryLighting;
+    const key = `${exterior}:${indoor.kind || "gallery"}:${state.minute}`;
+    if (key !== lightingKey) {
+      lightingKey = key;
+      atmosphere.setLighting(state, exterior);
+      hemisphere.color.set(state.hemisphereSky);
+      hemisphere.groundColor.set(state.hemisphereGround);
+      hemisphere.intensity = state.hemisphereIntensity;
+      sun.color.set(state.sunColor);
+      sun.intensity = state.sunIntensity;
+      architecture.setNight(exterior ? state.night : 0);
+      indoor.setLighting(state.night);
+    }
+    const target = controls.target;
+    sun.position.set(
+      target.x + state.sunOffset.x,
+      target.y + state.sunOffset.y,
+      target.z + state.sunOffset.z,
+    );
+    sun.target.position.copy(target);
+    const anchors = [];
+    for (const group of chunkGroups.values()) {
+      for (const child of group.children) {
+        if (!child.userData.lighting) continue;
+        setLandscapeNight(child, exterior ? state.night : 0);
+        if (exterior && group.visible && child.visible)
+          anchors.push(...child.userData.lighting.lampAnchors);
+      }
+    }
+    const closeLamps =
+      exterior && state.night > 0.01 && camera.position.distanceTo(target) < 600
+        ? nearestLampAnchors(anchors, target)
+        : [];
+    lampLights.forEach((light, index) => {
+      const point = closeLamps[index];
+      light.visible = !!point;
+      light.intensity = point ? state.night * 110 : 0;
+      if (point) light.position.copy(point);
+    });
+  }
+  function setTime(minute) {
+    if (destroyed) return;
+    exteriorLighting = lightingForMinute(minute);
+    syncLighting();
+  }
   let pendingVenue = null;
   function flatPolygonGeometry(ring, holes = [], height = 0.06) {
     const toPath = (points, path) => {
@@ -283,7 +424,7 @@ export function createCity(host, options) {
         merged,
         kind === "water"
           ? atmosphere.water
-          : mat({ park: "#a3b785", wood: "#71896c", sand: "#e0d1ab" }[kind]),
+          : mat({ park: "#91b974", wood: "#6d9965", sand: "#e0d1ab" }[kind]),
       );
       mesh.receiveShadow = kind !== "water";
       parent.add(mesh);
@@ -453,7 +594,8 @@ export function createCity(host, options) {
       destroyed ||
       loadInProgress ||
       characterGallery ||
-      indoor.active
+      indoor.active ||
+      (travel.active && travelPhase !== "arriving")
     )
       return;
     refreshMarkers();
@@ -504,12 +646,21 @@ export function createCity(host, options) {
         changed = true;
       }
       if (!destroyed && ticket === generation) {
-        if (!venueCentre || venueCentre.distanceTo(controls.target) > 120) {
+        if (
+          changed ||
+          !venueCentre ||
+          venueCentre.distanceTo(controls.target) > 120
+        ) {
           for (const [id, group] of chunkGroups) {
             const data = chunkCache.get(id);
             if (!data) continue;
             for (const child of [...group.children])
-              if (child.userData.venueDetail) disposeGroup(child);
+              if (
+                child.userData.venueDetail ||
+                child.userData.architectureDetail
+              )
+                disposeGroup(child);
+            addNearBuildingDetails(data, group);
             const storefronts = createVenueDecorations(
               data,
               (options.hotspots || []).filter((h) => h.mapVenue),
@@ -530,6 +681,7 @@ export function createCity(host, options) {
           group.traverse((mesh) => {
             if (mesh.userData.hotspot) venueMeshes.push(mesh);
           });
+        refreshMarkers();
         if (
           pendingTeleport ||
           changed ||
@@ -572,11 +724,11 @@ export function createCity(host, options) {
   }
   async function addBuildings(chunk, ticket) {
     const groups = architecture.wallMaterials.map(() => []),
-      roofs = [];
+      roofs = architecture.roofMaterials.map(() => []);
     let count = 0;
     const cleanup = () => {
       groups.flat().forEach((g) => g.dispose());
-      roofs.forEach((g) => g.dispose());
+      roofs.flat().forEach((g) => g.dispose());
     };
     for (const building of chunk.buildings) {
       if (destroyed || ticket !== generation) {
@@ -589,7 +741,7 @@ export function createCity(host, options) {
         const geometry = buildingArchitecture(building, { projectGeo, geoY });
         if (geometry) {
           groups[geometry.paletteIndex].push(geometry.wall);
-          roofs.push(geometry.roof);
+          roofs[geometry.roofIndex].push(geometry.roof);
         }
       }
       if (count % 100 === 0)
@@ -611,18 +763,20 @@ export function createCity(host, options) {
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
     });
-    if (roofs.length) {
-      const merged = mergeGeometries(roofs, false);
-      roofs.forEach((geometry) => geometry.dispose());
-      const mesh = new THREE.Mesh(merged, architecture.roofMaterial);
+    roofs.forEach((geometries, i) => {
+      if (!geometries.length) return;
+      const merged = mergeGeometries(geometries, false);
+      geometries.forEach((geometry) => geometry.dispose());
+      const mesh = new THREE.Mesh(merged, architecture.roofMaterials[i]);
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
-    }
+    });
     const dressing = createLandscape(chunk, {
       projectGeo,
       geoY,
       focusPoint: unprojectGeo(controls.target.x, controls.target.z),
     });
+    setLandscapeNight(dressing, exteriorLighting.night);
     dressing.userData.streetDetail = true;
     group.add(dressing);
     const storefronts = createVenueDecorations(
@@ -639,6 +793,43 @@ export function createCity(host, options) {
     group.add(createLandmarks(chunk, { projectGeo, geoY }));
     city.add(group);
     chunkGroups.set(chunk.id, group);
+  }
+  function addNearBuildingDetails(chunk, group) {
+    // Ornament follows the camera, including within an already loaded chunk.
+    // Keep it bounded independently of the full geographic building mesh.
+    const nearest = chunk.buildings
+      .filter(
+        (building) =>
+          building.ring?.length >= 3 && !isLandmarkBuilding(building),
+      )
+      .map((building) => {
+        const centre = building.ring
+          .reduce((p, q) => [p[0] + q[0], p[1] + q[1]], [0, 0])
+          .map((value) => value / building.ring.length);
+        const p = projectGeo(centre);
+        return {
+          building,
+          distance:
+            (p.x - controls.target.x) ** 2 + (p.z - controls.target.z) ** 2,
+        };
+      })
+      .filter(({ distance }) => distance < 350 ** 2)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 64);
+    const geometries = nearest
+      .map(({ building }) =>
+        createBuildingDetails(building, { projectGeo, geoY }),
+      )
+      .filter(Boolean);
+    if (!geometries.length) return;
+    const merged = mergeGeometries(geometries, false);
+    geometries.forEach((geometry) => geometry.dispose());
+    if (!merged) return;
+    const details = new THREE.Mesh(merged, architecture.detailMaterial);
+    details.name = "Nearby balconies, cornices and chimneys";
+    details.userData.architectureDetail = true;
+    details.castShadow = details.receiveShadow = true;
+    group.add(details);
   }
   function canvasLabel(text, color = "#292942") {
     const cvs = document.createElement("canvas");
@@ -666,19 +857,30 @@ export function createCity(host, options) {
     markerSelection = "";
     refreshMarkers();
   }
-  function setPeers(peers) {
+  function setPeers(peers, frameSelected = false) {
     options.peers = Array.isArray(peers) ? peers : [];
+    // Presence polling records the latest roster during a journey, leaving its
+    // camera and existing peer resources untouched until the city is restored.
+    if (destroyed || travel.active) return;
     disposeGroup(peerPopulation);
     peerPopulation = new THREE.Group();
     scene.add(peerPopulation);
     peerMeshes.length = 0;
     peerActors = [];
-    if (!manifest || indoor.active) return;
+    peerPopulation.visible =
+      !characterGallery &&
+      !indoor.active &&
+      camera.position.distanceTo(controls.target) < 900;
+    if (!manifest || indoor.active || characterGallery) return;
     const shirts = ["#bd7557", "#4f7370", "#77748c", "#c19a4b", "#52735b"];
     const skins = ["#a87955", "#76513b", "#d5af8b", "#5b3d30"];
     options.peers.slice(0, 40).forEach((peer, index) => {
       if (
+        !peer ||
+        !Number.isFinite(peer.longitude) ||
+        !Number.isFinite(peer.latitude) ||
         !containsGeo(manifest.bounds, [peer.longitude, peer.latitude]) ||
+        typeof peer.handle !== "string" ||
         !peer.handle
       )
         return;
@@ -722,7 +924,7 @@ export function createCity(host, options) {
       peerMeshes.push(label);
       peerPopulation.add(character);
       peerActors.push(character);
-      if (focus.peerId === peer.id) {
+      if (frameSelected && focus?.peerId === peer.id) {
         controls.target
           .copy(character.position)
           .add(new THREE.Vector3(0, 1, 0));
@@ -753,45 +955,49 @@ export function createCity(host, options) {
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 16)
       .map((v) => v.h);
-    const selected = [...hotspots.filter((h) => !h.mapVenue), ...nearby];
-    const key = selected.map((h) => h.id).join("|");
+    const selected = [
+      ...new Map(
+        [
+          ...hotspots.filter((h) => !h.mapVenue),
+          ...nearby,
+          ...hotspots.filter((h) => h.id === selectedHotspotId),
+        ].map((h) => [h.id, h]),
+      ).values(),
+    ];
+    const items = selected.map((h) => {
+      const v = point3([h.lng, h.lat]);
+      const storefront = h.mapVenue
+        ? venueMeshes.find(
+            (mesh) =>
+              mesh.userData.hotspot?.id === h.id && mesh.userData.venueView,
+          )?.userData.venueView
+        : null;
+      if (storefront) {
+        // Anchor to the same illustrative storefront used by the close camera.
+        v.set(storefront.point.x, storefront.point.y + 0.8, storefront.point.z);
+      } else {
+        v.y += h.custom || h.mapLocation ? 5 : h.mapVenue ? 10 : 16;
+      }
+      return {
+        id: h.id,
+        name: h.name,
+        category:
+          h.custom || h.mapLocation ? "custom" : h.category || "landmark",
+        position: v,
+        value: h,
+      };
+    });
+    const key = items
+      .map(
+        ({ id, name, category, position: p }) =>
+          `${id}:${name}:${category}:${p.x}:${p.y}:${p.z}`,
+      )
+      .join("|");
     if (key === markerSelection) return;
     markerSelection = key;
-    disposeGroup(markers);
-    scene.add(markers);
-    markerMeshes.length = 0;
-    labels.length = 0;
-    for (const h of selected) {
-      const v = point3([h.lng, h.lat]);
-      const g = new THREE.Group();
-      g.position.copy(v);
-      const pin = new THREE.Mesh(
-        new THREE.SphereGeometry(1.5, 12, 8),
-        new THREE.MeshBasicMaterial({
-          color: h.custom ? "#6d896e" : h.mapVenue ? "#3e6a63" : "#292942",
-          depthTest: false,
-        }),
-      );
-      pin.position.y = 7;
-      pin.renderOrder = 6;
-      pin.userData.hotspot = h;
-      const stem = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, 5, 6),
-        mat("#292942"),
-      );
-      stem.position.y = 4;
-      g.add(stem, pin);
-      const label = canvasLabel(
-        h.name,
-        h.custom ? "#527460" : h.mapVenue ? "#3e6a63" : "#292942",
-      );
-      label.position.y = 11;
-      label.userData.hotspot = h;
-      g.add(label);
-      markers.add(g);
-      markerMeshes.push(pin, label);
-      labels.push({ group: g, pin, stem, label, hotspot: h });
-    }
+    badgeItems.length = 0;
+    badgeItems.push(...items);
+    badges.setItems(badgeItems);
   }
   function sample(line, d, side = 0) {
     const doubled =
@@ -1011,18 +1217,19 @@ export function createCity(host, options) {
     you.position.y = 2.6;
     you.scale.set(1.2, 0.27, 1);
     player.add(you);
-    setPeers(options.peers || []);
+    setPeers(options.peers || [], teleport);
   }
   function restoreCity() {
     indoor.clear();
     city.visible = true;
-    markers.visible = true;
     population.visible = true;
     peerPopulation.visible = true;
-    scene.background = new THREE.Color(atmosphere.horizon);
+    scene.background = new THREE.Color(exteriorLighting.horizon);
     atmosphere.sky.visible = true;
+    setPeers(options.peers || []);
   }
   function setFocus(next, street = false) {
+    cancelTravel();
     restoreCity();
     if (characterGallery) {
       disposeGroup(characterGallery);
@@ -1030,6 +1237,7 @@ export function createCity(host, options) {
     }
     generation++;
     focus = next;
+    selectedHotspotId = next.id || null;
     pendingVenue = !street && next.mapVenue ? next.id : null;
     const p = point3([next.lng, next.lat]);
     const distance = street ? 24 : next.range || 160;
@@ -1045,6 +1253,7 @@ export function createCity(host, options) {
     sun.target.position.copy(p);
     controls.update();
     refreshMarkers();
+    setPeers(options.peers || [], !street);
     if (manifest) {
       return loadChunks();
     }
@@ -1054,53 +1263,14 @@ export function createCity(host, options) {
     overviewLoading = true;
     try {
       const data = await geographyFile(
-        "/data/lisbon-overview.json.gz",
+        options.city?.data.overview || "/data/lisbon-overview.json.gz",
         abort.signal,
       );
       if (destroyed) return;
-      const boxes = data.buildings;
-      const geometry = new THREE.BoxGeometry(1, 1, 1);
-      const colors = [],
-        roofColor = new THREE.Color("#cf8967");
-      for (let i = 0; i < geometry.attributes.position.count; i++) {
-        const color =
-          geometry.attributes.normal.getY(i) > 0.5
-            ? roofColor
-            : new THREE.Color("#ffffff");
-        colors.push(color.r, color.g, color.b);
-      }
-      geometry.setAttribute(
-        "color",
-        new THREE.Float32BufferAttribute(colors, 3),
-      );
-      const mesh = new THREE.InstancedMesh(
-        geometry,
-        new THREE.MeshStandardMaterial({
-          color: "#ffffff",
-          vertexColors: true,
-          roughness: 0.95,
-        }),
-        boxes.length,
-      );
-      const dummy = new THREE.Object3D();
-      const palette = [
-        "#e2d2b6",
-        "#d0a186",
-        "#e5cf9f",
-        "#bdccc1",
-        "#d7d0bb",
-        "#e7d9c1",
-      ].map((color) => new THREE.Color(color));
-      boxes.forEach((b, i) => {
-        const y = geoY(unprojectGeo(b[0], b[1]));
-        dummy.position.set(b[0], y + b[4] / 2, b[1]);
-        dummy.scale.set(Math.max(1, b[2]), b[4], Math.max(1, b[3]));
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-        mesh.setColorAt(i, palette[i % palette.length]);
+      const mesh = createBuildingOverview(data.buildings, {
+        geoY,
+        unprojectGeo,
       });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.instanceColor.needsUpdate = true;
       scene.add(mesh);
       overviewMesh = mesh;
     } catch {
@@ -1109,6 +1279,7 @@ export function createCity(host, options) {
     }
   }
   function overview() {
+    cancelTravel();
     restoreCity();
     generation++;
     if (characterGallery) {
@@ -1149,6 +1320,7 @@ export function createCity(host, options) {
     down = { x: e.clientX, y: e.clientY };
   }
   function pointerUp(e) {
+    if (travel.active) return;
     if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 7) return;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(
@@ -1164,12 +1336,9 @@ export function createCity(host, options) {
       }
       return false;
     };
-    const hit = ray.intersectObjects(
-      [...markerMeshes, ...venueMeshes].filter(visible),
-      false,
-    )[0];
+    const hit = ray.intersectObjects(venueMeshes.filter(visible), false)[0];
     if (hit) {
-      options.onHotspot?.(hit.object.userData.hotspot);
+      selectHotspot(hit.object.userData.hotspot);
       return;
     }
     const personHit =
@@ -1210,12 +1379,14 @@ export function createCity(host, options) {
     if (destroyed) return;
     const dt = Math.min((now - lastTime) / 1000 || 0, 0.05);
     lastTime = now;
-    controls.update();
+    if (!travel.active) controls.update();
+    travel.update(dt);
     indoor.update(dt, motion);
     if (
       motion &&
       !characterGallery &&
       !indoor.active &&
+      !travel.active &&
       camera.position.distanceTo(controls.target) < 900
     ) {
       for (const a of agents) {
@@ -1232,7 +1403,7 @@ export function createCity(host, options) {
         v.group.rotation.y = p.angle;
       }
     }
-    if (player && !indoor.active) {
+    if (player && !indoor.active && !travel.active) {
       const diff = playerTarget.clone().sub(player.position),
         distance = diff.length();
       if (distance > 0.1) {
@@ -1244,60 +1415,51 @@ export function createCity(host, options) {
       }
       animateCharacter(player, now / 1000, motion && distance > 0.1);
     }
-    if (!indoor.active)
+    if (
+      !indoor.active &&
+      peerPopulation.visible &&
+      (!travel.active || travelPhase === "arriving")
+    )
       peerActors.forEach((peer, index) =>
         animateCharacter(peer, now / 1000 + index * 0.37, false),
       );
     const range = camera.position.distanceTo(controls.target);
-    population.visible = !characterGallery && !indoor.active && range < 900;
-    peerPopulation.visible = !characterGallery && !indoor.active && range < 900;
+    population.visible = peerPopulation.visible =
+      !characterGallery &&
+      !indoor.active &&
+      (!travel.active || travelPhase === "arriving") &&
+      range < 900;
     renderer.shadowMap.enabled = range < 1200;
     atmosphere.update(
       camera,
       dt,
       motion && !characterGallery && !indoor.active,
     );
-    const lightTarget = controls.target;
-    sun.position.set(
-      lightTarget.x - 260,
-      lightTarget.y + 460,
-      lightTarget.z + 280,
-    );
-    sun.target.position.copy(lightTarget);
     const shadowRange = Math.max(80, Math.min(420, range * 0.75));
     sun.shadow.camera.left = sun.shadow.camera.bottom = -shadowRange;
     sun.shadow.camera.right = sun.shadow.camera.top = shadowRange;
     sun.shadow.camera.updateProjectionMatrix();
     scene.fog.near = Math.max(1800, range * 1.2);
     scene.fog.far = Math.max(13000, range * 4);
-    if (range > 2200 && !overviewMesh) loadOverview();
+    if (range > 2200 && !overviewMesh && !travel.active) loadOverview();
     for (const group of chunkGroups.values()) {
       group.visible = range < 6000;
       for (const child of group.children)
         if (child.userData.streetDetail) child.visible = range < 2300;
+        else if (child.userData.architectureDetail) child.visible = range < 900;
     }
-    if (overviewMesh) overviewMesh.visible = range > 2200 && !characterGallery;
-    const seenAreas = new Set();
-    for (const m of labels) {
-      const scale = Math.max(
-        m.hotspot.mapVenue ? 0.22 : 0.4,
-        Math.min(180, range / 160),
-      );
-      m.label.scale.set(24 * scale, 5.3 * scale, 1);
-      m.label.position.y = 12 * scale;
-      m.pin.scale.setScalar(Math.max(1, scale * 0.8));
-      m.pin.position.y = 7 * scale;
-      m.stem.visible = scale < 3;
-      const far = m.group.position.distanceTo(controls.target);
-      m.label.visible =
-        range > 1800 || (range > 35 && far < Math.max(60, range * 2));
-      const area = m.hotspot.area || m.hotspot.id;
-      if (range > 5000) {
-        m.label.visible = m.label.visible && !seenAreas.has(area);
-        seenAreas.add(area);
-      }
-      m.pin.visible = range < 5000 ? m.label.visible : true;
-    }
+    if (overviewMesh)
+      overviewMesh.visible =
+        range > 2200 &&
+        !characterGallery &&
+        (!travel.active || travelPhase === "arriving");
+    syncLighting();
+    badges.update(camera, {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      visible: !characterGallery && !indoor.active && !travel.active,
+      selectedId: selectedHotspotId,
+    });
     if (manifest && now - lastChunkUpdate > 2200) {
       lastChunkUpdate = now;
       loadChunks();
@@ -1308,13 +1470,17 @@ export function createCity(host, options) {
   frame = requestAnimationFrame(animate);
   status("Loading real Lisbon geography…");
   const ready = Promise.all([
-    geographyFile("/data/lisbon-manifest.json.gz", abort.signal),
-    geographyFile("/data/lisbon-terrain.json.gz", abort.signal).catch(
-      () => null,
+    geographyFile(
+      options.city?.data.manifest || "/data/lisbon-manifest.json.gz",
+      abort.signal,
     ),
+    geographyFile(
+      options.city?.data.terrain || "/data/lisbon-terrain.json.gz",
+      abort.signal,
+    ).catch(() => null),
   ])
     .then(async ([data, dem]) => {
-      if (destroyed) return;
+      if (destroyed) return false;
       manifest = data;
       terrain = dem;
       coastline = coastRegions(manifest);
@@ -1324,19 +1490,22 @@ export function createCity(host, options) {
       setMarkers(options.hotspots || []);
       status("Loading the streets around you…");
       await setFocus(focus);
-      if (destroyed) return;
+      if (destroyed) return false;
       setPeers(options.peers || []);
       status("");
       options.onReady?.();
       if (options.interior) setInterior(options.interior);
+      return true;
     })
     .catch(() => {
       if (!destroyed)
         status(
           "City geography could not load. Try reloading; trip experiences still work.",
         );
+      return false;
     });
   function characters() {
+    cancelTravel();
     if (!player) return;
     if (characterGallery) disposeGroup(characterGallery);
     characterGallery = new THREE.Group();
@@ -1368,7 +1537,6 @@ export function createCity(host, options) {
     characterGallery.add(floor);
     scene.add(characterGallery);
     city.visible = false;
-    markers.visible = false;
     population.visible = false;
     peerPopulation.visible = false;
     scene.background = new THREE.Color("#dcded5");
@@ -1388,6 +1556,7 @@ export function createCity(host, options) {
     controls.update();
   }
   function people() {
+    cancelTravel();
     if (pendingTeleport) return;
     restoreCity();
     if (characterGallery) {
@@ -1423,14 +1592,49 @@ export function createCity(host, options) {
     controls.update();
   }
   function frameVenue(view) {
-    if (indoor.active || characterGallery) return;
+    if (indoor.active || characterGallery || travel.active) return;
     const { point, normal, groundY } = view;
     const footprints = [...chunkCache.values()]
       .flatMap((c) => c.buildings || [])
       .map((b) => b.ring.map(projectGeo))
-      .filter((ring) =>
-        ring.some((p) => Math.hypot(p.x - point.x, p.z - point.z) < 60),
-      );
+      .filter((ring) => {
+        const west = Math.min(...ring.map((p) => p.x)),
+          east = Math.max(...ring.map((p) => p.x)),
+          north = Math.min(...ring.map((p) => p.z)),
+          south = Math.max(...ring.map((p) => p.z));
+        return (
+          Math.hypot(
+            Math.max(west - point.x, 0, point.x - east),
+            Math.max(north - point.z, 0, point.z - south),
+          ) < 90
+        );
+      });
+    if (focus?.category === "beach" && coastline) {
+      const framed = beachCameraView({
+        point: projectGeo([focus.lng, focus.lat]),
+        groundY,
+        waterAt: (p) => coastline.waterAt(unprojectGeo(p.x, p.z)),
+        elevationAt: (p) => geoY(unprojectGeo(p.x, p.z)),
+        footprints,
+        aspect: camera.aspect,
+      });
+      if (framed) {
+        controls.target.set(framed.target.x, framed.target.y, framed.target.z);
+        camera.position.set(framed.camera.x, framed.camera.y, framed.camera.z);
+        // The freestanding poster faces the approaching visitor; rotating its
+        // plane keeps the atlas readable from land without moving its source.
+        const sign = venueMeshes.find(
+          (mesh) => mesh.userData.hotspot.id === focus.id,
+        );
+        if (sign)
+          sign.rotation.y = Math.atan2(
+            framed.camera.x - point.x,
+            framed.camera.z - point.z,
+          );
+        controls.update();
+        return;
+      }
+    }
     const blocked = (p) =>
       footprints.some((ring) => {
         let inside = false;
@@ -1470,6 +1674,7 @@ export function createCity(host, options) {
     controls.update();
   }
   function setInterior(next) {
+    cancelTravel();
     options.interior = next;
     if (!next) {
       restoreCity();
@@ -1483,11 +1688,7 @@ export function createCity(host, options) {
     }
     generation++;
     indoor.enter(next, point3([focus.lng, focus.lat]));
-    city.visible =
-      markers.visible =
-      population.visible =
-      peerPopulation.visible =
-        false;
+    city.visible = population.visible = peerPopulation.visible = false;
     atmosphere.sky.visible = false;
     scene.background = new THREE.Color("#d9dfd3");
     status("");
@@ -1495,6 +1696,10 @@ export function createCity(host, options) {
   return {
     ready,
     setFocus,
+    startTravel,
+    skipTravel: () => travel.skip(),
+    cancelTravel,
+    setTime,
     setMarkers,
     setPeers,
     overview,
@@ -1514,6 +1719,7 @@ export function createCity(host, options) {
       motion = value;
     },
     zoom(multiplier) {
+      if (travel.active) return;
       camera.position
         .sub(controls.target)
         .multiplyScalar(multiplier)
@@ -1521,6 +1727,7 @@ export function createCity(host, options) {
       controls.update();
     },
     rotate(angle) {
+      if (travel.active) return;
       const offset = camera.position.clone().sub(controls.target);
       offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
       camera.position.copy(controls.target).add(offset);
@@ -1532,6 +1739,10 @@ export function createCity(host, options) {
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
+      badges.dispose();
+      indoor.dispose();
+      travel.dispose();
+      lampLights.forEach((light) => light.dispose());
       renderer.domElement.removeEventListener("pointerdown", pointerDown);
       renderer.domElement.removeEventListener("pointerup", pointerUp);
       disposeGroup(scene);

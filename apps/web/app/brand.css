@@ -1,0 +1,483 @@
+/* ROAM's city-independent palette. Lisbon is the first playable chapter. */
+:root {
+  --roam-cobalt: #2456d8;
+  --roam-cobalt-dark: #193faf;
+  --roam-coral: #f47f6d;
+  --roam-lime: #d7ee83;
+  --roam-mint: #c9efdf;
+  --roam-blue-soft: #eaf0ff;
+  --roam-coral-soft: #fff0e9;
+  --roam-ink: #213052;
+  --roam-muted: #5f6a80;
+  --ink: var(--roam-ink);
+  --muted: var(--roam-muted);
+  --paper: #fffefb;
+  --soft: var(--roam-blue-soft);
+  --line: #dce3ef;
+  --accent: var(--roam-cobalt);
+  --green: #327159;
+  font-family: var(--font-roam-app), "Avenir Next", "Segoe UI", sans-serif;
+  background: #f6f7fb;
+}
+
+h1,
+h2,
+h3,
+.brand,
+.landing-brand,
+.auth-brand,
+.mission-symbol,
+.nav button,
+.roam-badge-label,
+.eyebrow {
+  font-family: var(--font-roam-game), var(--font-roam-app), sans-serif;
+}
+.clock,
+.wallet,
+.trip-stat,
+.travel-overlay {
+  font-variant-numeric: tabular-nums;
+}
+
+.brand,
+.landing-brand,
+.auth-brand {
+  font-weight: 850;
+  letter-spacing: -1.8px;
+}
+.brand,
+.landing-brand {
+  color: var(--roam-cobalt);
+}
+.brand span,
+.landing-brand span,
+.auth-brand span {
+  letter-spacing: 1.1px;
+  font-weight: 700;
+}
+.brand span,
+.landing-brand span {
+  color: var(--roam-ink);
+}
+.primary {
+  background: var(--roam-cobalt);
+  box-shadow: 0 4px 0 #193faf1c;
+}
+.secondary {
+  color: var(--roam-cobalt-dark);
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline-color: var(--roam-cobalt);
+}
+.card,
+.clock,
+.wallet,
+.world-controls {
+  border: 1px solid #ffffffb3;
+  box-shadow: 0 6px 24px #21305216;
+}
+.wallet {
+  min-height: 44px;
+  color: var(--roam-cobalt-dark);
+  background: var(--roam-blue-soft);
+}
+.clock svg {
+  color: #b55829;
+}
+.welcome.card {
+  border: 1px solid #ffffff;
+  border-top: 6px solid var(--roam-coral);
+  background: #fffefbf5;
+  box-shadow: 0 12px 36px #2130521f;
+}
+.welcome .eyebrow {
+  color: var(--roam-cobalt-dark);
+}
+.welcome h1 {
+  color: var(--roam-ink);
+  letter-spacing: -1.9px;
+}
+.welcome-details span:first-child svg {
+  color: var(--roam-cobalt);
+}
+.welcome-details span:last-child svg {
+  color: #c15444;
+}
+.mission-symbol,
+.object-icon {
+  color: var(--roam-cobalt-dark);
+  background: var(--roam-lime);
+}
+.nav button[aria-pressed="true"],
+.scenario-tabs button[aria-pressed="true"],
+.location-entry-tabs button[aria-pressed="true"] {
+  color: #fff;
+  background: var(--roam-cobalt);
+}
+.map-tools button {
+  min-height: 44px;
+  color: var(--roam-cobalt-dark);
+  border: 1px solid #dce3ef;
+}
+.map-tools button:first-child {
+  background: var(--roam-lime);
+  color: var(--roam-ink);
+  border-color: #c9e07a;
+}
+.dialog-head {
+  padding-bottom: 14px;
+  border-bottom: 3px solid var(--roam-coral);
+}
+.dialog-head h2 {
+  color: var(--roam-ink);
+}
+.dialog-head .eyebrow {
+  color: var(--roam-cobalt-dark);
+}
+.setup-form .interest-options button:nth-child(3n + 1) {
+  background: var(--roam-mint);
+}
+.setup-form .interest-options button:nth-child(3n + 2) {
+  background: var(--roam-coral-soft);
+}
+.setup-form .segments button[aria-pressed="true"] {
+  color: #fff;
+  background: var(--roam-cobalt);
+  border-color: var(--roam-cobalt);
+}
+.swatches button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.auth-account {
+  background: #203fb8f2;
+}
+.auth-account button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* The cream veil keeps the headline readable while the city retains colour. */
+.landing-page {
+  color: var(--roam-ink);
+  background: #b9e0ec;
+}
+.landing-shade {
+  background:
+    linear-gradient(
+      90deg,
+      #fffaf2f5 0%,
+      #fffaf2f0 22%,
+      #fffaf2c4 41%,
+      #fffaf23d 64%,
+      #fffaf200 83%
+    ),
+    linear-gradient(180deg, #fffdf943 0%, transparent 42%, #f5faf43b 100%);
+}
+.landing-brand {
+  font-size: 34px;
+}
+.landing-login {
+  color: var(--roam-cobalt-dark);
+  border-color: #c2cef0;
+  background: #fffefbe8;
+}
+.landing-create,
+.landing-primary {
+  color: #fff;
+  background: var(--roam-cobalt);
+  box-shadow: 0 5px 0 #193faf21;
+}
+.landing-hero {
+  width: min(580px, calc(100% - 48px));
+}
+.landing-kicker {
+  color: #28523f;
+  border-color: #a0d4bc;
+  background: var(--roam-mint);
+  letter-spacing: 0.8px;
+}
+.landing-hero h1 {
+  margin-top: 23px;
+  color: var(--roam-cobalt);
+  font-weight: 800;
+  font-size: clamp(54px, 7.2vw, 100px);
+  line-height: 0.98;
+  text-shadow: none;
+}
+.landing-story {
+  color: var(--roam-ink);
+}
+.landing-hero > p {
+  max-width: 430px;
+  color: #4c5971;
+  line-height: 1.65;
+}
+.landing-secondary {
+  color: var(--roam-cobalt-dark);
+  border-color: #bfcbee;
+  background: #fffefbbd;
+}
+.landing-promises {
+  color: #4c5971;
+  gap: 15px;
+}
+.landing-promises span:first-child svg {
+  color: var(--roam-cobalt);
+}
+.landing-promises span:nth-child(2) svg {
+  color: #b24d3f;
+}
+.landing-promises span:last-child svg {
+  color: #327159;
+}
+.landing-locations {
+  border-color: #ffffffd9;
+  background: #fffefbed;
+  color: var(--roam-ink);
+  box-shadow: 0 10px 35px #2130521a;
+}
+.landing-locations > span {
+  color: var(--roam-cobalt-dark);
+}
+.landing-locations button {
+  min-height: 44px;
+  color: #394b6d;
+  background: var(--roam-blue-soft);
+}
+.landing-locations button[aria-pressed="true"] {
+  color: var(--roam-ink);
+  background: var(--roam-lime);
+}
+.landing-locations small {
+  color: #5f6a80;
+}
+
+.auth-story {
+  color: #fffefb;
+  background:
+    radial-gradient(ellipse at 102% 105%, #f47f6d 0 16%, #f47f6d00 16.2%),
+    radial-gradient(ellipse at -14% 8%, #496ce3 0 36%, transparent 36.2%),
+    linear-gradient(140deg, #2456d8 0%, #204bc1 65%, #183eab 100%);
+}
+.auth-story::after {
+  border-color: #d7ee8370;
+  box-shadow: 0 0 0 44px #c9efdf12;
+}
+.auth-brand span {
+  color: #e9f0ff;
+}
+.auth-story-copy .eyebrow {
+  display: inline-flex;
+  padding: 7px 10px;
+  color: var(--roam-ink);
+  background: var(--roam-lime);
+  border-radius: 7px;
+  font-size: 9px;
+}
+.auth-story-copy h1 {
+  font-size: clamp(48px, 5.7vw, 78px);
+  letter-spacing: -3.4px;
+  text-wrap: balance;
+}
+.auth-story-copy > p {
+  color: #edf2ff;
+}
+.auth-place-row span {
+  border-color: #ffffff52;
+  background: #ffffff0d;
+}
+.auth-place-row span:nth-child(2) {
+  color: var(--roam-lime);
+}
+.auth-panel {
+  background: #fffefb;
+}
+.auth-card > .eyebrow {
+  color: var(--roam-cobalt-dark);
+}
+.auth-card h2 {
+  color: var(--roam-ink);
+  font-size: 35px;
+}
+.auth-type button {
+  color: var(--roam-ink);
+  background: #f4f6fb;
+  border-color: #dde3ef;
+}
+.auth-type button[aria-pressed="true"] {
+  background: var(--roam-blue-soft);
+  border-color: var(--roam-cobalt);
+  box-shadow: inset 0 0 0 1px var(--roam-cobalt);
+}
+.auth-type button[aria-pressed="true"] svg {
+  color: var(--roam-cobalt);
+}
+.auth-check input {
+  accent-color: var(--roam-cobalt);
+}
+.auth-form input:not([type="checkbox"]) {
+  border-color: #dce3ef;
+}
+.auth-form input:not([type="checkbox"]):focus {
+  border-color: var(--roam-cobalt);
+}
+.auth-switch a {
+  color: var(--roam-cobalt-dark);
+}
+
+.world-time {
+  position: absolute;
+  z-index: 4;
+  top: 104px;
+  right: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #dae3f0;
+  border-radius: 12px;
+  color: var(--roam-cobalt-dark);
+  background: #fffefbf2;
+  box-shadow: 0 4px 18px #21305213;
+  font-size: 10px;
+}
+.world-time select {
+  min-width: 0;
+  min-height: 44px;
+  max-width: 145px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+.world-time > span {
+  border-left: 1px solid #dae3f0;
+  padding-left: 8px;
+  color: #53627b;
+  font-variant-numeric: tabular-nums;
+}
+.world-time:has(select:focus-visible) {
+  outline: 3px solid var(--roam-cobalt);
+  outline-offset: 3px;
+}
+.landing-map .world-time {
+  top: auto;
+  right: auto;
+  left: 28px;
+  bottom: 38px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .primary:not(:disabled):hover,
+  .landing-create:hover,
+  .landing-primary:hover {
+    background: var(--roam-cobalt-dark);
+  }
+  .landing-login:hover,
+  .landing-secondary:hover {
+    background: #f0f4ff;
+  }
+}
+@media (max-width: 900px) {
+  .landing-shade {
+    background: linear-gradient(
+      90deg,
+      #fffaf2f2 0%,
+      #fffaf2de 35%,
+      #fffaf282 69%,
+      #fffaf224 100%
+    );
+  }
+}
+@media (max-width: 620px) {
+  .landing-shade {
+    background: linear-gradient(
+      180deg,
+      #fffaf2f2 0%,
+      #fffaf2f2 68%,
+      #fffaf299 80%,
+      #fffaf238 92%,
+      #fffaf210 100%
+    );
+  }
+  .landing-brand {
+    font-size: 29px;
+  }
+  .landing-brand span {
+    font-size: 6px;
+    letter-spacing: 0.8px;
+  }
+  .landing-login,
+  .landing-create {
+    min-height: 44px;
+  }
+  .landing-hero {
+    width: calc(100% - 40px);
+  }
+  .landing-hero h1 {
+    font-size: clamp(52px, 14.5vw, 72px);
+    letter-spacing: -2.8px;
+  }
+  .landing-kicker {
+    font-size: 8px;
+    padding: 8px 9px;
+  }
+  .auth-story-copy h1 {
+    font-size: 45px;
+    letter-spacing: -2.3px;
+  }
+  .auth-card h2 {
+    font-size: 30px;
+  }
+}
+@media (max-width: 600px) {
+  .world-time {
+    top: 141px;
+    right: 17px;
+    gap: 5px;
+    padding: 0 8px;
+    min-width: 88px;
+  }
+  .world-time select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    opacity: 0;
+    font-size: 14px;
+  }
+  .world-time > span {
+    padding-left: 5px;
+  }
+  .game:has(.welcome) .world-time {
+    top: 187px;
+  }
+  .landing-map .world-time {
+    top: auto;
+    right: 20px;
+    left: auto;
+    bottom: 96px;
+  }
+}
+@media (max-height: 700px) and (max-width: 620px) {
+  .landing-page {
+    min-height: 720px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  a {
+    transition: none;
+  }
+  button:active:not(:disabled) {
+    transform: none;
+  }
+}

@@ -6,10 +6,16 @@ import { LogOut, UserRound } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
 import { MultiplayerProvider } from "../lib/multiplayer";
 
-export default function AuthBoundary({ children }: { children: ReactNode }) {
+export default function AuthBoundary({
+  children,
+}: {
+  children: ReactNode | ((user: AuthUser) => ReactNode);
+}) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -31,9 +37,20 @@ export default function AuthBoundary({ children }: { children: ReactNode }) {
   }, [router]);
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
-    router.replace("/login");
-    router.refresh();
+    if (signingOut) return;
+    setSigningOut(true);
+    setLogoutError("");
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("unavailable");
+      setUser(null);
+      router.replace("/login");
+      router.refresh();
+    } catch {
+      setLogoutError("Sign out failed. Please try again.");
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   if (unavailable) {
@@ -56,14 +73,22 @@ export default function AuthBoundary({ children }: { children: ReactNode }) {
   }
   return (
     <>
-      <MultiplayerProvider user={user}>{children}</MultiplayerProvider>
+      <MultiplayerProvider user={user}>
+        {typeof children === "function" ? children(user) : children}
+      </MultiplayerProvider>
       <aside className="auth-account" aria-label="Active account">
         <UserRound size={16} />
         <span>
           <strong>@{user.handle}</strong>
           <small>{user.userType === "local" ? "Local" : "Tourist"}</small>
         </span>
-        <button onClick={logout} aria-label="Sign out" title="Sign out">
+        {logoutError && <span role="alert">{logoutError}</span>}
+        <button
+          onClick={logout}
+          aria-label="Sign out"
+          title="Sign out"
+          disabled={signingOut}
+        >
           <LogOut size={16} />
         </button>
       </aside>
