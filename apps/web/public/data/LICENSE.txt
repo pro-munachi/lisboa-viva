@@ -1,9 +1,16 @@
-OpenStreetMap-derived road, coastline, surface and building geometry:
+OpenStreetMap-derived road, coastline, surface and building geometry,
+named venue directory, and street/locality name index:
 Copyright OpenStreetMap contributors.
 Licensed under Open Database License 1.0 (ODbL).
 https://www.openstreetmap.org/copyright
 https://opendatacommons.org/licenses/odbl/1-0/
-The downloadable gzip-compressed JSON files make the derived database available.
+The downloadable gzip-compressed geography JSON files and uncompressed
+lisbon-venues.json and lisbon-locations.json make the derived database available.
+Named venue and street/locality identities, coordinates, addresses and website
+tags come from the recorded OSM snapshot. Street/locality focus positions may
+be approximate and do not establish surveyed entrances or exact addresses.
+Original decorative storefront art and simulation code do not change the
+license of this derived database.
 
 Terrain grid:
 Produced using Copernicus data and information funded by the European Union — EU-DEM layers.

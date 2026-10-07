@@ -8,6 +8,22 @@ import {
   containsGeo,
 } from "./geography";
 import { createCharacter, animateCharacter } from "./characters";
+import {
+  createArchitecturePalette,
+  buildingArchitecture,
+} from "./city-architecture";
+import { createLandscape } from "./city-landscape";
+import { createLandmarks, isLandmarkBuilding } from "./city-landmarks";
+import { createCityAtmosphere } from "./city-atmosphere";
+import { coastRegions } from "./city-water";
+import { drapedPolygonGeometry } from "./city-surfaces";
+import { createVenueDecorations } from "./city-venues";
+import { createInteriorRuntime } from "./city-interior-runtime";
+import {
+  createLocalWalkerProfiles,
+  advanceLocalWalker,
+  sampleLocalWalker,
+} from "./city-population";
 
 async function geographyFile(url, signal) {
   const r = await fetch(url, { signal });
@@ -18,42 +34,29 @@ async function geographyFile(url, signal) {
     ).json();
   return r.json();
 }
-const facadeColors = [
-  "#e5d9c1",
-  "#d6aa8c",
-  "#e0e1d2",
-  "#d6c9a9",
-  "#c7c8bc",
-  "#e8d8c5",
-];
-const roadColor = (kind) =>
-  kind === "rail"
-    ? "#655e53"
-    : ["footway", "pedestrian", "steps", "path"].includes(kind)
-      ? "#d3cfc1"
-      : "#a5aaa9";
 export function createCity(host, options) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.setClearColor("#c7dee8");
+  renderer.setClearColor("#dae5e0");
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   host.append(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#c7dee8");
-  scene.fog = new THREE.Fog("#c7dee8", 2500, 18000);
-  scene.add(new THREE.HemisphereLight("#fff6e7", "#7e9074", 2.4));
-  const sun = new THREE.DirectionalLight("#fff0d6", 2.8);
+  const atmosphere = createCityAtmosphere(renderer, scene);
+  const architecture = createArchitecturePalette();
+  scene.add(new THREE.HemisphereLight("#e4f1ff", "#ae9c78", 1.65));
+  const sun = new THREE.DirectionalLight("#fff0d8", 3.1);
   sun.position.set(-150, 400, 180);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -150;
   sun.shadow.camera.right = 150;
   sun.shadow.camera.top = 150;
   sun.shadow.camera.bottom = -150;
-  sun.shadow.camera.far = 1200;
-  sun.shadow.normalBias = 0.4;
+  sun.shadow.camera.far = 1800;
+  sun.shadow.normalBias = 0.16;
+  sun.shadow.bias = -0.00015;
   scene.add(sun);
   scene.add(sun.target);
   const camera = new THREE.PerspectiveCamera(43, 1, 0.3, 90000);
@@ -78,6 +81,7 @@ export function createCity(host, options) {
     frame = 0,
     manifest = null,
     terrain = null,
+    coastline = null,
     focus = options.focus,
     player = null,
     playerTarget = null,
@@ -91,11 +95,17 @@ export function createCity(host, options) {
     overviewLoading = false,
     mode = "orbit",
     motion = !reduce;
+  let pendingTeleport = true;
   const chunkGroups = new Map(),
     chunkCache = new Map(),
     roadPaths = [],
     markerMeshes = [],
+    venueMeshes = [],
+    personMeshes = [],
     labels = [];
+  let markerSelection = "",
+    populationCentre = null,
+    venueCentre = null;
   const city = new THREE.Group();
   scene.add(city);
   const markers = new THREE.Group();
@@ -103,12 +113,20 @@ export function createCity(host, options) {
   const population = new THREE.Group();
   scene.add(population);
   const materials = new Map();
+  const sharedMaterials = new Set([
+    ...architecture.wallMaterials,
+    architecture.roofMaterial,
+    ...atmosphere.materials,
+  ]);
   function mat(c) {
-    if (!materials.has(c))
-      materials.set(
-        c,
-        new THREE.MeshStandardMaterial({ color: c, roughness: 0.92 }),
-      );
+    if (!materials.has(c)) {
+      const material = new THREE.MeshStandardMaterial({
+        color: c,
+        roughness: 0.88,
+      });
+      materials.set(c, material);
+      sharedMaterials.add(material);
+    }
     return materials.get(c);
   }
   const geoY = (p) => surfaceElevationAt(p, terrain);
@@ -124,10 +142,11 @@ export function createCity(host, options) {
       mats = new Set(),
       textures = new Set();
     group.traverse((o) => {
+      if (o.isInstancedMesh) o.dispose();
       if (o.geometry) geometries.add(o.geometry);
       if (o.material)
         for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-          if (![...materials.values()].includes(m)) {
+          if (!sharedMaterials.has(m)) {
             mats.add(m);
             if (m.map) textures.add(m.map);
           }
@@ -139,72 +158,116 @@ export function createCity(host, options) {
     group.removeFromParent();
     group.clear();
   }
+  const indoor = createInteriorRuntime({
+    scene,
+    camera,
+    controls,
+    disposeGroup,
+    shirt: options.shirt,
+    onZone: options.onInteriorZone,
+    onActivity: options.onInteriorActivity,
+  });
+  let pendingVenue = null;
+  function flatPolygonGeometry(ring, holes = [], height = 0.06) {
+    const toPath = (points, path) => {
+      points
+        .map(projectGeo)
+        .forEach((p, i) =>
+          i ? path.lineTo(p.x, -p.z) : path.moveTo(p.x, -p.z),
+        );
+      return path;
+    };
+    const shape = toPath(ring, new THREE.Shape());
+    shape.holes = holes.map((hole) => toPath(hole, new THREE.Path()));
+    const indexed = new THREE.ShapeGeometry(shape);
+    indexed.rotateX(-Math.PI / 2);
+    indexed.translate(0, height, 0);
+    const geometry = indexed.toNonIndexed();
+    indexed.dispose();
+    return geometry;
+  }
   function terrainMesh() {
     const bounds = manifest.bounds;
-    const cols = terrain ? terrain.width : 64,
-      rows = terrain ? terrain.height : 40;
-    const positions = [],
-      indices = [],
-      colors = [];
-    const c = new THREE.Color();
-    for (let y = 0; y < rows; y++)
-      for (let x = 0; x < cols; x++) {
-        const p = [
-          bounds[0] + ((bounds[2] - bounds[0]) * x) / (cols - 1),
-          bounds[3] - ((bounds[3] - bounds[1]) * y) / (rows - 1),
+    const land = coastline.land.length
+      ? coastline.land
+      : [
+          {
+            ring: [
+              [bounds[0], bounds[1]],
+              [bounds[2], bounds[1]],
+              [bounds[2], bounds[3]],
+              [bounds[0], bounds[3]],
+            ],
+            holes: [],
+          },
         ];
-        const v = point3(p);
-        positions.push(v.x, v.y - 0.25, v.z);
-        c.set(v.y > 140 ? "#81977b" : v.y > 50 ? "#a8b395" : "#c8cbb6");
-        colors.push(c.r, c.g, c.b);
-      }
-    for (let y = 0; y < rows - 1; y++)
-      for (let x = 0; x < cols - 1; x++) {
-        const a = y * cols + x,
-          b = a + 1,
-          d = a + cols,
-          e = d + 1;
-        indices.push(a, d, b, b, d, e);
-      }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-    g.setIndex(indices);
-    g.computeVertexNormals();
+    const geometries = land.map((polygon) =>
+      drapedPolygonGeometry(
+        polygon.ring,
+        {
+          projectGeo,
+          unprojectGeo,
+          geoY,
+          terrain,
+          holes: polygon.holes,
+        },
+        -0.25,
+      ),
+    );
+    const geometry = mergeGeometries(geometries, false);
+    geometries.forEach((g) => g.dispose());
+    const colors = [],
+      color = new THREE.Color(),
+      positions = geometry.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      const y = positions.getY(i),
+        x = positions.getX(i),
+        z = positions.getZ(i);
+      color.set(y > 140 ? "#789077" : y > 50 ? "#a2ae89" : "#c5c7ac");
+      color.multiplyScalar(
+        0.95 + Math.sin(x * 0.004) * Math.cos(z * 0.006) * 0.035,
+      );
+      colors.push(color.r, color.g, color.b);
+    }
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     const mesh = new THREE.Mesh(
-      g,
+      geometry,
       new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }),
     );
     mesh.receiveShadow = true;
     mesh.userData.ground = true;
     city.add(mesh);
+    const waterGeometries = coastline.water.map((polygon) =>
+      flatPolygonGeometry(polygon.ring, polygon.holes),
+    );
+    if (waterGeometries.length) {
+      const merged = mergeGeometries(waterGeometries, false);
+      waterGeometries.forEach((g) => g.dispose());
+      const water = new THREE.Mesh(merged, atmosphere.water);
+      water.name = "Tagus estuary and Atlantic coast";
+      city.add(water);
+    }
   }
   function polygonGeometry(ring, yOffset = 0) {
-    const shape = new THREE.Shape();
-    const points = ring.map((p) => projectGeo(p));
-    points.forEach((p, i) =>
-      i ? shape.lineTo(p.x, -p.z) : shape.moveTo(p.x, -p.z),
+    return drapedPolygonGeometry(
+      ring,
+      { projectGeo, unprojectGeo, geoY, terrain },
+      yOffset,
     );
-    const g = new THREE.ShapeGeometry(shape);
-    g.rotateX(-Math.PI / 2);
-    const pos = g.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const p = unprojectGeo(pos.getX(i), pos.getZ(i));
-      pos.setY(i, geoY(p) + yOffset);
-    }
-    g.computeVertexNormals();
-    return g;
   }
   function surfaces(list = manifest.surfaces, parent = city) {
     const buckets = { water: [], park: [], wood: [], sand: [] };
     for (const s of list) {
       if (s.ring.length < 3) continue;
-      const g = polygonGeometry(s.ring, s.kind === "water" ? 0.07 : 0.1);
-      if (s.kind === "water") {
-        const p = g.attributes.position;
-        for (let i = 0; i < p.count; i++) p.setY(i, 0.05);
-        g.computeVertexNormals();
-      }
+      if (s.kind === "water" && coastline.waterAt(s.ring[0])) continue;
+      const g =
+        s.kind === "water"
+          ? flatPolygonGeometry(
+              s.ring,
+              [],
+              Math.max(0, Math.min(...s.ring.map(geoY))) + 0.08,
+            )
+          : polygonGeometry(s.ring, 0.1);
       buckets[s.kind]?.push(g);
     }
     for (const [kind, gs] of Object.entries(buckets)) {
@@ -213,15 +276,11 @@ export function createCity(host, options) {
       gs.forEach((g) => g.dispose());
       const mesh = new THREE.Mesh(
         merged,
-        mat(
-          {
-            water: "#7fabbe",
-            park: "#9aac81",
-            wood: "#7d956f",
-            sand: "#dcd1b0",
-          }[kind],
-        ),
+        kind === "water"
+          ? atmosphere.water
+          : mat({ park: "#a3b785", wood: "#71896c", sand: "#e0d1ab" }[kind]),
       );
+      mesh.receiveShadow = kind !== "water";
       parent.add(mesh);
     }
   }
@@ -275,35 +334,88 @@ export function createCity(host, options) {
   }
   function roads(list = manifest.roads, parent = city, owner = "overview") {
     const buckets = new Map();
+    const add = (material, vertices) => {
+      if (!vertices.length) return;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(vertices, 3),
+      );
+      const uv = [];
+      for (let i = 0; i < vertices.length; i += 3)
+        uv.push(vertices[i] / 4, vertices[i + 2] / 4);
+      geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+      geometry.computeVertexNormals();
+      if (!buckets.has(material)) buckets.set(material, []);
+      buckets.get(material).push(geometry);
+    };
+    const ribbon = (a, b, width, side, lift, vertices) => {
+      const dx = b.x - a.x,
+        dz = b.z - a.z,
+        len = Math.hypot(dx, dz);
+      if (len < 0.2) return;
+      const nx = -dz / len,
+        nz = dx / len;
+      const p = [
+        [a.x + nx * (side + width / 2), a.z + nz * (side + width / 2)],
+        [a.x + nx * (side - width / 2), a.z + nz * (side - width / 2)],
+        [b.x + nx * (side + width / 2), b.z + nz * (side + width / 2)],
+        [b.x + nx * (side - width / 2), b.z + nz * (side - width / 2)],
+      ].map(([x, z]) => [x, geoY(unprojectGeo(x, z)) + lift, z]);
+      vertices.push(...p[0], ...p[2], ...p[1], ...p[2], ...p[3], ...p[1]);
+    };
     for (const road of list) {
       if (road.points.length < 2) continue;
       const points = densePoints(road.points),
-        ps = points.map(point3),
-        vertices = [];
+        ps = points.map(point3);
+      const vertices = [],
+        paving = [],
+        rails = [],
+        lanes = [];
+      const driving = ![
+        "rail",
+        "tram",
+        "footway",
+        "pedestrian",
+        "steps",
+        "path",
+        "cycleway",
+      ].includes(road.kind);
+      const detailed = owner !== "overview";
+      let travelled = 0;
       for (let i = 1; i < ps.length; i++) {
         const a = ps[i - 1],
-          b = ps[i];
-        const dx = b.x - a.x,
-          dz = b.z - a.z,
-          len = Math.hypot(dx, dz);
-        if (len < 0.2) continue;
-        const nx = ((-dz / len) * road.width) / 2,
-          nz = ((dx / len) * road.width) / 2;
-        const p = [
-          [a.x + nx, geoY(unprojectGeo(a.x + nx, a.z + nz)) + 0.15, a.z + nz],
-          [a.x - nx, geoY(unprojectGeo(a.x - nx, a.z - nz)) + 0.15, a.z - nz],
-          [b.x + nx, geoY(unprojectGeo(b.x + nx, b.z + nz)) + 0.15, b.z + nz],
-          [b.x - nx, geoY(unprojectGeo(b.x - nx, b.z - nz)) + 0.15, b.z - nz],
-        ];
-        vertices.push(...p[0], ...p[2], ...p[1], ...p[2], ...p[3], ...p[1]);
+          b = ps[i],
+          length = a.distanceTo(b);
+        ribbon(a, b, road.width, 0, 0.19, vertices);
+        if (detailed && driving && road.width >= 4)
+          ribbon(a, b, road.width + 2, 0, 0.14, paving);
+        if (["tram", "rail"].includes(road.kind)) {
+          ribbon(a, b, 0.12, -0.7, 0.225, rails);
+          ribbon(a, b, 0.12, 0.7, 0.225, rails);
+        }
+        if (
+          detailed &&
+          road.width >= 7 &&
+          ["primary", "secondary", "tertiary"].includes(road.kind)
+        ) {
+          for (let d = (8 - (travelled % 8)) % 8; d + 2 < length; d += 8) {
+            ribbon(
+              a.clone().lerp(b, d / length),
+              a.clone().lerp(b, Math.min(1, (d + 2.8) / length)),
+              0.13,
+              0,
+              0.225,
+              lanes,
+            );
+          }
+        }
+        travelled += length;
       }
-      if (!vertices.length) continue;
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
-      g.computeVertexNormals();
-      const color = roadColor(road.kind);
-      if (!buckets.has(color)) buckets.set(color, []);
-      buckets.get(color).push(g);
+      add(atmosphere.roadMaterial(road.kind), vertices);
+      add(atmosphere.paving, paving);
+      add(atmosphere.steel, rails);
+      add(atmosphere.lane, lanes);
       const line = path(points);
       if (line.length > 20)
         roadPaths.push({
@@ -314,10 +426,10 @@ export function createCity(host, options) {
           owner,
         });
     }
-    for (const [color, gs] of buckets) {
-      const merged = mergeGeometries(gs);
-      gs.forEach((g) => g.dispose());
-      const mesh = new THREE.Mesh(merged, mat(color));
+    for (const [material, geometries] of buckets) {
+      const merged = mergeGeometries(geometries);
+      geometries.forEach((geometry) => geometry.dispose());
+      const mesh = new THREE.Mesh(merged, material);
       mesh.receiveShadow = true;
       parent.add(mesh);
     }
@@ -331,7 +443,15 @@ export function createCity(host, options) {
     return Math.hypot(q.x - v.x, q.z - v.z);
   }
   async function loadChunks() {
-    if (!manifest || destroyed || loadInProgress) return;
+    if (
+      !manifest ||
+      destroyed ||
+      loadInProgress ||
+      characterGallery ||
+      indoor.active
+    )
+      return;
+    refreshMarkers();
     if (camera.position.distanceTo(controls.target) > 5000) return;
     loadInProgress = true;
     const ticket = generation;
@@ -357,19 +477,73 @@ export function createCity(host, options) {
             if (roadPaths[i].owner === id) roadPaths.splice(i, 1);
         }
       }
+      // Canceled construction can leave cached data without a rendered group.
+      // Keep only the same bounded set requested by the current camera region.
+      for (const id of chunkCache.keys())
+        if (!ids.has(id)) chunkCache.delete(id);
       for (const chunk of wanted) {
         if (destroyed || ticket !== generation) break;
         if (chunkGroups.has(chunk.id)) continue;
         let data = chunkCache.get(chunk.id);
         if (!data) {
           data = await geographyFile(chunk.url, abort.signal);
+          if (destroyed || ticket !== generation) break;
           chunkCache.set(chunk.id, data);
         }
-        if (ticket !== generation) break;
+        if (destroyed || ticket !== generation) break;
         await addBuildings(data, ticket);
+        if (destroyed || ticket !== generation) {
+          if (!chunkGroups.has(chunk.id)) chunkCache.delete(chunk.id);
+          break;
+        }
         changed = true;
       }
-      if (changed && !destroyed && ticket === generation) populate();
+      if (!destroyed && ticket === generation) {
+        if (!venueCentre || venueCentre.distanceTo(controls.target) > 120) {
+          for (const [id, group] of chunkGroups) {
+            const data = chunkCache.get(id);
+            if (!data) continue;
+            for (const child of [...group.children])
+              if (child.userData.venueDetail) disposeGroup(child);
+            const storefronts = createVenueDecorations(
+              data,
+              (options.hotspots || []).filter((h) => h.mapVenue),
+              {
+                projectGeo,
+                geoY,
+                focusPoint: unprojectGeo(controls.target.x, controls.target.z),
+              },
+            );
+            storefronts.userData.streetDetail =
+              storefronts.userData.venueDetail = true;
+            group.add(storefronts);
+          }
+          venueCentre = controls.target.clone();
+        }
+        venueMeshes.length = 0;
+        for (const group of chunkGroups.values())
+          group.traverse((mesh) => {
+            if (mesh.userData.hotspot) venueMeshes.push(mesh);
+          });
+        if (
+          pendingTeleport ||
+          changed ||
+          !populationCentre ||
+          populationCentre.distanceTo(controls.target) > 70
+        ) {
+          populate(pendingTeleport);
+          pendingTeleport = false;
+        }
+        if (pendingVenue) {
+          const storefront = venueMeshes.find(
+            (mesh) =>
+              mesh.userData.hotspot.id === pendingVenue &&
+              mesh.userData.venueView,
+          );
+          if (storefront) frameVenue(storefront.userData.venueView);
+          pendingVenue = null;
+        }
+      }
       options.onStats?.({
         buildings: [...chunkGroups.values()].reduce(
           (n, g) => n + (g.userData.count || 0),
@@ -379,6 +553,7 @@ export function createCity(host, options) {
         source: manifest.source.name,
         heights: "OSM heights where recorded; otherwise estimated",
         terrain: !!terrain,
+        people: agents.length,
       });
     } catch (e) {
       if (!destroyed)
@@ -391,45 +566,27 @@ export function createCity(host, options) {
     }
   }
   async function addBuildings(chunk, ticket) {
-    const groups = facadeColors.map(() => []),
+    const groups = architecture.wallMaterials.map(() => []),
       roofs = [];
     let count = 0;
     const cleanup = () => {
       groups.flat().forEach((g) => g.dispose());
       roofs.forEach((g) => g.dispose());
     };
-    for (const b of chunk.buildings) {
+    for (const building of chunk.buildings) {
       if (destroyed || ticket !== generation) {
         cleanup();
         return;
       }
-      if (b.ring.length < 3) continue;
-      const ps = b.ring.map(projectGeo);
-      const cx = ps.reduce((n, p) => n + p.x, 0) / ps.length,
-        cz = ps.reduce((n, p) => n + p.z, 0) / ps.length;
-      const shape = new THREE.Shape();
-      ps.forEach((p, i) =>
-        i
-          ? shape.lineTo(p.x - cx, -(p.z - cz))
-          : shape.moveTo(p.x - cx, -(p.z - cz)),
-      );
-      const groundLevels = b.ring.map(geoY),
-        base = Math.min(...groundLevels),
-        depth = b.height + Math.max(...groundLevels) - base;
-      const g = new THREE.ExtrudeGeometry(shape, {
-        depth,
-        bevelEnabled: false,
-        steps: 1,
-      });
-      g.rotateX(-Math.PI / 2);
-      g.translate(cx, base, cz);
-      g.clearGroups();
-      groups[Math.abs(b.id) % facadeColors.length].push(g);
-      const roof = new THREE.ShapeGeometry(shape);
-      roof.rotateX(-Math.PI / 2);
-      roof.translate(cx, base + depth + 0.03, cz);
-      roofs.push(roof);
+      if (building.ring.length < 3) continue;
       count++;
+      if (!isLandmarkBuilding(building)) {
+        const geometry = buildingArchitecture(building, { projectGeo, geoY });
+        if (geometry) {
+          groups[geometry.paletteIndex].push(geometry.wall);
+          roofs.push(geometry.roof);
+        }
+      }
       if (count % 100 === 0)
         await new Promise((resolve) => requestAnimationFrame(resolve));
     }
@@ -441,20 +598,40 @@ export function createCity(host, options) {
     group.userData.count = count;
     if (chunk.roads) roads(chunk.roads, group, chunk.id);
     if (chunk.surfaces) surfaces(chunk.surfaces, group);
-    groups.forEach((gs, i) => {
-      if (!gs.length) return;
-      const merged = mergeGeometries(gs, false);
-      gs.forEach((g) => g.dispose());
-      const mesh = new THREE.Mesh(merged, mat(facadeColors[i]));
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
+    groups.forEach((geometries, i) => {
+      if (!geometries.length) return;
+      const merged = mergeGeometries(geometries, false);
+      geometries.forEach((geometry) => geometry.dispose());
+      const mesh = new THREE.Mesh(merged, architecture.wallMaterials[i]);
+      mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
     });
     if (roofs.length) {
       const merged = mergeGeometries(roofs, false);
-      roofs.forEach((g) => g.dispose());
-      group.add(new THREE.Mesh(merged, mat("#b78367")));
+      roofs.forEach((geometry) => geometry.dispose());
+      const mesh = new THREE.Mesh(merged, architecture.roofMaterial);
+      mesh.castShadow = mesh.receiveShadow = true;
+      group.add(mesh);
     }
+    const dressing = createLandscape(chunk, {
+      projectGeo,
+      geoY,
+      focusPoint: unprojectGeo(controls.target.x, controls.target.z),
+    });
+    dressing.userData.streetDetail = true;
+    group.add(dressing);
+    const storefronts = createVenueDecorations(
+      chunk,
+      (options.hotspots || []).filter((h) => h.mapVenue),
+      {
+        projectGeo,
+        geoY,
+        focusPoint: unprojectGeo(controls.target.x, controls.target.z),
+      },
+    );
+    storefronts.userData.streetDetail = storefronts.userData.venueDetail = true;
+    group.add(storefronts);
+    group.add(createLandmarks(chunk, { projectGeo, geoY }));
     city.add(group);
     chunkGroups.set(chunk.id, group);
   }
@@ -481,18 +658,44 @@ export function createCity(host, options) {
   }
   function setMarkers(hotspots) {
     options.hotspots = hotspots;
+    markerSelection = "";
+    refreshMarkers();
+  }
+  function refreshMarkers() {
+    const hotspots = options.hotspots || [];
+    const range = camera.position.distanceTo(controls.target);
+    const nearby = hotspots
+      .filter((h) => h.mapVenue)
+      .map((h) => {
+        const p = projectGeo([h.lng, h.lat]);
+        return {
+          h,
+          distance: Math.hypot(
+            p.x - controls.target.x,
+            p.z - controls.target.z,
+          ),
+        };
+      })
+      .filter((v) => v.distance < Math.max(500, Math.min(1800, range * 3)))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 16)
+      .map((v) => v.h);
+    const selected = [...hotspots.filter((h) => !h.mapVenue), ...nearby];
+    const key = selected.map((h) => h.id).join("|");
+    if (key === markerSelection) return;
+    markerSelection = key;
     disposeGroup(markers);
     scene.add(markers);
     markerMeshes.length = 0;
     labels.length = 0;
-    for (const h of hotspots) {
+    for (const h of selected) {
       const v = point3([h.lng, h.lat]);
       const g = new THREE.Group();
       g.position.copy(v);
       const pin = new THREE.Mesh(
         new THREE.SphereGeometry(1.5, 12, 8),
         new THREE.MeshBasicMaterial({
-          color: h.custom ? "#6d896e" : "#292942",
+          color: h.custom ? "#6d896e" : h.mapVenue ? "#3e6a63" : "#292942",
           depthTest: false,
         }),
       );
@@ -505,7 +708,10 @@ export function createCity(host, options) {
       );
       stem.position.y = 4;
       g.add(stem, pin);
-      const label = canvasLabel(h.name, h.custom ? "#527460" : "#292942");
+      const label = canvasLabel(
+        h.name,
+        h.custom ? "#527460" : h.mapVenue ? "#3e6a63" : "#292942",
+      );
       label.position.y = 11;
       label.userData.hotspot = h;
       g.add(label);
@@ -558,7 +764,7 @@ export function createCity(host, options) {
           best = { line, distance: d, d: line.lengths[i] };
       }
     }
-    return best;
+    return best && best.distance <= 120 ? best : null;
   }
   function car(color, tram = false) {
     const g = new THREE.Group();
@@ -623,48 +829,39 @@ export function createCity(host, options) {
     const close = roadPaths.filter((p) =>
       p.ps.some((v) => Math.hypot(v.x - target.x, v.z - target.z) < 650),
     );
-    const walks = close.filter((p) =>
-      [
-        "footway",
-        "pedestrian",
-        "path",
-        "residential",
-        "living_street",
-      ].includes(p.kind),
-    );
+    populationCentre = target.clone();
+    personMeshes.length = 0;
     const drives = close.filter(
       (p) =>
         !["footway", "pedestrian", "steps", "path", "rail", "tram"].includes(
           p.kind,
         ),
     );
-    const outfits = [
-      "#bba46a",
-      "#4c666a",
-      "#b97563",
-      "#d8d4c2",
-      "#77748c",
-      "#496a59",
-    ];
-    const skins = ["#a87955", "#76513b", "#d5af8b", "#b58c6b", "#5b3d30"];
-    for (let i = 0; i < 26 && walks.length; i++) {
-      const line = walks[i % walks.length],
-        group = createCharacter({
-          shirt: outfits[i % outfits.length],
-          skin: skins[i % skins.length],
-          style: ["casual", "jacket", "dress", "tourist"][i % 4],
-          hairStyle: ["short", "curly", "bob", "bun"][i % 4],
-          phase: i * 0.7,
-        });
-      const side = ["footway", "path", "pedestrian"].includes(line.kind)
-        ? 0
-        : line.width / 2 + 1.2;
-      const d = ((i * 0.173) % 1) * line.length;
-      const initial = sample(line, d, side);
-      group.position.copy(initial.v);
+    const profiles = createLocalWalkerProfiles({
+      paths: roadPaths,
+      target,
+      buildings: [...chunkCache.values()].flatMap(
+        (chunk) => chunk.buildings || [],
+      ),
+      projectGeo,
+      max: 28,
+    });
+    for (const profile of profiles) {
+      const group = createCharacter(profile.character);
+      const initial = sampleLocalWalker(profile);
+      group.position.set(
+        initial.x,
+        geoY(unprojectGeo(initial.x, initial.z)) + 0.2,
+        initial.z,
+      );
       group.rotation.y = initial.angle;
+      group.traverse((mesh) => {
+        if (!mesh.isMesh) return;
+        mesh.userData.person = { name: profile.name, label: profile.label };
+        personMeshes.push(mesh);
+      });
       population.add(group);
-      agents.push({ group, line, d, side, speed: 1.05 + (i % 4) * 0.12 });
+      agents.push({ ...profile, group });
     }
     for (let i = 0; i < 18 && drives.length; i++) {
       const line = drives[i % drives.length],
@@ -709,19 +906,44 @@ export function createCity(host, options) {
       hairStyle: "short",
     });
     const nearest = nearestPath(target, true);
+    const safe =
+      profiles[0] &&
+      sampleLocalWalker({
+        ...profiles[0],
+        d: Math.max(
+          profiles[0].minD,
+          Math.min(
+            profiles[0].maxD,
+            profiles[0].d + (profiles[0].d - profiles[0].minD > 4 ? -3.8 : 3.8),
+          ),
+        ),
+      });
     player.position.copy(
-      nearest
-        ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 1.2).v
-        : target,
+      safe
+        ? new THREE.Vector3(
+            safe.x,
+            geoY(unprojectGeo(safe.x, safe.z)) + 0.2,
+            safe.z,
+          )
+        : nearest
+          ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 0.5).v
+          : target,
     );
     population.add(player);
     playerTarget = player.position.clone();
     const you = canvasLabel("YOU", "#292942");
     you.position.y = 2.6;
-    you.scale.set(2.5, 0.55, 1);
+    you.scale.set(1.2, 0.27, 1);
     player.add(you);
   }
-  function restoreCity(){city.visible=true;markers.visible=true;population.visible=true;scene.background=new THREE.Color("#c7dee8");}
+  function restoreCity() {
+    indoor.clear();
+    city.visible = true;
+    markers.visible = true;
+    population.visible = true;
+    scene.background = new THREE.Color(atmosphere.horizon);
+    atmosphere.sky.visible = true;
+  }
   function setFocus(next, street = false) {
     restoreCity();
     if (characterGallery) {
@@ -730,9 +952,11 @@ export function createCity(host, options) {
     }
     generation++;
     focus = next;
+    pendingVenue = !street && next.mapVenue ? next.id : null;
     const p = point3([next.lng, next.lat]);
     const distance = street ? 24 : next.range || 160;
-    if (street && player) p.copy(player.position);
+    if (!street) pendingTeleport = true;
+    if (street && player && !pendingTeleport) p.copy(player.position);
     controls.target.copy(p);
     camera.position.set(
       p.x + distance * 0.7,
@@ -742,9 +966,9 @@ export function createCity(host, options) {
     sun.position.set(p.x - 150, p.y + 400, p.z + 180);
     sun.target.position.copy(p);
     controls.update();
+    refreshMarkers();
     if (manifest) {
-      if (!street) populate(true);
-      loadChunks();
+      return loadChunks();
     }
   }
   async function loadOverview() {
@@ -757,20 +981,48 @@ export function createCity(host, options) {
       );
       if (destroyed) return;
       const boxes = data.buildings;
+      const geometry = new THREE.BoxGeometry(1, 1, 1);
+      const colors = [],
+        roofColor = new THREE.Color("#cf8967");
+      for (let i = 0; i < geometry.attributes.position.count; i++) {
+        const color =
+          geometry.attributes.normal.getY(i) > 0.5
+            ? roofColor
+            : new THREE.Color("#ffffff");
+        colors.push(color.r, color.g, color.b);
+      }
+      geometry.setAttribute(
+        "color",
+        new THREE.Float32BufferAttribute(colors, 3),
+      );
       const mesh = new THREE.InstancedMesh(
-        new THREE.BoxGeometry(1, 1, 1),
-        mat("#d1c4ac"),
+        geometry,
+        new THREE.MeshStandardMaterial({
+          color: "#ffffff",
+          vertexColors: true,
+          roughness: 0.95,
+        }),
         boxes.length,
       );
       const dummy = new THREE.Object3D();
+      const palette = [
+        "#e2d2b6",
+        "#d0a186",
+        "#e5cf9f",
+        "#bdccc1",
+        "#d7d0bb",
+        "#e7d9c1",
+      ].map((color) => new THREE.Color(color));
       boxes.forEach((b, i) => {
         const y = geoY(unprojectGeo(b[0], b[1]));
         dummy.position.set(b[0], y + b[4] / 2, b[1]);
         dummy.scale.set(Math.max(1, b[2]), b[4], Math.max(1, b[3]));
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setColorAt(i, palette[i % palette.length]);
       });
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
       scene.add(mesh);
       overviewMesh = mesh;
     } catch {
@@ -807,6 +1059,7 @@ export function createCity(host, options) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    if (indoor.active) indoor.frameRoom();
   }
   const observer = new ResizeObserver(resize);
   observer.observe(host);
@@ -825,9 +1078,27 @@ export function createCity(host, options) {
       (-(e.clientY - rect.top) / rect.height) * 2 + 1,
     );
     ray.setFromCamera(pointer, camera);
-    const hit = ray.intersectObjects(markerMeshes, false)[0];
+    if (indoor.pick(ray, mode)) return;
+    const visible = (mesh) => {
+      for (let parent = mesh; parent; parent = parent.parent) {
+        if (!parent.visible) return false;
+        if (parent === scene) return true;
+      }
+      return false;
+    };
+    const hit = ray.intersectObjects(
+      [...markerMeshes, ...venueMeshes].filter(visible),
+      false,
+    )[0];
     if (hit) {
       options.onHotspot?.(hit.object.userData.hotspot);
+      return;
+    }
+    const personHit =
+      population.visible &&
+      ray.intersectObjects(personMeshes.filter(visible), false)[0];
+    if (personHit) {
+      options.onPerson?.(personHit.object.userData.person);
       return;
     }
     if (player && mode === "walk") {
@@ -855,11 +1126,17 @@ export function createCity(host, options) {
     const dt = Math.min((now - lastTime) / 1000 || 0, 0.05);
     lastTime = now;
     controls.update();
-    if (motion && !characterGallery && camera.position.distanceTo(controls.target) < 900) {
+    indoor.update(dt, motion);
+    if (
+      motion &&
+      !characterGallery &&
+      !indoor.active &&
+      camera.position.distanceTo(controls.target) < 900
+    ) {
       for (const a of agents) {
-        a.d += dt * a.speed;
-        const p = sample(a.line, a.d, a.side);
-        a.group.position.copy(p.v);
+        advanceLocalWalker(a, dt);
+        const p = sampleLocalWalker(a);
+        a.group.position.set(p.x, geoY(unprojectGeo(p.x, p.z)) + 0.2, p.z);
         a.group.rotation.y = p.angle;
         animateCharacter(a.group, now / 1000, true);
       }
@@ -870,7 +1147,7 @@ export function createCity(host, options) {
         v.group.rotation.y = p.angle;
       }
     }
-    if (player) {
+    if (player && !indoor.active) {
       const diff = playerTarget.clone().sub(player.position),
         distance = diff.length();
       if (distance > 0.1) {
@@ -883,23 +1160,47 @@ export function createCity(host, options) {
       animateCharacter(player, now / 1000, motion && distance > 0.1);
     }
     const range = camera.position.distanceTo(controls.target);
-    population.visible = !characterGallery && range < 900;
+    population.visible = !characterGallery && !indoor.active && range < 900;
     renderer.shadowMap.enabled = range < 1200;
-    scene.fog.near = Math.max(2500, range * 1.2);
-    scene.fog.far = Math.max(18000, range * 4);
+    atmosphere.update(
+      camera,
+      dt,
+      motion && !characterGallery && !indoor.active,
+    );
+    const lightTarget = controls.target;
+    sun.position.set(
+      lightTarget.x - 260,
+      lightTarget.y + 460,
+      lightTarget.z + 280,
+    );
+    sun.target.position.copy(lightTarget);
+    const shadowRange = Math.max(80, Math.min(420, range * 0.75));
+    sun.shadow.camera.left = sun.shadow.camera.bottom = -shadowRange;
+    sun.shadow.camera.right = sun.shadow.camera.top = shadowRange;
+    sun.shadow.camera.updateProjectionMatrix();
+    scene.fog.near = Math.max(1800, range * 1.2);
+    scene.fog.far = Math.max(13000, range * 4);
     if (range > 2200 && !overviewMesh) loadOverview();
-    for (const group of chunkGroups.values()) group.visible = range < 6000;
+    for (const group of chunkGroups.values()) {
+      group.visible = range < 6000;
+      for (const child of group.children)
+        if (child.userData.streetDetail) child.visible = range < 2300;
+    }
     if (overviewMesh) overviewMesh.visible = range > 2200 && !characterGallery;
     const seenAreas = new Set();
     for (const m of labels) {
-      const scale = Math.max(0.7, Math.min(180, range / 160));
+      const scale = Math.max(
+        m.hotspot.mapVenue ? 0.22 : 0.4,
+        Math.min(180, range / 160),
+      );
       m.label.scale.set(24 * scale, 5.3 * scale, 1);
       m.label.position.y = 12 * scale;
       m.pin.scale.setScalar(Math.max(1, scale * 0.8));
       m.pin.position.y = 7 * scale;
       m.stem.visible = scale < 3;
       const far = m.group.position.distanceTo(controls.target);
-      m.label.visible = range > 1800 || far < Math.max(450, range * 2);
+      m.label.visible =
+        range > 1800 || (range > 35 && far < Math.max(60, range * 2));
       const area = m.hotspot.area || m.hotspot.id;
       if (range > 5000) {
         m.label.visible = m.label.visible && !seenAreas.has(area);
@@ -922,17 +1223,21 @@ export function createCity(host, options) {
       () => null,
     ),
   ])
-    .then(([data, dem]) => {
+    .then(async ([data, dem]) => {
       if (destroyed) return;
       manifest = data;
       terrain = dem;
+      coastline = coastRegions(manifest);
       terrainMesh();
       surfaces();
       roads();
       setMarkers(options.hotspots || []);
-      setFocus(focus);
+      status("Loading the streets around you…");
+      await setFocus(focus);
+      if (destroyed) return;
       status("");
       options.onReady?.();
+      if (options.interior) setInterior(options.interior);
     })
     .catch(() => {
       if (!destroyed)
@@ -962,8 +1267,20 @@ export function createCity(host, options) {
       person.rotation.y = angle;
       characterGallery.add(person);
     }
-    const floor=new THREE.Mesh(new THREE.BoxGeometry(7,.05,4),mat("#eeeadf"));floor.position.copy(centre);floor.position.y-=.03;floor.receiveShadow=true;characterGallery.add(floor);
-    scene.add(characterGallery);city.visible=false;markers.visible=false;population.visible=false;scene.background=new THREE.Color("#dcded5");
+    const floor = new THREE.Mesh(
+      new THREE.BoxGeometry(7, 0.05, 4),
+      mat("#eeeadf"),
+    );
+    floor.position.copy(centre);
+    floor.position.y -= 0.03;
+    floor.receiveShadow = true;
+    characterGallery.add(floor);
+    scene.add(characterGallery);
+    city.visible = false;
+    markers.visible = false;
+    population.visible = false;
+    scene.background = new THREE.Color("#dcded5");
+    atmosphere.sky.visible = false;
     controls.target.copy(centre).add(new THREE.Vector3(0, 0.95, 0));
     const distance = Math.max(
       8,
@@ -978,17 +1295,123 @@ export function createCity(host, options) {
 
     controls.update();
   }
+  function people() {
+    if (pendingTeleport) return;
+    restoreCity();
+    if (characterGallery) {
+      disposeGroup(characterGallery);
+      characterGallery = null;
+    }
+    const person = agents
+      .slice()
+      .sort(
+        (a, b) =>
+          a.group.position.distanceTo(controls.target) -
+          b.group.position.distanceTo(controls.target),
+      )[0];
+    if (!person) return;
+    const at = person.group.position.clone();
+    // View along a safe mapped walking section, keeping the camera out of facades.
+    const before = sampleLocalWalker({
+      ...person,
+      d: Math.max(
+        person.minD,
+        Math.min(
+          person.maxD,
+          person.d + (person.d - person.minD > 12 ? -12 : 12),
+        ),
+      ),
+    });
+    camera.position.set(
+      before.x,
+      Math.max(at.y, geoY(unprojectGeo(before.x, before.z))) + 7,
+      before.z,
+    );
+    controls.target.copy(at).add(new THREE.Vector3(0, 0.9, 0));
+    controls.update();
+  }
+  function frameVenue(view) {
+    if (indoor.active || characterGallery) return;
+    const { point, normal, groundY } = view;
+    const footprints = [...chunkCache.values()]
+      .flatMap((c) => c.buildings || [])
+      .map((b) => b.ring.map(projectGeo))
+      .filter((ring) =>
+        ring.some((p) => Math.hypot(p.x - point.x, p.z - point.z) < 60),
+      );
+    const blocked = (p) =>
+      footprints.some((ring) => {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const a = ring[i],
+            b = ring[j];
+          if (
+            a.z > p.z !== b.z > p.z &&
+            p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x
+          )
+            inside = !inside;
+        }
+        return inside;
+      });
+    const candidates = [
+      [9, 10],
+      [9, -10],
+      [6, 9],
+      [6, -9],
+      [12, 0],
+      [5, 0],
+    ].map(([out, along]) => ({
+      x: point.x + normal.x * out - normal.z * along,
+      z: point.z + normal.z * out + normal.x * along,
+    }));
+    const at = candidates.find((p) => !blocked(p)) || candidates.at(-1);
+    controls.target.set(
+      point.x + normal.x * 1.2,
+      groundY + 1.6,
+      point.z + normal.z * 1.2,
+    );
+    camera.position.set(
+      at.x,
+      Math.max(groundY, geoY(unprojectGeo(at.x, at.z))) + 8,
+      at.z,
+    );
+    controls.update();
+  }
+  function setInterior(next) {
+    options.interior = next;
+    if (!next) {
+      restoreCity();
+      setFocus(focus);
+      return;
+    }
+    if (!manifest) return;
+    if (characterGallery) {
+      disposeGroup(characterGallery);
+      characterGallery = null;
+    }
+    generation++;
+    indoor.enter(next, point3([focus.lng, focus.lat]));
+    city.visible = markers.visible = population.visible = false;
+    atmosphere.sky.visible = false;
+    scene.background = new THREE.Color("#d9dfd3");
+    status("");
+  }
   return {
     ready,
     setFocus,
     setMarkers,
     overview,
     characters,
+    people,
+    setInterior,
+    selectInteriorZone: (id) => indoor.selectZone(id),
+    performInteriorAction: (id, duration) => indoor.perform(id, duration),
     setMode(next) {
       mode = next;
       controls.mouseButtons.LEFT =
         next === "pan" ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
-      controls.touches.ONE = next === "pan" ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+      controls.touches.ONE =
+        next === "pan" ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     },
     setMotion(value) {
       motion = value;
@@ -1016,6 +1439,8 @@ export function createCity(host, options) {
       renderer.domElement.removeEventListener("pointerup", pointerUp);
       disposeGroup(scene);
       materials.forEach((m) => m.dispose());
+      architecture.dispose();
+      atmosphere.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },
