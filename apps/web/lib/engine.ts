@@ -5,6 +5,7 @@ import {
   scenarios,
   stageAt,
   transport,
+  routeFor,
   type PlaceId,
   type Style,
   type Mode,
@@ -185,7 +186,11 @@ export function apply(t: Trip, cmd: Command): { trip: Trip; error?: string } {
       cmd.place === t.place
     )
       return fail("Choose another place.");
-    const route = transport[cmd.mode];
+    const route = routeFor(t.place, cmd.place, cmd.mode);
+    if (!route)
+      return fail(
+        "This route is not available. Choose a train, walk, or cycle for Sintra.",
+      );
     ({ cost, minutes, energy } = route);
     place = cmd.place;
     tag = "travel";

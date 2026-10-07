@@ -1414,3 +1414,453 @@ small {
     transform: none;
   }
 }
+/* The city stays one geographic scene; HUD cards float above the camera. */
+.world {
+  inset: 0;
+  z-index: 0;
+}
+.world canvas {
+  touch-action: none;
+}
+.topbar,
+.welcome,
+.missions,
+.arrival-note,
+.scene-caption,
+.needs,
+.place-pill,
+.interaction,
+.nav,
+.world-tip,
+.game-footnote {
+  z-index: 2;
+}
+.world-loading {
+  pointer-events: none;
+  background: transparent;
+  inset: 40% 30%;
+  padding: 20px;
+  background: #fffdf9dd;
+  border-radius: 15px;
+  display: flex;
+  justify-content: center;
+  font-size: 12px;
+  height: max-content;
+  box-shadow: 0 5px 30px #2929421a;
+}
+.map-tools {
+  position: absolute;
+  left: 30px;
+  top: 205px;
+  z-index: 3;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  max-width: 250px;
+}
+.map-tools button {
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+}
+.map-tools > span {
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  padding: 7px 0;
+  flex-basis: 100%;
+  color: #384451;
+}
+.nav {
+  top: 303px;
+}
+.world-controls {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--paper);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 7px 35px #29294222;
+  max-width: calc(100% - 38px);
+}
+.world-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 8px;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.world-controls button[aria-pressed="true"] {
+  background: var(--accent);
+  color: white;
+}
+.gesture-controls,
+.camera-buttons {
+  display: flex;
+  gap: 2px;
+}
+.camera-buttons {
+  border-inline: 1px solid var(--line);
+  padding: 0 3px;
+}
+.map-credits {
+  position: absolute;
+  z-index: 2;
+  right: 15px;
+  bottom: 5px;
+  display: flex;
+  gap: 8px;
+  font-size: 7px;
+  color: #343b44;
+  background: #fffdf9c9;
+  padding: 4px 6px;
+  border-radius: 4px;
+  align-items: center;
+}
+.map-credits button {
+  font-size: 8px;
+  padding: 2px;
+  background: transparent;
+  text-decoration: underline;
+}
+.game-footnote {
+  display: none;
+}
+.needs {
+  bottom: 50px;
+}
+.world-tip {
+  bottom: 90px;
+}
+.scene-caption {
+  bottom: 100px;
+}
+.clean-world .missions,
+.clean-world .needs,
+.clean-world .interaction,
+.clean-world .world-tip,
+.clean-world .nav,
+.clean-world .place-pill,
+.clean-world .welcome,
+.clean-world .arrival-note,
+.clean-world .scene-caption {
+  display: none;
+}
+.map-input-label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.map-input-label input {
+  padding: 13px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  width: 100%;
+  font-size: 13px;
+}
+.hotspot-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+  max-height: 320px;
+  overflow: auto;
+}
+.hotspot-list button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--soft);
+  padding: 12px;
+  border-radius: 10px;
+  text-align: left;
+  min-height: 62px;
+}
+.hotspot-list button > span {
+  flex: 1;
+}
+.hotspot-list strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+}
+.hotspot-list small {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.pin-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+}
+.pin-form h3 {
+  font-size: 15px;
+  font-weight: 500;
+}
+.hotspot-coordinates {
+  font-size: 12px;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  background: var(--soft);
+  padding: 14px;
+  border-radius: 9px;
+}
+.map-credits span:last-of-type {
+  display: none;
+}
+@media (max-width: 950px) {
+  .world {
+    inset: 0;
+  }
+  .map-tools {
+    left: 23px;
+    top: 216px;
+  }
+  .world-controls {
+    bottom: 185px;
+    gap: 2px;
+  }
+  .world-controls button {
+    padding: 7px;
+    font-size: 8px;
+  }
+  .nav {
+    top: auto;
+  }
+  .needs {
+    bottom: 35px;
+  }
+  .interaction {
+    bottom: 265px;
+    max-height: 285px;
+  }
+  .map-credits {
+    bottom: 7px;
+  }
+  .world-tip {
+    display: none;
+  }
+  .welcome {
+    top: auto;
+    bottom: 255px;
+    transform: none;
+  }
+  .scene-caption {
+    bottom: 238px;
+  }
+  .game {
+    min-height: 920px;
+  }
+}
+@media (max-width: 600px) {
+  .game,
+  .game:has(.welcome) {
+    min-height: 960px;
+    height: calc(100svh - 35px);
+    max-height: none;
+  }
+  .world,
+  .game:has(.welcome) .world {
+    inset: 0;
+  }
+  .world-controls {
+    left: 17px;
+    right: 17px;
+    transform: none;
+    bottom: 203px;
+    max-width: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 5px;
+    border-radius: 12px;
+  }
+  .world-controls button {
+    min-height: 34px;
+    padding: 7px;
+  }
+  .world-controls > button span {
+    display: none;
+  }
+  .gesture-controls button span {
+    font-size: 9px;
+  }
+  .map-tools {
+    top: 253px;
+    left: 17px;
+    max-width: calc(100% - 34px);
+  }
+  .map-tools > span {
+    padding-top: 1px;
+  }
+  .map-tools button {
+    min-height: 35px;
+    font-size: 9px;
+  }
+  .place-pill {
+    top: 219px;
+  }
+  .missions {
+    top: 137px;
+  }
+  .interaction {
+    bottom: 282px;
+    max-height: 280px;
+  }
+  .needs {
+    bottom: 106px;
+  }
+  .nav {
+    bottom: 21px;
+  }
+  .map-credits {
+    bottom: 0;
+    right: 5px;
+    left: 5px;
+    font-size: 5px;
+    gap: 5px;
+    justify-content: center;
+  }
+  .welcome {
+    bottom: 292px;
+    padding: 23px;
+  }
+  .welcome h1 {
+    font-size: 35px;
+  }
+  .arrival-note {
+    top: 100px;
+  }
+  .scene-caption {
+    top: 168px;
+    bottom: auto;
+    left: 17px;
+  }
+  .game:has(.welcome) .map-tools {
+    top: 107px;
+    left: auto;
+    right: 17px;
+    max-width: 140px;
+    justify-content: flex-end;
+  }
+  .game:has(.welcome) .map-tools > span {
+    font-size: 7px;
+    text-align: right;
+  }
+  .game:has(.welcome) .world-controls {
+    bottom: 218px;
+  }
+  .hotspot-list {
+    grid-template-columns: 1fr;
+  }
+  .world-loading {
+    inset: 35% 12%;
+    width: 76%;
+    padding: 15px;
+  }
+  .clean-world {
+    min-height: calc(100svh - 36px) !important;
+    height: calc(100svh - 36px) !important;
+  }
+  .clean-world .world-controls {
+    bottom: 33px;
+  }
+  .clean-world .map-tools {
+    top: 145px;
+  }
+  .clean-world .map-credits {
+    bottom: 4px;
+  }
+  .clean-world .clock {
+    padding: 8px;
+  }
+  .below-game {
+    display: none;
+  }
+}
+
+.map-credits {
+  flex-wrap: wrap;
+  max-width: calc(100% - 30px);
+  justify-content: flex-end;
+  font-size: 7px;
+  row-gap: 2px;
+}
+.map-credits span[title] {
+  flex-basis: 100%;
+  text-align: right;
+}
+@media (max-width: 600px) {
+  .clean-world .world-controls {
+    bottom: 58px;
+  }
+  .map-credits {
+    justify-content: center;
+    max-width: calc(100% - 10px);
+    font-size: 6px;
+  }
+  .map-credits span[title] {
+    text-align: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .missions {
+    display: none;
+  }
+  .place-pill {
+    top: 140px;
+    left: 17px;
+    right: auto;
+    max-width: calc(100% - 34px);
+  }
+  .map-tools {
+    top: 186px;
+  }
+}
+
+.world-tip {
+  display: none;
+}
+@media (min-width: 951px) {
+  .map-tools {
+    top: 275px;
+  }
+  .nav {
+    top: auto;
+    bottom: 260px;
+    flex-direction: row;
+    width: 253px;
+  }
+  .nav button {
+    flex: 1;
+  }
+}
+@media (min-width: 601px) and (max-width: 950px) {
+  .map-tools {
+    top: 275px;
+  }
+}
+
+.character-preview-label{position:absolute;z-index:3;top:110px;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:1px;color:var(--accent);white-space:nowrap}@media(max-width:600px){.character-preview-label{top:120px;font-size:7px}}

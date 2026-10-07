@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -16,6 +16,9 @@ import {
   Home,
   Map,
   MapPin,
+  Search,
+  Eye,
+  EyeOff,
   Moon,
   Music,
   RefreshCw,
@@ -28,8 +31,22 @@ import {
 } from "lucide-react";
 import World from "../components/World";
 import Dialog from "../components/Dialog";
+import { GEOGRAPHIC_HOTSPOTS } from "../lib/geography";
+import {
+  focusFor,
+  placeFocus,
+  fromGeographic,
+  mapLinkPin,
+  restorePins,
+  PIN_KEY,
+  areaPlace,
+  type WorldFocus,
+  type WorldHotspot,
+} from "../lib/world-state";
 import {
   places,
+  scenarios,
+  routeFor,
   stageAt,
   transport,
   REVIEWED,
@@ -65,6 +82,8 @@ const initial: Setup = {
   shirt: colors[0],
 };
 type Panel =
+  | "hotspot"
+  | "map-search"
   | "setup"
   | "travel"
   | "journal"
@@ -82,8 +101,22 @@ const iconFor = (id: PlaceId) =>
     viewpoint: Camera,
     riverside: Waves,
     music: Music,
+    cais: Waves,
+    benfica: Home,
+    sintra: Camera,
   })[id];
 export default function Roam() {
+  const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
+  const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
+  const [pins, setPins] = useState<WorldHotspot[]>([]);
+  const [search, setSearch] = useState("");
+  const [pinUrl, setPinUrl] = useState("");
+  const [pinName, setPinName] = useState("");
+  const [clean, setClean] = useState(false);
+  const worldHotspots = useMemo(
+    () => [...GEOGRAPHIC_HOTSPOTS.map(fromGeographic), ...pins],
+    [pins],
+  );
   const [trip, setTrip] = useState<Trip | null>(null);
   const tripRef = useRef<Trip | null>(null);
   tripRef.current = trip;
@@ -98,6 +131,52 @@ export default function Roam() {
   const [notice, setNotice] = useState("");
   const [storageError, setStorageError] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PIN_KEY);
+      if (raw) setPins(restorePins(raw));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    if (trip) setMapFocus(focusFor(trip.place, trip.setup.base));
+  }, [trip?.place, trip?.setup.base]);
+  function pickHotspot(h: WorldHotspot) {
+    setMapHotspot(h);
+    setMapFocus({ ...h, range: 140 });
+    setPanel("hotspot");
+  }
+  function addPin() {
+    const pin = mapLinkPin(pinUrl, pinName);
+    if (!pin) {
+      notify(
+        "Paste a full Google Maps link with coordinates inside the Lisbon–Sintra region. Expand short links in Google Maps first.",
+      );
+      return;
+    }
+    const next = [pin, ...pins.filter((p) => p.id !== pin.id)].slice(0, 16);
+    setPins(next);
+    try {
+      localStorage.setItem(PIN_KEY, JSON.stringify(next));
+    } catch {
+      notify("This pin is available now but could not be saved.");
+    }
+    setPinUrl("");
+    setPinName("");
+    pickHotspot(pin);
+  }
+  function route(mode: Mode) {
+    return trip && destination
+      ? routeFor(trip.place, destination, mode)
+      : transport[mode];
+  }
+  function routeReason(mode: Mode) {
+    const r = route(mode);
+    return !r
+      ? "This mode does not serve this trip"
+      : trip
+        ? blocked(trip, r)
+        : null;
+  }
   function notify(text: string) {
     setNotice(text);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -229,23 +308,29 @@ export default function Roam() {
     setDestination(null);
     setPanel("travel");
   };
-  function selectObject(id: string) {
-    const found = available.find((s) => s.object === id);
-    if (found) setSelected(found.id);
-    else if (trip)
-      notify("Use the experience cards to explore what’s available right now.");
-  }
+
   const visited = trip
     ? new Set(memories(trip).map((h) => h.place))
     : new Set<PlaceId>();
   return (
     <main className="app-shell">
-      <div className="game">
+      <div className={clean ? "game clean-world" : "game"}>
         <World
-          place={place}
+          focus={mapFocus}
           shirt={trip?.setup.shirt || setup.shirt}
-          onSelect={selectObject}
+          hotspots={worldHotspots}
+          onHotspot={pickHotspot}
         />
+        <div className="map-tools">
+          <button onClick={() => setPanel("map-search")}>
+            <Search size={16} /> Find a hotspot
+          </button>
+          <button onClick={() => setClean((v) => !v)}>
+            {clean ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
+            {clean ? "Show trip" : "Clean screen"}
+          </button>
+          <span>VIEWING {mapFocus.name.toUpperCase()}</span>
+        </div>
         <header className="topbar">
           <a className="brand" href="/" aria-label="ROAM home">
             ROAM<span>LISBON. YOUR WAY.</span>
@@ -277,9 +362,9 @@ export default function Roam() {
         {!trip ? (
           <>
             <div className="arrival-note">
-              <span className="eyebrow">YOUR FIRST DESTINATION</span>
+              <span className="eyebrow">A CONNECTED LISBON WORLD</span>
               <span>
-                <MapPin size={14} /> {setup.base}, Lisbon
+                <MapPin size={14} /> Cais do Sodré, Lisbon
               </span>
             </div>
             <section className="welcome card">
@@ -312,8 +397,8 @@ export default function Roam() {
               </small>
             </section>
             <div className="scene-caption">
-              <span>YOUR LITTLE LOFT</span>
-              <p>A soft landing in the city of seven hills.</p>
+              <span>STREETS. HILLS. EVERYDAY LIFE.</span>
+              <p>Drag, rotate, and find your own Lisbon.</p>
             </div>
           </>
         ) : (
@@ -519,9 +604,9 @@ export default function Roam() {
               </div>
             </section>
             <div className="world-tip">
-              Click the floor to walk.
+              Drag to rotate · Scroll to zoom.
               <br />
-              Choose an object, or use the experience cards.
+              Click a hotspot to explore.
             </div>
           </>
         )}
@@ -548,6 +633,149 @@ export default function Roam() {
         <span>Try a city. Find your rhythm.</span>
         <span>Lisbon pilot · Illustrative costs · Europe/Lisbon time</span>
       </div>
+      {panel === "map-search" && (
+        <Dialog title="Find your Lisbon." onClose={() => setPanel(null)} wide>
+          <p className="lede">
+            Real landmarks in one connected region. Or bring your own map pin.
+          </p>
+          <label className="map-input-label">
+            Search landmarks
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Sintra, Cais do Sodré, Benfica…"
+            />
+          </label>
+          <div className="hotspot-list">
+            {worldHotspots
+              .filter((h) =>
+                (h.name + " " + h.area)
+                  .toLowerCase()
+                  .includes(search.toLowerCase()),
+              )
+              .map((h) => (
+                <button key={h.id} onClick={() => pickHotspot(h)}>
+                  <MapPin size={17} />
+                  <span>
+                    <strong>{h.name}</strong>
+                    <small>{h.custom ? "Your saved pin" : h.area}</small>
+                  </span>
+                  <ArrowUpRight size={15} />
+                </button>
+              ))}
+          </div>
+          <form
+            className="pin-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addPin();
+            }}
+          >
+            <h3>Add a Google Maps pin</h3>
+            <label className="map-input-label">
+              Full Maps link
+              <input
+                required
+                type="url"
+                value={pinUrl}
+                onChange={(e) => setPinUrl(e.target.value)}
+                placeholder="https://www.google.com/maps/place/…"
+              />
+            </label>
+            <label className="map-input-label">
+              Your label (optional)
+              <input
+                value={pinName}
+                onChange={(e) => setPinName(e.target.value)}
+                maxLength={60}
+                placeholder="My Lisbon stop"
+              />
+            </label>
+            <button className="primary" type="submit">
+              Add & explore <MapPin size={16} />
+            </button>
+            <p className="quiet">
+              Use an expanded link with coordinates. No Google API key needed. A
+              saved pin is your map location; venue details are not verified.
+            </p>
+          </form>
+        </Dialog>
+      )}
+      {panel === "hotspot" && mapHotspot && (
+        <Dialog title={mapHotspot.name} onClose={() => setPanel(null)}>
+          <span className="eyebrow">
+            {mapHotspot.custom
+              ? "YOUR MAP PIN"
+              : mapHotspot.area?.toUpperCase()}
+          </span>
+          <p className="lede">
+            {mapHotspot.custom
+              ? "A location you picked from a Maps link."
+              : GEOGRAPHIC_HOTSPOTS.find((h) => h.id === mapHotspot.id)
+                  ?.description}
+          </p>
+          <div className="hotspot-coordinates">
+            <MapPin size={15} />
+            {mapHotspot.lat.toFixed(5)}, {mapHotspot.lng.toFixed(5)}
+          </div>
+          <button
+            className="primary full"
+            onClick={() => {
+              setMapFocus({ ...mapHotspot, range: 100 });
+              setPanel(null);
+            }}
+          >
+            Look around in 3D <Compass size={17} />
+          </button>
+          {trip &&
+            !trip.complete &&
+            mapHotspot.area &&
+            areaPlace[mapHotspot.area] &&
+            areaPlace[mapHotspot.area] !== trip.place && (
+              <button
+                className="secondary full"
+                onClick={() => {
+                  setDestination(areaPlace[mapHotspot.area!]);
+                  setMode(mapHotspot.area === "Sintra" ? "train" : "walk");
+                  setPanel("travel");
+                }}
+              >
+                Travel here in your trip <ArrowRight size={17} />
+              </button>
+            )}
+          <div className="source-note">
+            <span>
+              Mapped geographic position. Building heights and appearances are
+              approximate. Activities are simulated; nothing is booked.
+            </span>
+            {mapHotspot.mapsUrl && (
+              <a target="_blank" rel="noreferrer" href={mapHotspot.mapsUrl}>
+                Open this pin in Google Maps <ArrowUpRight size={13} />
+              </a>
+            )}
+            {mapHotspot.sourceUrl && (
+              <a target="_blank" rel="noreferrer" href={mapHotspot.sourceUrl}>
+                Official cultural context <ArrowUpRight size={13} />
+              </a>
+            )}
+          </div>
+          {mapHotspot.custom && (
+            <button
+              className="danger-link"
+              onClick={() => {
+                const next = pins.filter((p) => p.id !== mapHotspot.id);
+                setPins(next);
+                try {
+                  localStorage.setItem(PIN_KEY, JSON.stringify(next));
+                } catch {}
+                setPanel(null);
+              }}
+            >
+              Remove this pin
+            </button>
+          )}
+        </Dialog>
+      )}
       {pending && trip && (
         <Dialog title={pending.title} onClose={() => setPending(null)}>
           <p className="lede">A little preview before you choose.</p>
@@ -709,7 +937,7 @@ export default function Roam() {
           {!destination ? (
             <>
               <p className="lede">
-                Six corners of Lisbon. Each with its own rhythm.
+                One connected region. Real positions, your own rhythm.
               </p>
               <div className="destinations">
                 {(Object.keys(places) as PlaceId[]).map((id) => {
@@ -720,14 +948,27 @@ export default function Roam() {
                       className="destination"
                       key={id}
                       disabled={id === trip.place || trip.complete}
-                      onClick={() => setDestination(id)}
+                      onClick={() => {
+                        setDestination(id);
+                        setMode(
+                          id === "sintra" || trip?.place === "sintra"
+                            ? "train"
+                            : "walk",
+                        );
+                      }}
                     >
                       <span
                         className="destination-art"
                         style={{ background: p.color }}
                       >
                         <Icon size={28} />
-                        <span>{visited.has(id) ? "DISCOVERED" : "LISBON"}</span>
+                        <span>
+                          {visited.has(id)
+                            ? "DISCOVERED"
+                            : id === "sintra"
+                              ? "REGION"
+                              : "LISBON"}
+                        </span>
                       </span>
                       <span className="destination-copy">
                         <small>{p.district.toUpperCase()}</small>
@@ -743,8 +984,8 @@ export default function Roam() {
                 })}
               </div>
               <p className="quiet">
-                Original miniature scenes. Venues and characters are
-                illustrative.
+                Real geographic positions. Activities, characters and travel
+                costs are illustrative.
               </p>
             </>
           ) : (
@@ -764,13 +1005,14 @@ export default function Roam() {
                 {(Object.keys(transport) as Mode[]).map((m) => (
                   <button
                     key={m}
-                    disabled={!!blocked(trip, transport[m])}
+                    disabled={!!routeReason(m)}
                     aria-pressed={mode === m}
                     onClick={() => setMode(m)}
                   >
                     {transport[m].title}
                     <small>
-                      {euro(transport[m].cost)} · {transport[m].minutes} min
+                      {euro(route(m)?.cost || 0)} · {route(m)?.minutes || "—"}{" "}
+                      min
                     </small>
                   </button>
                 ))}
@@ -779,12 +1021,10 @@ export default function Roam() {
                 Simplified travel estimates, including walks in Belém. These are
                 not live fares, routes, or timetables.
               </p>
-              {blocked(trip, transport[mode]) && (
-                <p role="status">{blocked(trip, transport[mode])}</p>
-              )}
+              {routeReason(mode) && <p role="status">{routeReason(mode)}</p>}
               <button
                 className="primary full"
-                disabled={!!blocked(trip, transport[mode]) || trip.complete}
+                disabled={!!routeReason(mode) || trip.complete}
                 onClick={() => {
                   command({ kind: "travel", place: destination, mode });
                   setPanel(null);
@@ -796,7 +1036,7 @@ export default function Roam() {
                 <strong>
                   {places[destination].fictional
                     ? "Fictional venue · Real neighbourhood"
-                    : "An imagined scene in a real neighbourhood"}
+                    : "Real neighbourhood, simulated activities"}
                 </strong>
                 <span>
                   Context reviewed {REVIEWED}. Costs and durations are
@@ -972,9 +1212,10 @@ export default function Roam() {
           <div className="source-note">
             <strong>A simulation, with room to dream.</strong>
             <span>
-              30 authored scenarios · 6 miniature scenes. Energy, inspiration,
-              and connection are game meters. Inês, Tomás, and Noor are
-              fictional characters. Multiplayer is planned for a later release.
+              {scenarios.length} authored scenarios · a continuous Lisbon–Sintra
+              world. Energy, inspiration, and connection are game meters. Inês,
+              Tomás, and Noor are fictional characters. Multiplayer is planned
+              for a later release.
             </span>
             <span>
               Costs and durations are illustrative, not current prices. Sources

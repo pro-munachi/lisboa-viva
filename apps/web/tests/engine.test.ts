@@ -13,7 +13,13 @@ import {
   type Setup,
   type Trip,
 } from "../lib/engine";
-import { places, scenarios, transport, CONTENT_VERSION } from "../lib/content";
+import {
+  places,
+  scenarios,
+  transport,
+  routeFor,
+  CONTENT_VERSION,
+} from "../lib/content";
 const setup: Setup = {
   days: 3,
   budget: 300,
@@ -33,11 +39,15 @@ function act(t: Trip, action: Record<string, unknown>): Trip {
   return result.trip;
 }
 function travel(t: Trip, place: string) {
-  return act(t, { kind: "travel", place, mode: "tram" });
+  return act(t, {
+    kind: "travel",
+    place,
+    mode: t.place === "sintra" || place === "sintra" ? "train" : "tram",
+  });
 }
-test("catalog has 30 distinct scenarios, valid choices, sources and free options", () => {
-  assert.equal(scenarios.length, 30);
-  assert.equal(new Set(scenarios.map((s) => s.id)).size, 30);
+test("catalog has 45 distinct scenarios, valid choices and cultural sources", () => {
+  assert.equal(scenarios.length, 45);
+  assert.equal(new Set(scenarios.map((s) => s.id)).size, 45);
   const ids = scenarios.flatMap((s) => s.choices.map((c) => c.id));
   assert.equal(new Set(ids).size, ids.length);
   for (const s of scenarios) {
@@ -51,6 +61,26 @@ test("catalog has 30 distinct scenarios, valid choices, sources and free options
   for (const p of Object.values(places)) {
     assert.match(p.source, /^https:\/\/www.visitlisboa.com\//);
     assert.ok(p.map.length);
+  }
+  for (const place of ["cais", "benfica", "sintra"] as const) {
+    const chapter = scenarios.filter((s) => s.place === place);
+    assert.equal(chapter.length, 5, place);
+    assert.ok(
+      chapter.some((s) => s.stage === "morning"),
+      place,
+    );
+    assert.ok(
+      chapter.some((s) => s.stage === "afternoon"),
+      place,
+    );
+    assert.ok(
+      chapter.some((s) => s.stage === "evening"),
+      place,
+    );
+    assert.ok(
+      chapter.some((s) => s.choices.some((c) => c.cost === 0 && c.energy >= 0)),
+      `${place}: free recovery`,
+    );
   }
 });
 test("choice is charged once, rejects double-taps with different keys and stale revisions", () => {
@@ -75,17 +105,110 @@ test("every destination changes the scene state and charges travel once", () => 
     t = travel(t, place);
     assert.equal(t.place, place);
   }
-  assert.equal(t.spent, 15);
-  assert.equal(t.minute, 665);
+  assert.equal(t.spent, 27);
+  assert.equal(t.minute, 780);
   assert.ok(
     apply(t, {
       kind: "travel",
-      place: "music",
-      mode: "tram",
+      place: t.place,
+      mode: "train",
       revision: t.revision,
       key: "stay",
     }).error,
   );
+});
+test("Sintra uses an intercity route; a tram cannot mutate either leg of the trip", () => {
+  for (const [from, to] of [
+    ["cais", "sintra"],
+    ["sintra", "benfica"],
+  ] as const) {
+    const t = { ...trip(), place: from };
+    const rejected = apply(t, {
+      kind: "travel",
+      place: to,
+      mode: "tram",
+      key: `${from}-tram`,
+      revision: 0,
+    });
+    assert.match(rejected.error || "", /route is not available/);
+    assert.equal(rejected.trip, t);
+    const cmd: Command = {
+      kind: "travel",
+      place: to,
+      mode: "train",
+      key: `${from}-train`,
+      revision: 0,
+    };
+    const arrived = apply(t, cmd).trip;
+    assert.equal(arrived.place, to);
+    assert.equal(arrived.spent, 6);
+    assert.equal(arrived.minute, 605);
+    assert.equal(arrived.energy, 83);
+    assert.match(arrived.history[0].title, /^Train to /);
+    assert.equal(apply(arrived, cmd).trip, arrived);
+  }
+});
+test("long walks and cycle trips to Sintra respect energy and the end of the day", () => {
+  const t = trip();
+  const walk = apply(t, {
+    kind: "travel",
+    place: "sintra",
+    mode: "walk",
+    key: "long-walk",
+    revision: 0,
+  });
+  assert.equal(walk.error, undefined);
+  assert.equal(walk.trip.minute, 870);
+  assert.equal(walk.trip.energy, 5);
+  assert.equal(walk.trip.spent, 0);
+  const returnWalk = apply(walk.trip, {
+    kind: "travel",
+    place: "cais",
+    mode: "walk",
+    key: "return-walk",
+    revision: 1,
+  });
+  assert.match(returnWalk.error || "", /restore your energy/);
+  assert.equal(returnWalk.trip, walk.trip);
+  const late = { ...t, minute: 1200 };
+  const cycle = apply(late, {
+    kind: "travel",
+    place: "sintra",
+    mode: "cycle",
+    key: "late-cycle",
+    revision: 0,
+  });
+  assert.match(cycle.error || "", /before 22:00/);
+  assert.equal(cycle.trip, late);
+  const tired = { ...t, energy: 49 };
+  assert.ok(
+    apply(tired, {
+      kind: "travel",
+      place: "sintra",
+      mode: "cycle",
+      key: "tired-cycle",
+      revision: 0,
+    }).error,
+  );
+  assert.equal(routeFor("cais", "benfica", "walk")?.cost, 0);
+});
+test("Cais, Benfica and Sintra experiences survive save replay and appear in the itinerary", () => {
+  const chapters = [
+    { place: "cais", choice: "station-story-0", district: "Cais do Sodré" },
+    { place: "benfica", choice: "benfica-stories-1", district: "Benfica" },
+    { place: "sintra", choice: "sintra-village-1", district: "Sintra" },
+  ] as const;
+  let t = trip();
+  for (const chapter of chapters) {
+    t = travel(t, chapter.place);
+    t = act(t, { kind: "choice", choiceId: chapter.choice });
+    assert.equal(t.history.at(-1)?.place, chapter.place);
+    assert.deepEqual(restore(serialize(t)), t);
+    assert.match(itinerary(t), new RegExp(chapter.district));
+  }
+  assert.equal(memories(t).length, 3);
+  assert.match(itinerary(t), /All costs\/times illustrative/);
+  assert.match(itinerary(t), /Nothing booked or confirmed/);
 });
 test("over-budget and insufficient-energy choices cannot mutate state", () => {
   let t = newTrip({ ...setup, budget: 30 }, "tight");
