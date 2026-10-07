@@ -50,7 +50,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         );
         return;
       }
-      router.replace("/");
+      router.replace("/play");
       router.refresh();
     } catch {
       setError("We could not connect to the account service.");
@@ -63,10 +63,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   return (
     <main className="auth-page">
       <section className="auth-story" aria-label="Lisboa Viva">
-        <Link
-          className="auth-brand"
-          href={registering ? "/register" : "/login"}
-        >
+        <Link className="auth-brand" href="/">
           ROAM
           <span>Lisbon. Your way.</span>
         </Link>
