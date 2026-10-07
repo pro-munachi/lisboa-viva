@@ -42,6 +42,7 @@ Create migrations only for the active milestone. The P2 and P3 entities below de
 
 - Account registration, login, logout, session refresh, session listing, and session revocation.
 - Unique normalized game handle used for player lookup and transfers.
+- Required user type: `tourist` or `local`. Account creation must ask for this value explicitly; the server must not infer it from location, nationality, language, or activity.
 - Account status: active, suspended, banned, deletion pending.
 - Preferred locale with `pt-PT` as the first-launch default and `en` as an option.
 - Accessibility, sound, message-permission, presence-visibility, and risk-mode preferences.
@@ -254,6 +255,69 @@ The first active schema should cover these tables or equivalent aggregates. Name
 | Justice | `cases`, `case_participants`, `evidence`, `case_events`, `hearings`, `judgments`, `appeals`, `detentions`, `community_service_assignments` | Evidence source authenticated; decision append-only; detention has bounded release time. |
 | Operations | `notifications`, `moderation_reports`, `moderation_actions`, `audit_events`, `runtime_settings` | Privileged changes audited; balance correction references a ledger transaction. |
 
+### 4.1 Proposed `users` table
+
+The account record identifies the human account. Character name, appearance, biography, starting story, current location, skills, needs, and game progress belong to character tables. Password hashes belong to `password_credentials`; permissions belong to `user_roles`; detailed preferences belong to `user_settings`.
+
+| Column | PostgreSQL type | Null/default | Purpose and constraint |
+| --- | --- | --- | --- |
+| `id` | `uuid` | Not null; generated | Primary key. Stable internal account identifier. |
+| `handle` | `varchar(24)` | Not null | Public unique game handle. Normalize to lowercase, validate `^[a-z0-9_]{3,24}$`, and enforce case-insensitive uniqueness. |
+| `email` | `varchar(320)` | Nullable | Private login/recovery address. Enforce case-insensitive uniqueness only when present. Never expose it as profile data. |
+| `user_type` | `user_type` enum | Not null; no implicit default | Explicit selection: `tourist` or `local`. It may be changed through an authenticated profile action. |
+| `account_status` | `account_status` enum | Not null; `active` | `active`, `suspended`, `banned`, or `deletion_pending`. Moderation details remain in moderation tables. |
+| `preferred_locale` | `varchar(10)` | Not null; `pt-PT` | Player-facing locale. Initially accepts `pt-PT` or `en`. |
+| `timezone` | `text` | Not null; `Europe/Lisbon` | IANA timezone used for account-facing real-time displays; game-world time remains separate. |
+| `adult_confirmed_at` | `timestamptz` | Nullable | Records the adult-player confirmation required before social features are enabled without storing a date of birth unnecessarily. |
+| `email_verified_at` | `timestamptz` | Nullable | Set after ownership of a supplied email is verified. |
+| `onboarding_completed_at` | `timestamptz` | Nullable | Marks completion of account and character onboarding. |
+| `last_login_at` | `timestamptz` | Nullable | Updated after successful authentication; useful for account security and operations. |
+| `created_at` | `timestamptz` | Not null; `now()` | Account creation timestamp in UTC. |
+| `updated_at` | `timestamptz` | Not null; `now()` | Last account-record update timestamp in UTC. |
+| `deleted_at` | `timestamptz` | Nullable | Soft-deletion/anonymization workflow timestamp. It is not a substitute for the deletion job. |
+
+Proposed PostgreSQL definition:
+
+```sql
+CREATE TYPE user_type AS ENUM ('tourist', 'local');
+CREATE TYPE account_status AS ENUM (
+    'active',
+    'suspended',
+    'banned',
+    'deletion_pending'
+);
+
+CREATE TABLE users (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    handle varchar(24) NOT NULL
+        CHECK (handle ~ '^[a-z0-9_]{3,24}$'),
+    email varchar(320),
+    user_type user_type NOT NULL,
+    account_status account_status NOT NULL DEFAULT 'active',
+    preferred_locale varchar(10) NOT NULL DEFAULT 'pt-PT'
+        CHECK (preferred_locale IN ('pt-PT', 'en')),
+    timezone text NOT NULL DEFAULT 'Europe/Lisbon',
+    adult_confirmed_at timestamptz,
+    email_verified_at timestamptz,
+    onboarding_completed_at timestamptz,
+    last_login_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+);
+
+CREATE UNIQUE INDEX users_handle_unique
+    ON users (lower(handle));
+
+CREATE UNIQUE INDEX users_email_unique
+    ON users (lower(email))
+    WHERE email IS NOT NULL AND deleted_at IS NULL;
+```
+
+`user_type` describes how the player identifies for the product experience. It must not grant money, permanent progression advantages, moderation access, or in-world legal authority. Tourist/local-specific onboarding, recommendations, and quests should read this field, while the character's starting story remains a separate choice.
+
+For a future migration from the legacy backend, add the nullable column first, ask existing users to choose on next login, and make it non-null only after backfill. New accounts must provide it immediately.
+
 ## 5. Core relationship map
 
 ```mermaid
@@ -349,4 +413,3 @@ Before reuse, replace opaque text identifiers with consistent stable IDs, split 
 - Police/judicial game roles cannot read unrelated messages, alter balances, or moderate accounts.
 - Detention expires while offline and appeal cannot apply the original judgment twice.
 - Admin balance correction creates an auditable balanced-ledger adjustment.
-
