@@ -93,7 +93,6 @@ export function createCity(host, options) {
     generation = 0,
     overviewMesh = null,
     overviewLoading = false,
-    firstFocus = true,
     mode = "orbit",
     motion = !reduce;
   let pendingTeleport = true;
@@ -284,61 +283,6 @@ export function createCity(host, options) {
       mesh.receiveShadow = kind !== "water";
       parent.add(mesh);
     }
-  }
-  function signatureLandmarks() {
-    // Original approximate suspension-bridge model retained from Muna’s waterfront update.
-    const north = point3([-9.1777, 38.6996]);
-    const south = point3([-9.1813, 38.6893]);
-    north.y = south.y = 0;
-    const midpoint = north.clone().lerp(south, 0.5);
-    const span = south.clone().sub(north);
-    const length = span.length();
-    const angle = Math.atan2(span.x, span.z);
-    const bridge = new THREE.Group();
-    bridge.position.copy(midpoint);
-    bridge.rotation.y = angle;
-    const red = new THREE.MeshStandardMaterial({
-      color: "#b84f38",
-      roughness: 0.7,
-    });
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(18, 3.2, length), red);
-    deck.position.y = 64;
-    deck.castShadow = true;
-    bridge.add(deck);
-    for (const z of [-length * 0.34, length * 0.34]) {
-      for (const x of [-11, 11]) {
-        const tower = new THREE.Mesh(new THREE.BoxGeometry(3.8, 104, 4.5), red);
-        tower.position.set(x, 52, z);
-        tower.castShadow = true;
-        bridge.add(tower);
-      }
-      const top = new THREE.Mesh(new THREE.BoxGeometry(27, 3.5, 5), red);
-      top.position.set(0, 101, z);
-      bridge.add(top);
-    }
-    const cableMaterial = new THREE.LineBasicMaterial({ color: "#783326" });
-    for (const x of [-10, 10]) {
-      const points = [];
-      for (let i = 0; i <= 48; i++) {
-        const z = -length / 2 + (length * i) / 48;
-        const between = Math.abs(z) <= length * 0.34;
-        const cableY = between
-          ? 70 + 31 * Math.pow(Math.abs(z) / (length * 0.34), 2)
-          : 70 + 31 * (1 - Math.abs(z) / (length / 2));
-        points.push(new THREE.Vector3(x, cableY, z));
-      }
-      bridge.add(
-        new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints(points),
-          cableMaterial,
-        ),
-      );
-    }
-    city.add(bridge);
-    const bridgeLabel = canvasLabel("PONTE 25 DE ABRIL", "#8e3e2f");
-    bridgeLabel.position.copy(midpoint).add(new THREE.Vector3(0, 135, 0));
-    bridgeLabel.scale.set(105, 22, 1);
-    city.add(bridgeLabel);
   }
   function path(points) {
     const ps = points.map(point3),
@@ -1010,17 +954,14 @@ export function createCity(host, options) {
     focus = next;
     pendingVenue = !street && next.mapVenue ? next.id : null;
     const p = point3([next.lng, next.lat]);
-    const opening = firstFocus;
-    firstFocus = false;
-    const peopleView = street || opening;
-    const distance = street ? 24 : opening ? 58 : next.range || 160;
+    const distance = street ? 24 : next.range || 160;
     if (!street) pendingTeleport = true;
     if (street && player && !pendingTeleport) p.copy(player.position);
-    controls.target.copy(p).add(new THREE.Vector3(0, peopleView ? 1.1 : 0, 0));
+    controls.target.copy(p);
     camera.position.set(
-      p.x + distance * (peopleView ? 0.95 : 0.72),
-      p.y + distance * (peopleView ? 0.38 : 0.72),
-      p.z + distance * (peopleView ? -0.15 : 0.85),
+      p.x + distance * 0.7,
+      p.y + distance * 0.72,
+      p.z + distance * 0.85,
     );
     sun.position.set(p.x - 150, p.y + 400, p.z + 180);
     sun.target.position.copy(p);
@@ -1109,86 +1050,6 @@ export function createCity(host, options) {
     camera.position
       .copy(mid)
       .add(new THREE.Vector3(distance * 0.08, distance * 0.9, distance * 0.42));
-    controls.update();
-  }
-  function coast() {
-    restoreCity();
-    generation++;
-    if (characterGallery) {
-      disposeGroup(characterGallery);
-      characterGallery = null;
-    }
-    characterGallery = new THREE.Group();
-    const centre = point3([-9.335, 38.6805]);
-    centre.y = 0;
-    const sand = new THREE.Mesh(
-      new THREE.BoxGeometry(120, 0.6, 70),
-      mat("#ead79f"),
-    );
-    sand.position.copy(centre).add(new THREE.Vector3(0, -0.3, 8));
-    sand.receiveShadow = true;
-    const ocean = new THREE.Mesh(
-      new THREE.BoxGeometry(160, 0.25, 95),
-      new THREE.MeshStandardMaterial({
-        color: "#5f9fb8",
-        roughness: 0.28,
-        metalness: 0.08,
-      }),
-    );
-    ocean.position.copy(centre).add(new THREE.Vector3(0, -0.12, -70));
-    characterGallery.add(sand, ocean);
-    for (let i = 0; i < 8; i++) {
-      const person = createCharacter({
-        shirt: ["#d86f52", "#efc55d", "#4f7778", "#e9e2d1"][i % 4],
-        skin: ["#a87955", "#76513b", "#d5af8b", "#5b3d30"][i % 4],
-        style: ["casual", "tourist"][i % 2],
-        hairStyle: ["short", "curly", "bob", "bun"][i % 4],
-      });
-      person.position
-        .copy(centre)
-        .add(
-          new THREE.Vector3(-46 + (i % 4) * 13, 0, -2 + Math.floor(i / 4) * 18),
-        );
-      person.rotation.y = Math.PI + (i % 3) * 0.3;
-      person.scale.setScalar(1.4);
-      characterGallery.add(person);
-    }
-    for (let i = 0; i < 3; i++) {
-      const x = -34 + i * 34;
-      const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.18, 0.18, 5.5, 10),
-        mat("#efe8d6"),
-      );
-      pole.position.copy(centre).add(new THREE.Vector3(x, 2.75, 24));
-      const canopy = new THREE.Mesh(
-        new THREE.ConeGeometry(5.2, 2.1, 20),
-        mat(["#d65f4a", "#e6b84f", "#527f82"][i]),
-      );
-      canopy.position.copy(centre).add(new THREE.Vector3(x, 5.9, 24));
-      characterGallery.add(pole, canopy);
-    }
-    scene.add(characterGallery);
-    city.visible = false;
-    markers.visible = false;
-    population.visible = false;
-    scene.background = new THREE.Color("#c7dee8");
-    atmosphere.sky.visible = false;
-    controls.target.copy(centre).add(new THREE.Vector3(0, 2.5, -5));
-    camera.position.copy(centre).add(new THREE.Vector3(54, 34, 78));
-    controls.update();
-  }
-  function bridge() {
-    restoreCity();
-    generation++;
-    if (characterGallery) {
-      disposeGroup(characterGallery);
-      characterGallery = null;
-    }
-    const centre = point3([-9.1795, 38.6945]);
-    centre.y = 35;
-    centre.x += 300;
-    controls.target.copy(centre);
-    camera.position.copy(centre).add(new THREE.Vector3(1500, 520, 0));
     controls.update();
   }
   function resize() {
@@ -1369,7 +1230,6 @@ export function createCity(host, options) {
       coastline = coastRegions(manifest);
       terrainMesh();
       surfaces();
-      signatureLandmarks();
       roads();
       setMarkers(options.hotspots || []);
       status("Loading the streets around you…");
@@ -1385,65 +1245,6 @@ export function createCity(host, options) {
           "City geography could not load. Try reloading; trip experiences still work.",
         );
     });
-  function waterfrontPeople() {
-    if (characterGallery) disposeGroup(characterGallery);
-    generation++;
-    characterGallery = new THREE.Group();
-    // Muna's Cais crowd is an illustrative model preview, separate from mapped walkers.
-    const centre = point3([-9.1472, 38.7035]);
-    centre.y = 0.62;
-    const deck = new THREE.Mesh(
-      new THREE.BoxGeometry(34, 0.45, 20),
-      mat("#d9c6a4"),
-    );
-    deck.position.copy(centre);
-    deck.position.y = 0.36;
-    deck.receiveShadow = true;
-    characterGallery.add(deck);
-    const outfits = [
-      "#bba46a",
-      "#4c666a",
-      "#b97563",
-      "#d8d4c2",
-      "#77748c",
-      "#496a59",
-    ];
-    const skins = ["#a87955", "#76513b", "#d5af8b", "#b58c6b", "#5b3d30"];
-    for (let i = 0; i < 14; i++) {
-      const person = createCharacter({
-        shirt: outfits[i % outfits.length],
-        skin: skins[i % skins.length],
-        style: ["casual", "jacket", "dress", "tourist"][i % 4],
-        hairStyle: ["short", "curly", "bob", "bun"][i % 4],
-        phase: i * 0.55,
-      });
-      person.position
-        .copy(centre)
-        .add(
-          new THREE.Vector3(
-            -12 + (i % 5) * 5.8,
-            0.02,
-            -5.5 + Math.floor(i / 5) * 5.2,
-          ),
-        );
-      person.rotation.y = Math.PI * (0.75 + (i % 3) * 0.12);
-      person.scale.setScalar(1.28);
-      characterGallery.add(person);
-    }
-    scene.add(characterGallery);
-    city.visible = markers.visible = population.visible = false;
-    atmosphere.sky.visible = false;
-    scene.background = new THREE.Color("#c7dee8");
-    controls.target.copy(centre).add(new THREE.Vector3(0, 1.1, 0));
-    const distance = Math.max(
-      40,
-      38 / (2 * Math.tan((camera.fov * Math.PI) / 360) * camera.aspect),
-    );
-    camera.position
-      .copy(centre)
-      .add(new THREE.Vector3(distance * 0.2, distance * 0.42, distance));
-    controls.update();
-  }
   function characters() {
     if (!player) return;
     if (characterGallery) disposeGroup(characterGallery);
@@ -1600,9 +1401,6 @@ export function createCity(host, options) {
     setFocus,
     setMarkers,
     overview,
-    coast,
-    bridge,
-    waterfrontPeople,
     characters,
     people,
     setInterior,
