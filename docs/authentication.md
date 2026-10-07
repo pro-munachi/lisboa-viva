@@ -6,7 +6,7 @@ The account service is a Go HTTP service backed by PostgreSQL. Next.js exposes s
 
 - `/register` creates an adult account and requires `tourist` or `local`.
 - `/login` accepts a handle or email and password.
-- `/` is optimistically redirected to `/login` when no session cookie exists, then validates the session through the protected `me` endpoint before rendering the city.
+- `/` is a public map-led landing page. `/play` redirects to `/login` when no session cookie exists, then validates the session through the protected `me` endpoint before rendering the city.
 - The account control identifies the active handle and user type and provides logout.
 
 All authored authentication copy defaults to English. European Portuguese remains a supported account locale.

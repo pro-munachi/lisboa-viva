@@ -15,7 +15,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open [the development app](http://127.0.0.1:3000), create a tourist or local account, and sign in. The Compose stack runs PostgreSQL, the Go account API, and Next.js. PostgreSQL is exposed only on `127.0.0.1:55433`; the Go API is exposed on `127.0.0.1:8080` for local diagnostics.
+Open [the development app](http://127.0.0.1:3000) to preview the city map, then create a tourist or local account and enter the protected experience at `/play`. The Compose stack runs PostgreSQL, the Go account API, and Next.js. PostgreSQL is exposed only on `127.0.0.1:55433`; the Go API is exposed on `127.0.0.1:8080` for local diagnostics.
 
 For split local development, start `db` and `game` with Compose, then run the Next.js watcher:
 
