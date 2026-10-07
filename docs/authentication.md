@@ -63,10 +63,12 @@ Use `npm run local:status` to check the managed services and `npm run local:stop
 
 ## Render and staging database
 
+For a fresh isolated review environment, use [the prepared Render staging Blueprint and guide](staging.md). That configuration has not yet been deployed and does not reuse existing application accounts or staging secrets.
+
 Configure these as secrets or environment variables rather than committing them:
 
 - Go service: `DATABASE_URL`, `PROJECT_ROOT=/app`, `LISTEN_ADDR=0.0.0.0:8080`, `COOKIE_SECURE=true`.
-- Next.js service: `API_INTERNAL_URL` set to the private/internal URL of the Go service.
+- Next.js service: `API_INTERNAL_URL` set to the Go service's public HTTPS URL when the Go service uses Render's free plan. Free web services cannot receive private network requests. For a paid Go service in the same region, the private HTTP URL can be used instead.
 - Railway proxy target supplied for staging: `zephyr.proxy.rlwy.net:25979`.
 
 After the first administrator creates an ordinary account, set `BOOTSTRAP_ADMIN_HANDLE` to that exact lowercase handle and restart the Go service once. Startup grants the existing account the `admin` role idempotently. Clear the variable afterward. There is deliberately no public role-grant endpoint.
