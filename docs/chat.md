@@ -41,4 +41,4 @@ Pull `feat/arrival-and-city-experience` and rebuild both web and Go services. St
 4. Sign out and confirm the API rejects reading/posting without a valid session. A suspended account must also lose access.
 5. Retry the same POST/UUID to verify one stored message. Changed text/room must return 409. Test empty/overlong bodies, invented rooms and attempts to submit another author’s identity.
 
-This increment supplies shared room conversations and planning prompts. Structured activities/RSVPs, private messages, invitations, blocking/reporting, moderation tools, read receipts, typing indicators and server-backed avatar presence require later implementation before a broader public community launch.
+This increment supplies shared room conversations and planning prompts. The merged multiplayer slice separately supplies short-lived map presence and saved character appearance; see [multiplayer scope](multiplayer.md). Structured activities/RSVPs, private messages, invitations, blocking/reporting, moderation tools, read receipts and typing indicators require later implementation before a broader public community launch.

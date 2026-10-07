@@ -17,6 +17,8 @@ export type WorldFocus = {
   lng: number;
   name: string;
   range?: number;
+  peerId?: string;
+  presenceArea?: string;
 };
 export const areaPlace: Record<string, PlaceId> = {
   Baixa: "cafe",

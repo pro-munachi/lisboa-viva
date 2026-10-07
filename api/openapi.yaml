@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  title: Lisboa Viva Authentication API
-  version: 0.1.0
+  title: Lisboa Viva Account and Multiplayer API
+  version: 0.3.0
 servers:
   - url: /api
 paths:
@@ -66,6 +66,25 @@ paths:
       responses:
         "200":
           description: Updated account
+  /auth/appearance:
+    patch:
+      summary: Replace the current player's saved appearance
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Appearance"
+      responses:
+        "200":
+          description: Updated account and appearance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /admin/users:
     get:
       summary: List account summaries
@@ -74,6 +93,64 @@ paths:
         "200": { description: Admin-authorized account list }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /multiplayer/presence:
+    put:
+      summary: Publish the current in-world player location
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Presence"
+      responses:
+        "200": { description: Presence heartbeat accepted }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Leave multiplayer presence
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Presence removed }
+        "401": { $ref: "#/components/responses/Error" }
+  /multiplayer/nearby:
+    get:
+      summary: List active players near an in-world coordinate
+      security: [{ session: [] }]
+      parameters:
+        - {
+            in: query,
+            name: latitude,
+            required: true,
+            schema: { type: number },
+          }
+        - {
+            in: query,
+            name: longitude,
+            required: true,
+            schema: { type: number },
+          }
+        - {
+            in: query,
+            name: radius,
+            schema:
+              { type: number, minimum: 100, maximum: 25000, default: 3500 },
+          }
+      responses:
+        "200":
+          description: Active nearby players, excluding the caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [players, expiresInSeconds]
+                properties:
+                  players:
+                    type: array
+                    items: { $ref: "#/components/schemas/NearbyPlayer" }
+                  expiresInSeconds: { type: integer, example: 45 }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     session:
@@ -101,6 +178,35 @@ components:
         password: { type: string, minLength: 10, maxLength: 72 }
         userType: { type: string, enum: [tourist, local] }
         adultConfirmed: { type: boolean, const: true }
+        appearance: { $ref: "#/components/schemas/Appearance" }
+    Appearance:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          outfitStyle,
+          topColor,
+          bottomColor,
+          hairStyle,
+          hairColor,
+          skinTone,
+          shoeColor,
+        ]
+      properties:
+        outfitStyle: { type: string, enum: [casual, jacket, dress, tourist] }
+        topColor:
+          {
+            type: string,
+            enum: ["#ece7df", "#687f73", "#b47459", "#777791", "#c19a4b"],
+          }
+        bottomColor:
+          { type: string, enum: ["#34444f", "#4e504b", "#6b5147", "#30324a"] }
+        hairStyle: { type: string, enum: [short, curly, bob, bun] }
+        hairColor:
+          { type: string, enum: ["#302823", "#6a4430", "#b98452", "#171719"] }
+        skinTone:
+          { type: string, enum: ["#5b3d30", "#76513b", "#a87955", "#d5af8b"] }
+        shoeColor: { type: string, enum: ["#eee8df", "#5c4b42", "#292d31"] }
     Login:
       type: object
       additionalProperties: false
@@ -108,17 +214,62 @@ components:
       properties:
         identity: { type: string }
         password: { type: string, maxLength: 72 }
+    Presence:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude, area]
+      properties:
+        latitude: { type: number, minimum: 38.683, maximum: 38.832 }
+        longitude: { type: number, minimum: -9.435, maximum: -9.085 }
+        area: { type: string, minLength: 1, maxLength: 80 }
+    NearbyPlayer:
+      type: object
+      required:
+        [
+          id,
+          handle,
+          userType,
+          latitude,
+          longitude,
+          area,
+          distanceMetres,
+          lastSeenAt,
+          appearance,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: string }
+        userType: { type: string, enum: [tourist, local] }
+        latitude: { type: number }
+        longitude: { type: number }
+        area: { type: string }
+        distanceMetres: { type: integer, minimum: 0 }
+        lastSeenAt: { type: string, format: date-time }
+        appearance: { $ref: "#/components/schemas/Appearance" }
     User:
       type: object
-      required: [id, handle, email, userType, accountStatus, preferredLocale, timezone, roles]
+      required:
+        [
+          id,
+          handle,
+          email,
+          userType,
+          accountStatus,
+          preferredLocale,
+          timezone,
+          roles,
+          appearance,
+        ]
       properties:
         id: { type: string, format: uuid }
         handle: { type: string }
         email: { type: string, format: email }
         userType: { type: string, enum: [tourist, local] }
-        accountStatus: { type: string, enum: [active, suspended, banned, deletion_pending] }
+        accountStatus:
+          { type: string, enum: [active, suspended, banned, deletion_pending] }
         preferredLocale: { type: string, enum: [en, pt-PT], default: en }
         timezone: { type: string }
+        appearance: { $ref: "#/components/schemas/Appearance" }
         roles:
           type: array
           items: { type: string }

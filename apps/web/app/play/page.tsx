@@ -37,6 +37,7 @@ import AuthBoundary from "../../components/AuthBoundary";
 import type { AuthUser } from "../../lib/auth";
 import { accountStorageKeys } from "../../lib/account-storage";
 import { TRAVELLER_COLOURS } from "../../lib/traveller-colours";
+import MultiplayerDock from "../../components/MultiplayerDock";
 import { interiorForHotspot, type InteriorVisit } from "../../lib/interiors";
 import Dialog from "../../components/Dialog";
 import JourneyPanel from "../../components/JourneyPanel";
@@ -109,6 +110,7 @@ import {
   type Interest,
   type Accommodation,
 } from "../../lib/engine";
+import { useMultiplayer } from "../../lib/multiplayer";
 const colors = TRAVELLER_COLOURS.map((colour) => colour.value);
 const interests: { id: Interest; name: string }[] = [
   { id: "food", name: "Food & cafés" },
@@ -183,6 +185,7 @@ const transitHubFor = (hotspot: WorldHotspot | null) =>
   );
 function RoamExperience({ user }: { user: AuthUser }) {
   const storage = accountStorageKeys(user.id);
+  const { peers, setLocation, appearance } = useMultiplayer();
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -266,6 +269,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [loaded, setLoaded] = useState(false);
   const [archive, setArchive] = useState<Trip[]>([]);
   const [setup, setSetup] = useState<Setup>(initial);
+  const travellerAppearance = useMemo(
+    () => ({ ...appearance, topColor: trip?.setup.shirt || setup.shirt }),
+    [appearance, trip?.setup.shirt, setup.shirt],
+  );
   const [calendarValid, setCalendarValid] = useState(true);
   const [panel, setPanel] = useState<Panel>(null);
   const [destination, setDestination] = useState<PlaceId | null>(null);
@@ -324,6 +331,21 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setPanel(completion.panel);
     notify(completion.outcome);
   }
+  useEffect(() => {
+    if (travelSequence) return;
+    setLocation({
+      latitude: mapFocus.lat,
+      longitude: mapFocus.lng,
+      area: mapFocus.presenceArea || mapFocus.name,
+    });
+  }, [
+    mapFocus.lat,
+    mapFocus.lng,
+    mapFocus.name,
+    mapFocus.presenceArea,
+    travelSequence?.id,
+    setLocation,
+  ]);
   function pickHotspot(h: WorldHotspot) {
     if (travelGate.current.pending) return;
     setInterior(null);
@@ -615,6 +637,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
         <World
           focus={mapFocus}
           shirt={trip?.setup.shirt || setup.shirt}
+          appearance={travellerAppearance}
           hotspots={worldHotspots}
           onHotspot={pickHotspot}
           interior={interior}
@@ -626,7 +649,24 @@ function RoamExperience({ user }: { user: AuthUser }) {
             if (trip) setPanel("journey");
             else setPanel("setup");
           }}
+          peers={peers}
         />
+        {!travelSequence && !clean && (
+          <MultiplayerDock
+            onSelect={(peer) => {
+              setInterior(null);
+              setMapHotspot(null);
+              setMapFocus({
+                lat: peer.latitude,
+                lng: peer.longitude,
+                name: `@${peer.handle} · ${peer.area}`,
+                range: 18,
+                peerId: peer.id,
+                presenceArea: peer.area,
+              });
+            }}
+          />
+        )}
         {!travelSequence && (
           <div className="map-tools">
             <button onClick={() => setPanel(trip ? "journey" : "setup")}>
@@ -1036,8 +1076,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
       {panel === "map-search" && (
         <Dialog title="Find your Lisbon." onClose={() => setPanel(null)} wide>
           <p className="lede">
-            Landmarks, cafés, beaches and local spots across one connected Lisbon
-            region.
+            Landmarks, cafés, beaches and local spots across one connected
+            Lisbon region.
           </p>
           <div
             className="location-entry-tabs"
@@ -1869,8 +1909,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
             <span>
               {scenarios.length} authored scenarios · a continuous Lisbon–Sintra
               world. Energy, inspiration, and connection are game meters. Inês,
-              Tomás, and Noor are fictional characters. Multiplayer is planned
-              for a later release.
+              Tomás, and Noor are fictional characters. Signed-in players can
+              now see one another through live city presence.
             </span>
             <span>
               Costs and durations are illustrative, not current prices. Sources

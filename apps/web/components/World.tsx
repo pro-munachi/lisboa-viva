@@ -23,6 +23,9 @@ import { isGoogleMapsConfigured } from "../lib/google-maps";
 import { CITY, cityMinute } from "../lib/cities";
 import type { WorldFocus, WorldHotspot } from "../lib/world-state";
 import type { TravelPhase, TravelSequence } from "../lib/travel-sequence";
+import type { MultiplayerPeer } from "../lib/multiplayer";
+import type { CharacterAppearance } from "../lib/appearance";
+import { DEFAULT_APPEARANCE } from "../lib/appearance";
 type CityController = {
   ready: Promise<boolean>;
   setInterior: (visit: InteriorVisit | null) => void;
@@ -30,6 +33,7 @@ type CityController = {
   performInteriorAction: (id: string, duration?: number) => void;
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
+  setPeers: (peers: MultiplayerPeer[]) => void;
   overview: () => void;
   characters: () => void;
   people: () => void;
@@ -47,6 +51,7 @@ type LocalPerson = { name: string; label: string };
 export default function World({
   focus,
   shirt,
+  appearance = DEFAULT_APPEARANCE,
   hotspots,
   onHotspot,
   interior,
@@ -55,9 +60,11 @@ export default function World({
   minute,
   travelSequence = null,
   onTravelComplete,
+  peers = [],
 }: {
   focus: WorldFocus;
   shirt: string;
+  appearance?: CharacterAppearance;
   hotspots: WorldHotspot[];
   onHotspot: (h: WorldHotspot) => void;
   interior: InteriorVisit | null;
@@ -66,6 +73,7 @@ export default function World({
   minute?: number;
   travelSequence?: TravelSequence | null;
   onTravelComplete?: (id: string) => void;
+  peers?: MultiplayerPeer[];
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
@@ -91,6 +99,8 @@ export default function World({
   const latest = useRef({
     focus,
     shirt,
+    appearance,
+    peers,
     hotspots,
     interior,
     minute: sceneMinute,
@@ -99,6 +109,8 @@ export default function World({
   latest.current = {
     focus,
     shirt,
+    appearance,
+    peers,
     hotspots,
     interior,
     minute: sceneMinute,
@@ -111,6 +123,7 @@ export default function World({
   const googleVisible = google && !travelSequence;
   const [gallery, setGallery] = useState(false);
   const [person, setPerson] = useState<LocalPerson | null>(null);
+  const [peer, setPeer] = useState<MultiplayerPeer | null>(null);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [activityState, setActivityState] = useState<
     "idle" | "walking" | "active"
@@ -139,7 +152,12 @@ export default function World({
         }
         try {
           instance.setInterior(null);
-          if (instance.startTravel(sequence)) {
+          if (
+            instance.startTravel({
+              ...sequence,
+              appearance: latest.current.appearance,
+            })
+          ) {
             startedTravel.current = sequence.id;
           } else {
             startedTravel.current = null;
@@ -192,8 +210,15 @@ export default function World({
             onStats: setStats,
             onPerson: (local: LocalPerson) => {
               if (latest.current.travelSequence) return;
+              setPeer(null);
               setGallery(false);
               setPerson(local);
+            },
+            onPeer: (player: MultiplayerPeer) => {
+              if (latest.current.travelSequence) return;
+              setPerson(null);
+              setGallery(false);
+              setPeer(player);
             },
             onInteriorZone: (id: string) => {
               setSelectedZone(id);
@@ -250,7 +275,7 @@ export default function World({
       controller.current = null;
       startedTravel.current = null;
     };
-  }, [googleVisible, shirt]);
+  }, [googleVisible, shirt, appearance]);
   useEffect(() => {
     setTravelPhase(null);
     setTravelError("");
@@ -258,6 +283,7 @@ export default function World({
       setGoogle(false);
       setGallery(false);
       setPerson(null);
+      setPeer(null);
       if (
         startedTravel.current &&
         startedTravel.current !== travelSequence.id
@@ -274,6 +300,7 @@ export default function World({
   useEffect(() => {
     setGallery(false);
     setPerson(null);
+    setPeer(null);
     if (travelSequence) return;
     controller.current?.setFocus(focus);
     // A journey hub can update its map focus after entering a room. Restore
@@ -283,6 +310,9 @@ export default function World({
   useEffect(() => {
     controller.current?.setMarkers(hotspots);
   }, [hotspots]);
+  useEffect(() => {
+    controller.current?.setPeers(peers);
+  }, [peers]);
   useEffect(() => {
     setGallery(false);
     setPerson(null);
@@ -527,6 +557,27 @@ export default function World({
             Olá! I’m out for a walk. Take your time and explore the streets
             around you.
           </p>
+        </aside>
+      )}
+      {!googleVisible && !gallery && !travelSequence && peer && (
+        <aside className="local-card peer-card" aria-label="Nearby player">
+          <div className="local-card-header">
+            <div>
+              <span className="local-card-kicker">Player nearby</span>
+              <strong>@{peer.handle}</strong>
+            </div>
+            <button
+              className="local-card-close"
+              aria-label="Dismiss nearby player"
+              onClick={() => setPeer(null)}
+            >
+              <X size={17} />
+            </button>
+          </div>
+          <span className="local-card-label">
+            {peer.userType === "local" ? "Local" : "Tourist"} · {peer.area}
+          </span>
+          <p>This is another signed-in ROAM player who is online now.</p>
         </aside>
       )}
       <div

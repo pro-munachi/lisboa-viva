@@ -18,8 +18,16 @@ Most source buildings have no detailed architectural tags. The extra colours, wi
 
 ## Review evidence
 
-All 211 web tests and the typechecked production build pass. The full Go race suite, including real loopback PostgreSQL integrations, and `go vet` pass. Browser inspection showed the striped Café Janis entry, category icon and multiple façade/roof forms around Cais do Sodré. Computed browser styles confirmed both local fonts loaded; desktop content and viewport were both 1218px wide.
+All 225 web tests and the typechecked production build pass after integrating Muna's latest main. All 33 Go race tests, including real loopback PostgreSQL integrations, and `go vet` pass. Browser inspection showed the striped Café Janis entry, category icon and multiple façade/roof forms around Cais do Sodré. Computed browser styles confirmed both local fonts loaded; desktop content and viewport were both 1218px wide.
 
 An isolated account preview completed an airport landing into the airport journey controls, booked a €2 metro ticket and boarded to Baixa. The boarding view showed the original train and traveller, followed by movement and destination arrival. The budget and simulated 30-minute travel charge applied once, and reload preserved the ledger without replaying the camera sequence. The Beaches filter returned 24 results; Tamariz used its recorded OSM coordinates, source link and outdoor-only controls. At 390 × 844, Beaches remained visible, page width stayed 390px and the 44px Skip button was uncovered and operable by Enter. No warning/error logs appeared in the captured checks. Screenshots are saved locally under `/private/tmp/roam-city-refresh/`.
 
 These checks do not establish physical-device frame rates, real operator bookings, surveyed building/interior appearance or a hosted staging deployment. Plane and vehicle scenes are original illustrations; the destination camera returns to the geographic world.
+
+## Latest main integration
+
+Muna's `0bdea439` (live map presence) and `2ccd08d2` (customizable saved appearance) are integrated. Chat, account-scoped trip saves, strict request limits and account error handling remain. The two `004` migrations retain their original filenames/checksums; appearance backfill supplies existing accounts before the new API starts. Logout clears presence and revokes the session atomically.
+
+Presence uses one bounded polling chain, rejects stale location results and validates public peer fields. Explicit hide waits for the outstanding heartbeat and confirms deletion; reconnecting peers expire. Polling cannot reset the travel camera or rebuild actors mid-sequence. Saved outfit, hair, skin, trousers and shoes carry into the transport traveller; the local trip palette remains its top-colour override.
+
+Beach framing samples actual nearby water and chooses a clear inland camera facing the shoreline. Tests cover all 24 source beaches in desktop and portrait framing, with collision/missing-coast fallbacks. Geographic coordinates and coastline geometry stay unchanged.

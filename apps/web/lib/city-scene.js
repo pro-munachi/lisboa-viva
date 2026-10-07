@@ -105,6 +105,7 @@ export function createCity(host, options) {
     focus = options.focus,
     player = null,
     playerTarget = null,
+    peerActors = [],
     agents = [],
     vehicles = [],
     lastTime = 0,
@@ -120,7 +121,8 @@ export function createCity(host, options) {
     chunkCache = new Map(),
     roadPaths = [],
     venueMeshes = [],
-    personMeshes = [];
+    personMeshes = [],
+    peerMeshes = [];
   let selectedHotspotId = null;
   const badgeItems = [];
   let markerSelection = "",
@@ -130,6 +132,8 @@ export function createCity(host, options) {
   scene.add(city);
   const population = new THREE.Group();
   scene.add(population);
+  let peerPopulation = new THREE.Group();
+  scene.add(peerPopulation);
   const materials = new Map();
   const sharedMaterials = new Set([
     ...architecture.wallMaterials,
@@ -189,7 +193,8 @@ export function createCity(host, options) {
     controls,
     disposeGroup,
     badgeHost: host,
-    shirt: options.shirt,
+    shirt: options.appearance?.topColor || options.shirt,
+    appearance: options.appearance,
     onZone: options.onInteriorZone,
     onActivity: options.onInteriorActivity,
     reducedMotion: reduce,
@@ -211,6 +216,7 @@ export function createCity(host, options) {
       if (event.phase === "arriving") {
         city.visible = true;
         population.visible = true;
+        peerPopulation.visible = true;
       }
       options.onTravelPhase?.(event);
     },
@@ -242,7 +248,7 @@ export function createCity(host, options) {
       return false;
     cancelTravel();
     setFocus(sequence.to);
-    city.visible = population.visible = false;
+    city.visible = population.visible = peerPopulation.visible = false;
     if (overviewMesh) overviewMesh.visible = false;
     badges.update(camera, {
       width: host.clientWidth,
@@ -851,6 +857,85 @@ export function createCity(host, options) {
     markerSelection = "";
     refreshMarkers();
   }
+  function setPeers(peers, frameSelected = false) {
+    options.peers = Array.isArray(peers) ? peers : [];
+    // Presence polling records the latest roster during a journey, leaving its
+    // camera and existing peer resources untouched until the city is restored.
+    if (destroyed || travel.active) return;
+    disposeGroup(peerPopulation);
+    peerPopulation = new THREE.Group();
+    scene.add(peerPopulation);
+    peerMeshes.length = 0;
+    peerActors = [];
+    peerPopulation.visible =
+      !characterGallery &&
+      !indoor.active &&
+      camera.position.distanceTo(controls.target) < 900;
+    if (!manifest || indoor.active || characterGallery) return;
+    const shirts = ["#bd7557", "#4f7370", "#77748c", "#c19a4b", "#52735b"];
+    const skins = ["#a87955", "#76513b", "#d5af8b", "#5b3d30"];
+    options.peers.slice(0, 40).forEach((peer, index) => {
+      if (
+        !peer ||
+        !Number.isFinite(peer.longitude) ||
+        !Number.isFinite(peer.latitude) ||
+        !containsGeo(manifest.bounds, [peer.longitude, peer.latitude]) ||
+        typeof peer.handle !== "string" ||
+        !peer.handle
+      )
+        return;
+      const seed = [...peer.handle].reduce(
+        (total, character) => total + character.charCodeAt(0),
+        0,
+      );
+      const character = createCharacter({
+        shirt: peer.appearance?.topColor || shirts[seed % shirts.length],
+        trousers: peer.appearance?.bottomColor,
+        hair: peer.appearance?.hairColor,
+        skin: peer.appearance?.skinTone || skins[seed % skins.length],
+        shoes: peer.appearance?.shoeColor,
+        style:
+          peer.appearance?.outfitStyle ||
+          (peer.userType === "local" ? "casual" : "tourist"),
+        hairStyle:
+          peer.appearance?.hairStyle ||
+          ["short", "curly", "bob", "bun"][seed % 4],
+      });
+      const target = point3([peer.longitude, peer.latitude]);
+      const nearest = nearestPath(target, true);
+      character.position.copy(
+        nearest
+          ? sample(nearest.line, nearest.d + 2.5 + index * 1.7, 1.2).v
+          : target,
+      );
+      character.position.y =
+        geoY(unprojectGeo(character.position.x, character.position.z)) + 0.2;
+      character.rotation.y = ((seed % 8) * Math.PI) / 4;
+      character.traverse((mesh) => {
+        if (!mesh.isMesh) return;
+        mesh.userData.peer = peer;
+        peerMeshes.push(mesh);
+      });
+      const label = canvasLabel(`@${peer.handle}`, "#446b5a");
+      label.position.y = 2.75;
+      label.scale.set(1.45, 0.32, 1);
+      label.userData.peer = peer;
+      character.add(label);
+      peerMeshes.push(label);
+      peerPopulation.add(character);
+      peerActors.push(character);
+      if (frameSelected && focus?.peerId === peer.id) {
+        controls.target
+          .copy(character.position)
+          .add(new THREE.Vector3(0, 1, 0));
+        const distance = focus.range || 18;
+        camera.position
+          .copy(character.position)
+          .add(new THREE.Vector3(distance * 0.35, distance * 0.42, distance));
+        controls.update();
+      }
+    });
+  }
   function refreshMarkers() {
     const hotspots = options.hotspots || [];
     const range = camera.position.distanceTo(controls.target);
@@ -1094,10 +1179,13 @@ export function createCity(host, options) {
     if (savedPlayer) disposeGroup(savedPlayer);
     player = null;
     player = createCharacter({
-      shirt: options.shirt || "#ece7df",
-      skin: "#a87955",
-      style: "tourist",
-      hairStyle: "short",
+      shirt: options.appearance?.topColor || options.shirt || "#ece7df",
+      trousers: options.appearance?.bottomColor,
+      hair: options.appearance?.hairColor,
+      skin: options.appearance?.skinTone || "#a87955",
+      shoes: options.appearance?.shoeColor,
+      style: options.appearance?.outfitStyle || "tourist",
+      hairStyle: options.appearance?.hairStyle || "short",
     });
     const nearest = nearestPath(target, true);
     const safe =
@@ -1129,13 +1217,16 @@ export function createCity(host, options) {
     you.position.y = 2.6;
     you.scale.set(1.2, 0.27, 1);
     player.add(you);
+    setPeers(options.peers || [], teleport);
   }
   function restoreCity() {
     indoor.clear();
     city.visible = true;
     population.visible = true;
+    peerPopulation.visible = true;
     scene.background = new THREE.Color(exteriorLighting.horizon);
     atmosphere.sky.visible = true;
+    setPeers(options.peers || []);
   }
   function setFocus(next, street = false) {
     cancelTravel();
@@ -1162,6 +1253,7 @@ export function createCity(host, options) {
     sun.target.position.copy(p);
     controls.update();
     refreshMarkers();
+    setPeers(options.peers || [], !street);
     if (manifest) {
       return loadChunks();
     }
@@ -1252,6 +1344,13 @@ export function createCity(host, options) {
     const personHit =
       population.visible &&
       ray.intersectObjects(personMeshes.filter(visible), false)[0];
+    const peerHit =
+      peerPopulation.visible &&
+      ray.intersectObjects(peerMeshes.filter(visible), false)[0];
+    if (peerHit) {
+      options.onPeer?.(peerHit.object.userData.peer);
+      return;
+    }
     if (personHit) {
       options.onPerson?.(personHit.object.userData.person);
       return;
@@ -1316,8 +1415,16 @@ export function createCity(host, options) {
       }
       animateCharacter(player, now / 1000, motion && distance > 0.1);
     }
+    if (
+      !indoor.active &&
+      peerPopulation.visible &&
+      (!travel.active || travelPhase === "arriving")
+    )
+      peerActors.forEach((peer, index) =>
+        animateCharacter(peer, now / 1000 + index * 0.37, false),
+      );
     const range = camera.position.distanceTo(controls.target);
-    population.visible =
+    population.visible = peerPopulation.visible =
       !characterGallery &&
       !indoor.active &&
       (!travel.active || travelPhase === "arriving") &&
@@ -1384,6 +1491,7 @@ export function createCity(host, options) {
       status("Loading the streets around you…");
       await setFocus(focus);
       if (destroyed) return false;
+      setPeers(options.peers || []);
       status("");
       options.onReady?.();
       if (options.interior) setInterior(options.interior);
@@ -1430,6 +1538,7 @@ export function createCity(host, options) {
     scene.add(characterGallery);
     city.visible = false;
     population.visible = false;
+    peerPopulation.visible = false;
     scene.background = new THREE.Color("#dcded5");
     atmosphere.sky.visible = false;
     controls.target.copy(centre).add(new THREE.Vector3(0, 0.95, 0));
@@ -1493,10 +1602,12 @@ export function createCity(host, options) {
           east = Math.max(...ring.map((p) => p.x)),
           north = Math.min(...ring.map((p) => p.z)),
           south = Math.max(...ring.map((p) => p.z));
-        return Math.hypot(
-          Math.max(west - point.x, 0, point.x - east),
-          Math.max(north - point.z, 0, point.z - south),
-        ) < 90;
+        return (
+          Math.hypot(
+            Math.max(west - point.x, 0, point.x - east),
+            Math.max(north - point.z, 0, point.z - south),
+          ) < 90
+        );
       });
     if (focus?.category === "beach" && coastline) {
       const framed = beachCameraView({
@@ -1577,7 +1688,7 @@ export function createCity(host, options) {
     }
     generation++;
     indoor.enter(next, point3([focus.lng, focus.lat]));
-    city.visible = population.visible = false;
+    city.visible = population.visible = peerPopulation.visible = false;
     atmosphere.sky.visible = false;
     scene.background = new THREE.Color("#d9dfd3");
     status("");
@@ -1590,6 +1701,7 @@ export function createCity(host, options) {
     cancelTravel,
     setTime,
     setMarkers,
+    setPeers,
     overview,
     characters,
     people,

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { LogOut, UserRound } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
+import { MultiplayerProvider } from "../lib/multiplayer";
 
 export default function AuthBoundary({
   children,
@@ -72,7 +73,9 @@ export default function AuthBoundary({
   }
   return (
     <>
-      {typeof children === "function" ? children(user) : children}
+      <MultiplayerProvider user={user}>
+        {typeof children === "function" ? children(user) : children}
+      </MultiplayerProvider>
       <aside className="auth-account" aria-label="Active account">
         <UserRound size={16} />
         <span>
@@ -80,7 +83,12 @@ export default function AuthBoundary({
           <small>{user.userType === "local" ? "Local" : "Tourist"}</small>
         </span>
         {logoutError && <span role="alert">{logoutError}</span>}
-        <button onClick={logout} aria-label="Sign out" title="Sign out" disabled={signingOut}>
+        <button
+          onClick={logout}
+          aria-label="Sign out"
+          title="Sign out"
+          disabled={signingOut}
+        >
           <LogOut size={16} />
         </button>
       </aside>
