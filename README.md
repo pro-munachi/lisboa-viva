@@ -4,18 +4,26 @@ A playable city journey simulator with Lisbon–Sintra as its pilot region. Rota
 
 The default world works without a Google API key. It bundles OpenStreetMap geography and EU-DEM terrain, with original adult-proportioned characters, simulated pedestrians, cars and trams. The 273,347 building footprints retain real mapped positions; facades, roofs and most heights are approximate. This is a geographic game world, not an exact architectural or photorealistic replica.
 
-This replaces the earlier Lisboa Viva multiplayer life simulation. The old Go/PostgreSQL economy, authentication, jobs, transfers, policing and chat are removed from the active project; Git history retains that implementation. [PR #1](https://github.com/pro-munachi/lisboa-viva/pull/1) supplies the tourist trip requirements. The accepted ROAM design and later continuous-city brief extend its original 3D scope. The reference game's character assets have not been copied.
+This replaces the earlier Lisboa Viva multiplayer life simulation. Its wider economy, jobs, transfers, policing and chat remain outside the active client, while a new Go/PostgreSQL account service now provides registration, login, sessions and role authorization. Git history retains the broader earlier implementation. [PR #1](https://github.com/pro-munachi/lisboa-viva/pull/1) supplies the tourist trip requirements. The accepted ROAM design and later continuous-city brief extend its original 3D scope. The reference game's character assets have not been copied.
 
 ## Run
 
-Node 22 or newer and a modern browser supporting WebGL and `DecompressionStream`. From the repository root:
+Docker Desktop is the simplest way to run the authenticated application:
 
 ```sh
+cp .env.example .env
+docker compose up --build
+```
+
+Open [the development app](http://127.0.0.1:3000), create a tourist or local account, and sign in. The Compose stack runs PostgreSQL, the Go account API, and Next.js. PostgreSQL is exposed only on `127.0.0.1:55433`; the Go API is exposed on `127.0.0.1:8080` for local diagnostics.
+
+For split local development, start `db` and `game` with Compose, then run the Next.js watcher:
+
+```sh
+docker compose up --build db game
 npm --prefix apps/web ci
 npm run dev
 ```
-
-Open [the development app](http://127.0.0.1:3000). No database, account or external API credential is required.
 
 ```sh
 npm test
@@ -24,7 +32,7 @@ npm run build
 npm start
 ```
 
-Or run `docker compose up --build` and open [localhost](http://localhost:3000). Root scripts delegate to `apps/web`; the lockfile lives there. Optional Google 3D imagery setup is in [docs/google-maps.md](docs/google-maps.md); no key is included or required for the open-data world.
+Root npm scripts delegate to `apps/web`; the lockfile lives there. Run `go test ./...` from `services/game` for the account service. Optional Google 3D imagery setup is in [docs/google-maps.md](docs/google-maps.md); no key is included or required for the open-data world.
 
 ## What is playable
 
@@ -38,6 +46,7 @@ Or run `docker compose up --build` and open [localhost](http://localhost:3000). 
 - **Choices and consequences:** 45 scenarios with two choices each across food, craft, stories, music, viewpoints and rest. Previews show cost, duration and energy. Exact-once actions keep money nonnegative, energy bounded and simulated activities from overlapping. Each scenario supplies one unique experience per run.
 - **Travel and memories:** illustrative walk/cycle/tram travel, with an intercity train option and longer walk/cycle estimates for Sintra. Tram travel is unavailable for Sintra. District passport, three optional challenges, confirmed-action journal, recap, early finish and private itinerary download remain playable. Free breaks and overnight rest provide a route forward.
 - **Saved progress:** validated same-browser save/resume, the current trip plus four earlier chapters, replay/new trip and explicit deletion. Invalid saves receive a visible message. Custom pins are separately validated and capped at 16.
+- **Authenticated access:** English registration and login screens distinguish tourists from locals. Opaque seven-day sessions use HttpOnly cookies; the Go service owns password hashing, session validation and role checks. The app route verifies the session before rendering.
 - **Accessible alternatives:** responsive layouts, native modal focus management, reduced-motion support, semantic meters, camera buttons and list-based hotspot/activity selection. Trip experiences remain available if 3D cannot load.
 
 ## Accuracy and privacy
@@ -46,7 +55,7 @@ Street positions and footprints come from the bundled OpenStreetMap snapshot; te
 
 All euro costs, durations, route choices and activities are illustrative game assumptions, **not current prices, live timetables, availability or bookings**. Fictional venues and conversations are identified in their content. Cultural sources support context rather than prices or opening hours. Enterable room layouts are original imagined scenes, not surveyed business interiors or evidence of actual services, inventory, access or opening status. Custom pins, street/locality searches and unclassified Google places do not infer an enterable room from a name alone. Personal coordinate pins are unverified locations; a Maps link does not establish that a fictional venue exists.
 
-The budget excludes the arrival flight and accommodation; a booked simulated departure flight is explicitly charged to the game budget. No server stores trips. No analytics, live location, real social presence, accounts or public sharing are implemented. Downloading an itinerary creates a local text file. Clearing browser storage erases guest progress and saved pins. Opening an external Maps/source link takes the user to that provider.
+The budget excludes the arrival flight and accommodation; a booked simulated departure flight is explicitly charged to the game budget. Accounts are stored in PostgreSQL, but no server stores trips, map pins, analytics, live location, real social presence or public sharing. Downloading an itinerary creates a local text file. Clearing browser storage erases trip progress and saved pins. Opening an external Maps/source link takes the user to that provider.
 
 Optional AI recommendations use the [OpenAI Responses API with structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses). Set `OPENAI_API_KEY` in the server's ignored `apps/web/.env.local`; `OPENAI_MODEL` optionally selects a compatible model (default `gpt-4.1-mini`). Credentials are never exposed to the browser. Clicking the AI button sends only profile choices, duration and budget to the model; exact calendar dates, avatar colour, trip history and custom pins are omitted. Responses are bounded, uncached and validated against the chapter catalog. No live AI request has been verified without a configured key.
 
@@ -61,6 +70,8 @@ Optional AI recommendations use the [OpenAI Responses API with structured output
 - `apps/web/lib/interiors.ts`, `city-interiors.js`, `city-interior-runtime.js` and `city-room-navigation.js`: original room catalog, geometry, local activity poses and furniture-aware walking. `InteriorPanel` supplies the room controls.
 - `apps/web/public/data`: compressed derived database; `scripts/geography-build.py` and `geography-validate.py`: acquisition and validation.
 - `apps/web/tests`: engine, geography, character and pin regression checks.
+- `services/game`: Go authentication API, session and role authorization; `db/migrations`: PostgreSQL account schema.
+- [docs/authentication.md](docs/authentication.md): endpoints, security boundary, local setup and staging configuration.
 - `docs/PRD.md`: preserved original requirements; [docs/scope.md](docs/scope.md): current scope; [docs/verification.md](docs/verification.md): checks and limits.
 - [docs/backend-schema-plan.md](docs/backend-schema-plan.md): feature inventory and staged PostgreSQL schema boundary for rebuilding the persistent Lisboa Viva backend.
 

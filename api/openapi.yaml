@@ -1,0 +1,124 @@
+openapi: 3.1.0
+info:
+  title: Lisboa Viva Authentication API
+  version: 0.1.0
+servers:
+  - url: /api
+paths:
+  /auth/register:
+    post:
+      summary: Create an adult tourist or local account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Register"
+      responses:
+        "201":
+          description: Registered and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/login:
+    post:
+      summary: Create a session with handle/email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Login"
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      summary: Revoke the current session
+      responses:
+        "200":
+          description: Signed out
+  /auth/me:
+    get:
+      summary: Return the current account
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401": { $ref: "#/components/responses/Error" }
+    patch:
+      summary: Change user type or locale
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Updated account
+  /admin/users:
+    get:
+      summary: List account summaries
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Admin-authorized account list }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: lv_session
+  responses:
+    Error:
+      description: Stable error code
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+  schemas:
+    Register:
+      type: object
+      additionalProperties: false
+      required: [handle, email, password, userType, adultConfirmed]
+      properties:
+        handle: { type: string, pattern: "^[a-z0-9_]{3,24}$" }
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, minLength: 10, maxLength: 72 }
+        userType: { type: string, enum: [tourist, local] }
+        adultConfirmed: { type: boolean, const: true }
+    Login:
+      type: object
+      additionalProperties: false
+      required: [identity, password]
+      properties:
+        identity: { type: string }
+        password: { type: string, maxLength: 72 }
+    User:
+      type: object
+      required: [id, handle, email, userType, accountStatus, preferredLocale, timezone, roles]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: string }
+        email: { type: string, format: email }
+        userType: { type: string, enum: [tourist, local] }
+        accountStatus: { type: string, enum: [active, suspended, banned, deletion_pending] }
+        preferredLocale: { type: string, enum: [en, pt-PT], default: en }
+        timezone: { type: string }
+        roles:
+          type: array
+          items: { type: string }

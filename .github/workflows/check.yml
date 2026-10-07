@@ -1,6 +1,18 @@
 name: ROAM checks
 on: [push, pull_request]
 jobs:
+  game:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/game
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/game/go.mod
+          cache-dependency-path: services/game/go.sum
+      - run: go test ./...
   web:
     runs-on: ubuntu-latest
     defaults:

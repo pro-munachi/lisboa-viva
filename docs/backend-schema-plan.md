@@ -44,7 +44,7 @@ Create migrations only for the active milestone. The P2 and P3 entities below de
 - Unique normalized game handle used for player lookup and transfers.
 - Required user type: `tourist` or `local`. Account creation must ask for this value explicitly; the server must not infer it from location, nationality, language, or activity.
 - Account status: active, suspended, banned, deletion pending.
-- Preferred locale with `pt-PT` as the first-launch default and `en` as an option.
+- Preferred locale with `en` as the first-launch default and `pt-PT` as an option.
 - Accessibility, sound, message-permission, presence-visibility, and risk-mode preferences.
 - Terms/privacy acceptance versions and minimum-age eligibility when social play opens.
 - Admin roles are separate from in-world police and judicial roles.
@@ -69,7 +69,7 @@ Create migrations only for the active milestone. The P2 and P3 entities below de
 - NPC identities, occupations, traits, schedules, dialogue/content keys, relationships, and limited interaction memory.
 - Content versioning, draft/published/retired state, effective dates, and editor attribution.
 - Separate research sources and review dates from fictional prices, schedules, and mechanics.
-- Localized content keys with complete `pt-PT`; English may fall back to Portuguese.
+- Localized content keys with complete English copy; European Portuguese may fall back to English until translated.
 - First-playable seeds for about 10 connected hubs and at least 20 usable venues.
 
 ### 3.5 Simulation clock, weather, and calendar — P1
@@ -266,7 +266,7 @@ The account record identifies the human account. Character name, appearance, bio
 | `email` | `varchar(320)` | Nullable | Private login/recovery address. Enforce case-insensitive uniqueness only when present. Never expose it as profile data. |
 | `user_type` | `user_type` enum | Not null; no implicit default | Explicit selection: `tourist` or `local`. It may be changed through an authenticated profile action. |
 | `account_status` | `account_status` enum | Not null; `active` | `active`, `suspended`, `banned`, or `deletion_pending`. Moderation details remain in moderation tables. |
-| `preferred_locale` | `varchar(10)` | Not null; `pt-PT` | Player-facing locale. Initially accepts `pt-PT` or `en`. |
+| `preferred_locale` | `varchar(10)` | Not null; `en` | Player-facing locale. Initially accepts `en` or `pt-PT`. |
 | `timezone` | `text` | Not null; `Europe/Lisbon` | IANA timezone used for account-facing real-time displays; game-world time remains separate. |
 | `adult_confirmed_at` | `timestamptz` | Nullable | Records the adult-player confirmation required before social features are enabled without storing a date of birth unnecessarily. |
 | `email_verified_at` | `timestamptz` | Nullable | Set after ownership of a supplied email is verified. |
@@ -294,7 +294,7 @@ CREATE TABLE users (
     email varchar(320),
     user_type user_type NOT NULL,
     account_status account_status NOT NULL DEFAULT 'active',
-    preferred_locale varchar(10) NOT NULL DEFAULT 'pt-PT'
+    preferred_locale varchar(10) NOT NULL DEFAULT 'en'
         CHECK (preferred_locale IN ('pt-PT', 'en')),
     timezone text NOT NULL DEFAULT 'Europe/Lisbon',
     adult_confirmed_at timestamptz,
