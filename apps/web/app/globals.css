@@ -1993,6 +1993,45 @@ small {
   font-size: 12px;
   line-height: 1.5;
 }
+.interior-controls {
+  left: 28px;
+  transform: none;
+  bottom: 33px;
+  max-width: calc(100% - 420px);
+  flex-wrap: wrap;
+}
+.interior-error {
+  position: absolute;
+  z-index: 8;
+  right: 25px;
+  top: 125px;
+  padding: 12px;
+  max-width: 350px;
+  background: #f6e6df;
+  color: #9c4635;
+  border-radius: 10px;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .interior-controls,
+  .clean-world .interior-controls {
+    left: 12px;
+    right: 12px;
+    top: 170px;
+    bottom: auto;
+    max-width: none;
+    justify-content: center;
+  }
+  .interior-controls .gesture-controls button span {
+    display: none;
+  }
+  .interior-error {
+    left: 12px;
+    right: 12px;
+    top: 220px;
+    max-width: none;
+  }
+}
 
 .clean-world {
   min-height: calc(100svh - 66px) !important;

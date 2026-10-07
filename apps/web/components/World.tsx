@@ -17,9 +17,15 @@ import {
   Landmark,
 } from "lucide-react";
 import GoogleWorld from "./GoogleWorld";
+import InteriorPanel from "./InteriorPanel";
+import { INTERIOR_ACTIVITIES, type InteriorVisit } from "../lib/interiors";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
 import type { WorldFocus, WorldHotspot } from "../lib/world-state";
 type CityController = {
+  ready: Promise<void>;
+  setInterior: (visit: InteriorVisit | null) => void;
+  selectInteriorZone: (id: string) => void;
+  performInteriorAction: (id: string, duration?: number) => void;
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
   overview: () => void;
@@ -40,24 +46,34 @@ export default function World({
   shirt,
   hotspots,
   onHotspot,
+  interior,
+  onExitInterior,
 }: {
   focus: WorldFocus;
   shirt: string;
   hotspots: WorldHotspot[];
   onHotspot: (h: WorldHotspot) => void;
+  interior: InteriorVisit | null;
+  onExitInterior: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
   const callback = useRef(onHotspot);
   callback.current = onHotspot;
-  const latest = useRef({ focus, shirt, hotspots });
-  latest.current = { focus, shirt, hotspots };
+  const latest = useRef({ focus, shirt, hotspots, interior });
+  latest.current = { focus, shirt, hotspots, interior };
   const [status, setStatus] = useState("Loading Lisbon’s streets…");
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
   const [google, setGoogle] = useState(false);
   const [gallery, setGallery] = useState<"" | "people" | "beach">("");
   const [person, setPerson] = useState<LocalPerson | null>(null);
+  const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [activityState, setActivityState] = useState<
+    "idle" | "walking" | "active"
+  >("idle");
+  const [completed, setCompleted] = useState<string[]>([]);
+  const [roomError, setRoomError] = useState("");
   const [stats, setStats] = useState<{
     buildings: number;
     roads: number;
@@ -86,6 +102,26 @@ export default function World({
               setGallery("");
               setPerson(local);
             },
+            onInteriorZone: (id: string) => {
+              setSelectedZone(id);
+              setRoomError("");
+            },
+            onInteriorActivity: (event: {
+              state: "idle" | "walking" | "active" | "complete";
+              zoneId?: string;
+              error?: string;
+            }) => {
+              setActivityState(
+                event.state === "complete" ? "idle" : event.state,
+              );
+              if (event.error) setRoomError(event.error);
+              if (event.state === "complete" && event.zoneId)
+                setCompleted((list) =>
+                  list.includes(event.zoneId!)
+                    ? list
+                    : [...list, event.zoneId!],
+                );
+            },
           });
           controller.current?.setMode(ui.current.gesture);
           controller.current?.setMotion(ui.current.motion);
@@ -111,6 +147,16 @@ export default function World({
     controller.current?.setMarkers(hotspots);
   }, [hotspots]);
   useEffect(() => {
+    setGallery("");
+    setPerson(null);
+    setCompleted([]);
+    setRoomError("");
+    setActivityState("idle");
+    setSelectedZone(interior ? INTERIOR_ACTIVITIES[interior.kind][0].id : null);
+    if (interior) setGoogle(false);
+    controller.current?.setInterior(interior);
+  }, [interior]);
+  useEffect(() => {
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) setMotion(false);
   }, []);
@@ -118,7 +164,11 @@ export default function World({
     <>
       <div
         className="world"
-        aria-label="Continuous Lisbon 3D world. Drag to rotate, use Pan to move, or scroll to zoom."
+        aria-label={
+          interior
+            ? `${interior.name} original 3D interior. Select a room corner to interact.`
+            : "Continuous Lisbon 3D world. Drag to rotate, use Pan to move, or scroll to zoom."
+        }
       >
         {google ? (
           <GoogleWorld
@@ -137,7 +187,12 @@ export default function World({
         )}
       </div>
       {!google && (
-        <div className="world-controls" aria-label="3D camera controls">
+        <div
+          className={
+            interior ? "world-controls interior-controls" : "world-controls"
+          }
+          aria-label="3D camera controls"
+        >
           <div className="gesture-controls">
             <button
               aria-pressed={gesture === "orbit"}
@@ -197,72 +252,76 @@ export default function World({
               <RotateCw size={17} />
             </button>
           </div>
-          <button
-            aria-label="Street level"
-            onClick={() => {
-              setGallery("");
-              setPerson(null);
-              controller.current?.setFocus(focus, true);
-            }}
-          >
-            <PersonStanding size={17} />
-            <span>Street level</span>
-          </button>
-          <button
-            aria-label="People"
-            onClick={() => {
-              setGallery("people");
-              setPerson(null);
-              controller.current?.waterfrontPeople();
-            }}
-          >
-            <PersonStanding size={17} />
-            <span>People</span>
-          </button>
-          <button
-            aria-label="Lisbon beaches and ocean"
-            onClick={() => {
-              setGallery("beach");
-              setPerson(null);
-              controller.current?.coast();
-            }}
-          >
-            <Waves size={17} />
-            <span>Beaches</span>
-          </button>
-          <button
-            aria-label="Ponte 25 de Abril Lisbon bridge"
-            onClick={() => {
-              setGallery("");
-              setPerson(null);
-              controller.current?.bridge();
-            }}
-          >
-            <Landmark size={17} />
-            <span>Lisbon bridge</span>
-          </button>
-          <button
-            aria-label="Show nearby NPCs"
-            onClick={() => {
-              setGallery("");
-              setPerson(null);
-              controller.current?.people();
-            }}
-          >
-            <Users size={17} />
-            <span>Locals</span>
-          </button>
-          <button
-            aria-label="Whole region"
-            onClick={() => {
-              setGallery("");
-              setPerson(null);
-              controller.current?.overview();
-            }}
-          >
-            <Globe2 size={17} />
-            <span>Whole region</span>
-          </button>
+          {!interior && (
+            <>
+              <button
+                aria-label="Street level"
+                onClick={() => {
+                  setGallery("");
+                  setPerson(null);
+                  controller.current?.setFocus(focus, true);
+                }}
+              >
+                <PersonStanding size={17} />
+                <span>Street level</span>
+              </button>
+              <button
+                aria-label="People"
+                onClick={() => {
+                  setGallery("people");
+                  setPerson(null);
+                  controller.current?.waterfrontPeople();
+                }}
+              >
+                <PersonStanding size={17} />
+                <span>People</span>
+              </button>
+              <button
+                aria-label="Lisbon beaches and ocean"
+                onClick={() => {
+                  setGallery("beach");
+                  setPerson(null);
+                  controller.current?.coast();
+                }}
+              >
+                <Waves size={17} />
+                <span>Beaches</span>
+              </button>
+              <button
+                aria-label="Ponte 25 de Abril Lisbon bridge"
+                onClick={() => {
+                  setGallery("");
+                  setPerson(null);
+                  controller.current?.bridge();
+                }}
+              >
+                <Landmark size={17} />
+                <span>Lisbon bridge</span>
+              </button>
+              <button
+                aria-label="Show nearby NPCs"
+                onClick={() => {
+                  setGallery("");
+                  setPerson(null);
+                  controller.current?.people();
+                }}
+              >
+                <Users size={17} />
+                <span>Locals</span>
+              </button>
+              <button
+                aria-label="Whole region"
+                onClick={() => {
+                  setGallery("");
+                  setPerson(null);
+                  controller.current?.overview();
+                }}
+              >
+                <Globe2 size={17} />
+                <span>Whole region</span>
+              </button>
+            </>
+          )}
           <button
             aria-label={
               motion ? "Pause ambient movement" : "Resume ambient movement"
@@ -275,6 +334,30 @@ export default function World({
             {motion ? <Pause size={17} /> : <Play size={17} />}
           </button>
         </div>
+      )}
+      {interior && (
+        <InteriorPanel
+          visit={interior}
+          selectedZone={selectedZone}
+          activityState={activityState}
+          completed={completed}
+          motion={motion}
+          onSelectZone={(id) => controller.current?.selectInteriorZone(id)}
+          onPerform={(id) => {
+            setRoomError("");
+            controller.current?.performInteriorAction(
+              id,
+              INTERIOR_ACTIVITIES[interior.kind].find((a) => a.id === id)
+                ?.durationMs,
+            );
+          }}
+          onExit={onExitInterior}
+        />
+      )}
+      {interior && roomError && (
+        <p className="interior-error" role="alert">
+          {roomError}
+        </p>
       )}
       {gallery === "people" && (
         <div className="character-preview-label">
@@ -308,7 +391,9 @@ export default function World({
           </p>
         </aside>
       )}
-      <div className="map-credits">
+      <div
+        className={interior ? "map-credits interior-credits" : "map-credits"}
+      >
         <a
           href="https://www.openstreetmap.org/copyright"
           target="_blank"
@@ -316,27 +401,31 @@ export default function World({
         >
           © OpenStreetMap contributors
         </a>
-        <span>Building heights & façades approximate</span>
-        <span title="Produced using Copernicus data and information funded by the European Union — EU-DEM layers">
-          Produced using Copernicus data and information funded by the European
-          Union — EU-DEM layers
-        </span>
-        {stats && (
-          <span>{stats.buildings.toLocaleString()} footprints loaded</span>
-        )}
-        {!google && stats?.people !== undefined && (
-          <span>{stats.people} simulated locals</span>
-        )}
-        {isGoogleMapsConfigured && (
-          <button
-            onClick={() => {
-              setPerson(null);
-              setGallery("");
-              setGoogle((v) => !v);
-            }}
-          >
-            {google ? "Open-data simulation" : "Google 3D imagery"}
-          </button>
+        {!interior && (
+          <>
+            <span>Building heights & façades approximate</span>
+            <span title="Produced using Copernicus data and information funded by the European Union — EU-DEM layers">
+              Produced using Copernicus data and information funded by the
+              European Union — EU-DEM layers
+            </span>
+            {stats && (
+              <span>{stats.buildings.toLocaleString()} footprints loaded</span>
+            )}
+            {!google && stats?.people !== undefined && (
+              <span>{stats.people} simulated locals</span>
+            )}
+            {isGoogleMapsConfigured && (
+              <button
+                onClick={() => {
+                  setPerson(null);
+                  setGallery("");
+                  setGoogle((v) => !v);
+                }}
+              >
+                {google ? "Open-data simulation" : "Google 3D imagery"}
+              </button>
+            )}
+          </>
         )}
       </div>
     </>

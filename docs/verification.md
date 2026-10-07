@@ -4,7 +4,7 @@ Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, Re
 
 ## Automated checks
 
-**61 tests passed** in the latest complete automated test run. The direct Node/tsx loader is also available:
+**61 tests passed** in the complete automated run before the interior update. The direct Node/tsx loader is also available:
 
 ```sh
 node --import ./node_modules/tsx/dist/loader.mjs --test tests/*.test.ts
@@ -21,6 +21,8 @@ The city appearance update adds six coastline tests: actual Tagus/Atlantic water
 The named-venue update adds four focused tests, which passed with the direct Node/tsx loader and are included in the complete run above. They verify unique mapped identities and exact OSM source links; finite positions inside coverage; node-versus-way coordinate provenance; safe HTTPS website tags; actual café/restaurant coverage around Cais do Sodré, Benfica and Sintra; exclusion of individual exercise machines from gyms; accent-insensitive category search; nearby distance ordering; and coordinate-based Maps links.
 
 Two location-index tests verify mapped identities, finite covered positions, source links, distinction between place points and approximate street focuses, accent-insensitive district names, exact tourist street queries and nearby ordering for geographically separate same-name streets. Link-resolver tests cover approved hosts/paths, local full-coordinate parsing and destination precedence, manual approved redirects, rejected private/unrelated/credentialed destinations, loops/request limits, timeout abortion, name-only failures without HTML scraping, client response revalidation and bounded JSON requests to the uncached API route. These are automated checks; live browser results for the latest name/link flow remain pending below.
+
+**21 focused interior tests passed** across `city-interiors.test.ts`, `interiors.test.ts`, `city-interior-runtime.test.ts` and `city-room-navigation.test.ts`. They cover six finite original room builds with bounded mesh/triangle counts; agreement of all 18 catalog, prop and UI zone IDs; trusted mapped venue/museum classification and exclusion of custom/name-only/unclassified locations; reachable spawn-to-zone and zone-to-zone targets with conservative 0.35-metre clearance; padded furniture detours and thin/diagonal blockers; bounded malformed/unreachable navigation; walking → active → complete transitions for every activity; paused/zero-time updates; repeated-click protection; modelled seat positions and clear standing restoration; stable room/world origins; and room-switch/exit cancellation with resource disposal. These checks do not establish browser presentation, physical-device performance or a surveyed real interior.
 
 ## Geographic bundle
 
@@ -39,6 +41,8 @@ The production preview runs at `http://127.0.0.1:3017` in the in-app browser. De
 The appearance update was checked in the production browser with textured facades, shaped roofs, street furniture and vegetation. The Tagus surface and the mapped shoreline are visibly present at Belém Tower and Cais do Sodré; Belém's distinct tower model renders without hiding the water. The hotspot's “Look around in 3D” view changes only the camera, preserving the trip budget. No shader warnings/errors were captured in those views. That appearance production build and its 39 tests passed. These desktop checks do not establish physical-device frame rates.
 
 Browser verification of the latest named storefronts, venue selection, terrace adjustments, population of up to 28 nearby NPCs and typed-location/Google-link flow is pending. The new storefront signs, awnings and seating are approximate decorative interpretations placed near mapped venue coordinates, rather than verified business exteriors. NPCs represent simulated city life, not current customers, employees or live pedestrian counts. Short-link resolver tests use controlled redirect responses; they do not establish that every current Google Maps share link reveals coordinates.
+
+Browser validation of the new enterable home/café/gym/shop/gallery/bar scenes and their activity panel is pending. Automated runtime tests validate local walking, collision footprints, poses, pause and teardown, while the page implementation keeps these scene actions separate from trip transitions and saved progress. No live business interior, real purchase, booking, service availability or public event has been verified.
 
 Canvas dragging was verified in Pan mode after correcting the one-finger touch mapping to follow the selected camera mode. Full walking/collision behaviour has not received automated end-to-end verification. The itinerary button was clicked, but the in-app browser did not produce a downloadable-file event; file delivery remains unverified in this browser. The engine's exported itinerary text is covered by automated tests. Modal opening and its initial close-button focus were observed; full keyboard/screen-reader coverage remains pending. A camera interaction briefly timed out during a large regional render; distant actor rendering/shadows are now suppressed to reduce that load. Physical-device performance remains unmeasured.
 

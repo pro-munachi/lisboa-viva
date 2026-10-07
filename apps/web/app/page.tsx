@@ -30,6 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import World from "../components/World";
+import { interiorForHotspot, type InteriorVisit } from "../lib/interiors";
 import Dialog from "../components/Dialog";
 import { searchMapLocations } from "../lib/map-locations";
 import { resolveGoogleMapsLink } from "../lib/map-link";
@@ -129,6 +130,8 @@ export default function Roam() {
   const [pinError, setPinError] = useState("");
   const [pinName, setPinName] = useState("");
   const [clean, setClean] = useState(false);
+  const [interior, setInterior] = useState<InteriorVisit | null>(null);
+  const beforeInterior = useRef(false);
   const worldHotspots = useMemo(
     () => [
       ...GEOGRAPHIC_HOTSPOTS.map(fromGeographic),
@@ -206,9 +209,28 @@ export default function Roam() {
     if (trip) setMapFocus(focusFor(trip.place, trip.setup.base));
   }, [trip?.place, trip?.setup.base]);
   function pickHotspot(h: WorldHotspot) {
+    setInterior(null);
     setMapHotspot(h);
     setMapFocus({ ...h, range: 140 });
     setPanel("hotspot");
+  }
+  function enterRoom(visit: InteriorVisit) {
+    if (!interior) beforeInterior.current = clean;
+    setInterior(visit);
+    setClean(true);
+    setPanel(null);
+  }
+  function leaveRoom() {
+    setInterior(null);
+    setClean(beforeInterior.current);
+  }
+  function enterHome() {
+    setMapFocus(focusFor("home", trip?.setup.base || setup.base));
+    enterRoom({
+      id: "home",
+      kind: "home",
+      name: `Your Lisbon home · ${trip?.setup.base || setup.base}`,
+    });
   }
   async function addPin() {
     if (pinBusy) return;
@@ -395,16 +417,27 @@ export default function Roam() {
           shirt={trip?.setup.shirt || setup.shirt}
           hotspots={worldHotspots}
           onHotspot={pickHotspot}
+          interior={interior}
+          onExitInterior={leaveRoom}
         />
         <div className="map-tools">
           <button onClick={() => setPanel("map-search")}>
             <Search size={16} /> Find a hotspot
           </button>
-          <button onClick={() => setClean((v) => !v)}>
-            {clean ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
-            {clean ? "Show trip" : "Clean screen"}
+          <button onClick={enterHome}>
+            <Home size={16} /> Your home
           </button>
-          <span>VIEWING {mapFocus.name.toUpperCase()}</span>
+          {!interior && (
+            <button onClick={() => setClean((v) => !v)}>
+              {clean ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
+              {clean ? "Show trip" : "Clean screen"}
+            </button>
+          )}
+          <span>
+            {interior
+              ? `INSIDE ${interior.name.toUpperCase()}`
+              : `VIEWING ${mapFocus.name.toUpperCase()}`}
+          </span>
         </div>
         <header className="topbar">
           <a className="brand" href="/" aria-label="ROAM home">
@@ -869,6 +902,25 @@ export default function Roam() {
           >
             Look around in 3D <Compass size={17} />
           </button>
+          {interiorForHotspot(mapHotspot) && (
+            <button
+              className="secondary full"
+              onClick={() =>
+                enterRoom({
+                  id: mapHotspot.id,
+                  name: mapHotspot.name,
+                  kind: interiorForHotspot(mapHotspot)!,
+                  sourceUrl: mapHotspot.sourceUrl,
+                })
+              }
+            >
+              Enter{" "}
+              {interiorForHotspot(mapHotspot) === "cafe"
+                ? "café"
+                : interiorForHotspot(mapHotspot)}{" "}
+              <ArrowRight size={17} />
+            </button>
+          )}
           {trip &&
             !trip.complete &&
             mapHotspot.area &&

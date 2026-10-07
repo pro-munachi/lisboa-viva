@@ -18,6 +18,7 @@ import { createCityAtmosphere } from "./city-atmosphere";
 import { coastRegions } from "./city-water";
 import { drapedPolygonGeometry } from "./city-surfaces";
 import { createVenueDecorations } from "./city-venues";
+import { createInteriorRuntime } from "./city-interior-runtime";
 import {
   createLocalWalkerProfiles,
   advanceLocalWalker,
@@ -158,6 +159,16 @@ export function createCity(host, options) {
     group.removeFromParent();
     group.clear();
   }
+  const indoor = createInteriorRuntime({
+    scene,
+    camera,
+    controls,
+    disposeGroup,
+    shirt: options.shirt,
+    onZone: options.onInteriorZone,
+    onActivity: options.onInteriorActivity,
+  });
+  let pendingVenue = null;
   function flatPolygonGeometry(ring, holes = [], height = 0.06) {
     const toPath = (points, path) => {
       points
@@ -488,7 +499,14 @@ export function createCity(host, options) {
     return Math.hypot(q.x - v.x, q.z - v.z);
   }
   async function loadChunks() {
-    if (!manifest || destroyed || loadInProgress) return;
+    if (
+      !manifest ||
+      destroyed ||
+      loadInProgress ||
+      characterGallery ||
+      indoor.active
+    )
+      return;
     refreshMarkers();
     if (camera.position.distanceTo(controls.target) > 5000) return;
     loadInProgress = true;
@@ -571,6 +589,15 @@ export function createCity(host, options) {
         ) {
           populate(pendingTeleport);
           pendingTeleport = false;
+        }
+        if (pendingVenue) {
+          const storefront = venueMeshes.find(
+            (mesh) =>
+              mesh.userData.hotspot.id === pendingVenue &&
+              mesh.userData.venueView,
+          );
+          if (storefront) frameVenue(storefront.userData.venueView);
+          pendingVenue = null;
         }
       }
       options.onStats?.({
@@ -966,6 +993,7 @@ export function createCity(host, options) {
     player.add(you);
   }
   function restoreCity() {
+    indoor.clear();
     city.visible = true;
     markers.visible = true;
     population.visible = true;
@@ -980,6 +1008,7 @@ export function createCity(host, options) {
     }
     generation++;
     focus = next;
+    pendingVenue = !street && next.mapVenue ? next.id : null;
     const p = point3([next.lng, next.lat]);
     const opening = firstFocus;
     firstFocus = false;
@@ -1169,6 +1198,7 @@ export function createCity(host, options) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    if (indoor.active) indoor.frameRoom();
   }
   const observer = new ResizeObserver(resize);
   observer.observe(host);
@@ -1187,6 +1217,7 @@ export function createCity(host, options) {
       (-(e.clientY - rect.top) / rect.height) * 2 + 1,
     );
     ray.setFromCamera(pointer, camera);
+    if (indoor.pick(ray, mode)) return;
     const visible = (mesh) => {
       for (let parent = mesh; parent; parent = parent.parent) {
         if (!parent.visible) return false;
@@ -1234,9 +1265,11 @@ export function createCity(host, options) {
     const dt = Math.min((now - lastTime) / 1000 || 0, 0.05);
     lastTime = now;
     controls.update();
+    indoor.update(dt, motion);
     if (
       motion &&
       !characterGallery &&
+      !indoor.active &&
       camera.position.distanceTo(controls.target) < 900
     ) {
       for (const a of agents) {
@@ -1253,7 +1286,7 @@ export function createCity(host, options) {
         v.group.rotation.y = p.angle;
       }
     }
-    if (player) {
+    if (player && !indoor.active) {
       const diff = playerTarget.clone().sub(player.position),
         distance = diff.length();
       if (distance > 0.1) {
@@ -1266,9 +1299,13 @@ export function createCity(host, options) {
       animateCharacter(player, now / 1000, motion && distance > 0.1);
     }
     const range = camera.position.distanceTo(controls.target);
-    population.visible = !characterGallery && range < 900;
+    population.visible = !characterGallery && !indoor.active && range < 900;
     renderer.shadowMap.enabled = range < 1200;
-    atmosphere.update(camera, dt, motion && !characterGallery);
+    atmosphere.update(
+      camera,
+      dt,
+      motion && !characterGallery && !indoor.active,
+    );
     const lightTarget = controls.target;
     sun.position.set(
       lightTarget.x - 260,
@@ -1340,6 +1377,7 @@ export function createCity(host, options) {
       if (destroyed) return;
       status("");
       options.onReady?.();
+      if (options.interior) setInterior(options.interior);
     })
     .catch(() => {
       if (!destroyed)
@@ -1491,6 +1529,72 @@ export function createCity(host, options) {
     controls.target.copy(at).add(new THREE.Vector3(0, 0.9, 0));
     controls.update();
   }
+  function frameVenue(view) {
+    if (indoor.active || characterGallery) return;
+    const { point, normal, groundY } = view;
+    const footprints = [...chunkCache.values()]
+      .flatMap((c) => c.buildings || [])
+      .map((b) => b.ring.map(projectGeo))
+      .filter((ring) =>
+        ring.some((p) => Math.hypot(p.x - point.x, p.z - point.z) < 60),
+      );
+    const blocked = (p) =>
+      footprints.some((ring) => {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const a = ring[i],
+            b = ring[j];
+          if (
+            a.z > p.z !== b.z > p.z &&
+            p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x
+          )
+            inside = !inside;
+        }
+        return inside;
+      });
+    const candidates = [
+      [9, 10],
+      [9, -10],
+      [6, 9],
+      [6, -9],
+      [12, 0],
+      [5, 0],
+    ].map(([out, along]) => ({
+      x: point.x + normal.x * out - normal.z * along,
+      z: point.z + normal.z * out + normal.x * along,
+    }));
+    const at = candidates.find((p) => !blocked(p)) || candidates.at(-1);
+    controls.target.set(
+      point.x + normal.x * 1.2,
+      groundY + 1.6,
+      point.z + normal.z * 1.2,
+    );
+    camera.position.set(
+      at.x,
+      Math.max(groundY, geoY(unprojectGeo(at.x, at.z))) + 8,
+      at.z,
+    );
+    controls.update();
+  }
+  function setInterior(next) {
+    options.interior = next;
+    if (!next) {
+      restoreCity();
+      setFocus(focus);
+      return;
+    }
+    if (!manifest) return;
+    if (characterGallery) {
+      disposeGroup(characterGallery);
+      characterGallery = null;
+    }
+    generation++;
+    indoor.enter(next, point3([focus.lng, focus.lat]));
+    city.visible = markers.visible = population.visible = false;
+    atmosphere.sky.visible = false;
+    scene.background = new THREE.Color("#d9dfd3");
+    status("");
+  }
   return {
     ready,
     setFocus,
@@ -1501,6 +1605,9 @@ export function createCity(host, options) {
     waterfrontPeople,
     characters,
     people,
+    setInterior,
+    selectInteriorZone: (id) => indoor.selectZone(id),
+    performInteriorAction: (id, duration) => indoor.perform(id, duration),
     setMode(next) {
       mode = next;
       controls.mouseButtons.LEFT =
