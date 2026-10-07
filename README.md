@@ -4,7 +4,7 @@ A playable tourist trip simulator in one continuous 3D Lisbon–Sintra region. R
 
 The default world works without a Google API key. It bundles OpenStreetMap geography and EU-DEM terrain, with original adult-proportioned characters, simulated pedestrians, cars and trams. The 273,347 building footprints retain real mapped positions; facades, roofs and most heights are approximate. This is a geographic game world, not an exact architectural or photorealistic replica.
 
-This replaces the earlier Lisboa Viva multiplayer life simulation. Its wider economy, jobs, transfers, policing and chat remain outside the active client, while a new Go/PostgreSQL account service now provides registration, login, sessions and role authorization. Git history retains the broader earlier implementation. [PR #1](https://github.com/pro-munachi/lisboa-viva/pull/1) supplies the tourist trip requirements. The accepted ROAM design and later continuous-city brief extend its original 3D scope. The reference game's character assets have not been copied.
+This rebuilds the earlier Lisboa Viva multiplayer life simulation in working slices. The Go/PostgreSQL service now provides accounts, sessions, role authorization and short-lived player presence; the wider economy, jobs, transfers, policing and chat remain outside the active client. Git history retains the broader earlier implementation. [PR #1](https://github.com/pro-munachi/lisboa-viva/pull/1) supplies the tourist trip requirements. The accepted ROAM design and later continuous-city brief extend its original 3D scope. The reference game's character assets have not been copied.
 
 ## Run
 
@@ -45,6 +45,7 @@ Root npm scripts delegate to `apps/web`; the lockfile lives there. Run `go test 
 - **Travel and memories:** illustrative walk/cycle/tram travel, with an intercity train option and longer walk/cycle estimates for Sintra. Tram travel is unavailable for Sintra. District passport, three optional challenges, confirmed-action journal, recap, early finish and private itinerary download remain playable. Free breaks and overnight rest provide a route forward.
 - **Saved progress:** validated same-browser save/resume, the current trip plus four earlier chapters, replay/new trip and explicit deletion. Invalid saves receive a visible message. Custom pins are separately validated and capped at 16.
 - **Authenticated access:** English registration and login screens distinguish tourists from locals. Opaque seven-day sessions use HttpOnly cookies; the Go service owns password hashing, session validation and role checks. The app route verifies the session before rendering.
+- **Live player presence:** signed-in players publish their current in-world area while `/play` is open. The nearby panel and 3D map show other active players, with a control to leave or rejoin multiplayer. Presence expires after 45 seconds without a heartbeat and is removed on logout.
 - **Accessible alternatives:** responsive layouts, native modal focus management, reduced-motion support, semantic meters, camera buttons and list-based hotspot/activity selection. Trip experiences remain available if 3D cannot load.
 
 ## Accuracy and privacy
@@ -53,7 +54,7 @@ Street positions and footprints come from the bundled OpenStreetMap snapshot; te
 
 All euro costs, durations, route choices and activities are illustrative game assumptions, **not current prices, live timetables, availability or bookings**. Fictional venues and conversations are identified in their content. Cultural sources support context rather than prices or opening hours. Enterable room layouts are original imagined scenes, not surveyed business interiors or evidence of actual services, inventory, access or opening status. Custom pins, street/locality searches and unclassified Google places do not infer an enterable room from a name alone. Personal coordinate pins are unverified locations; a Maps link does not establish that a fictional venue exists.
 
-The budget excludes flights and accommodation. Accounts are stored in PostgreSQL, but no server stores trips, map pins, analytics, live location, real social presence or public sharing. Downloading an itinerary creates a local text file. Clearing browser storage erases trip progress and saved pins. Opening an external Maps/source link takes the user to that provider.
+The budget excludes flights and accommodation. Accounts and short-lived coarse in-world presence are stored in PostgreSQL; the server does not store trips, map pins, analytics, chat messages or public sharing. Presence contains a map coordinate and area label, is visible only to authenticated players, and expires after 45 seconds without a heartbeat. Downloading an itinerary creates a local text file. Clearing browser storage erases trip progress and saved pins. Opening an external Maps/source link takes the user to that provider.
 
 ## Source
 
@@ -65,9 +66,9 @@ The budget excludes flights and accommodation. Accounts are stored in PostgreSQL
 - `apps/web/lib/interiors.ts`, `city-interiors.js`, `city-interior-runtime.js` and `city-room-navigation.js`: original room catalog, geometry, local activity poses and furniture-aware walking. `InteriorPanel` supplies the room controls.
 - `apps/web/public/data`: compressed derived database; `scripts/geography-build.py` and `geography-validate.py`: acquisition and validation.
 - `apps/web/tests`: engine, geography, character and pin regression checks.
-- `services/game`: Go authentication API, session and role authorization; `db/migrations`: PostgreSQL account schema.
-- [docs/authentication.md](docs/authentication.md): endpoints, security boundary, local setup and staging configuration.
+- `services/game`: Go authentication, authorization and multiplayer presence API; `db/migrations`: PostgreSQL account and presence schema.
+- [docs/authentication.md](docs/authentication.md): account endpoints, security boundary, local setup and staging configuration. [docs/multiplayer.md](docs/multiplayer.md) covers presence behavior and privacy.
 - `docs/PRD.md`: preserved original requirements; [docs/scope.md](docs/scope.md): current scope; [docs/verification.md](docs/verification.md): checks and limits.
 - [docs/backend-schema-plan.md](docs/backend-schema-plan.md): feature inventory and staged PostgreSQL schema boundary for rebuilding the persistent Lisboa Viva backend.
 
-The derived OSM database is licensed under ODbL 1.0 and credited in the map. Terrain credits identify Copernicus/EU-DEM. Repository write permissions and reviewed pull requests provide the current restricted content workflow. Content changes must consider `CONTENT_VERSION` and save migration. Cross-device accounts, real social features, revocable public links, a dedicated authenticated editor, verified pricing and full accessibility/performance sign-off remain future work.
+The derived OSM database is licensed under ODbL 1.0 and credited in the map. Terrain credits identify Copernicus/EU-DEM. Repository write permissions and reviewed pull requests provide the current restricted content workflow. Content changes must consider `CONTENT_VERSION` and save migration. Chat, blocks, friendships, revocable public links, a dedicated authenticated editor, verified pricing and full accessibility/performance sign-off remain future work.

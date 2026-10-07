@@ -47,6 +47,9 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/logout", s.logout)
 	mux.Handle("GET /v1/auth/me", s.requireSession(http.HandlerFunc(s.me)))
 	mux.Handle("PATCH /v1/auth/me", s.requireSession(http.HandlerFunc(s.updateMe)))
+	mux.Handle("PUT /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.updatePresence)))
+	mux.Handle("DELETE /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.clearPresence)))
+	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
 	mux.Handle("GET /v1/admin/users", s.requireRole("admin", http.HandlerFunc(s.adminUsers)))
 	return s.headers(mux)
 }
@@ -92,7 +95,8 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_locale":              http.StatusBadRequest, "handle_taken": http.StatusConflict,
 			"email_taken": http.StatusConflict, "credentials": http.StatusUnauthorized,
 			"session_expired": http.StatusUnauthorized, "forbidden": http.StatusForbidden,
-			"rate_limited": http.StatusTooManyRequests,
+			"invalid_presence": http.StatusBadRequest,
+			"rate_limited":     http.StatusTooManyRequests,
 		}[code]
 	}
 	if status == 0 {
@@ -254,6 +258,8 @@ func clientIP(r *http.Request) string {
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookie); err == nil {
+		_, _ = s.db.Exec(r.Context(), `DELETE FROM player_presence WHERE user_id=(
+			SELECT user_id FROM sessions WHERE token_hash=$1)`, tokenHash(cookie.Value))
 		_, _ = s.db.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", tokenHash(cookie.Value))
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(1, 0)})

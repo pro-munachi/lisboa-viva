@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import World from "../../components/World";
 import AuthBoundary from "../../components/AuthBoundary";
+import MultiplayerDock from "../../components/MultiplayerDock";
 import { interiorForHotspot, type InteriorVisit } from "../../lib/interiors";
 import Dialog from "../../components/Dialog";
 import { searchMapLocations } from "../../lib/map-locations";
@@ -82,6 +83,7 @@ import {
   type Setup,
   type Command,
 } from "../../lib/engine";
+import { useMultiplayer } from "../../lib/multiplayer";
 const colors = ["#ece7df", "#687f73", "#b47459", "#777791"];
 const styles: Style[] = ["Budget explorer", "Foodie", "Culture seeker"];
 const initial: Setup = {
@@ -116,6 +118,7 @@ const iconFor = (id: PlaceId) =>
     sintra: Camera,
   })[id];
 function RoamExperience() {
+  const { peers, setLocation } = useMultiplayer();
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -209,6 +212,19 @@ function RoamExperience() {
   useEffect(() => {
     if (trip) setMapFocus(focusFor(trip.place, trip.setup.base));
   }, [trip?.place, trip?.setup.base]);
+  useEffect(() => {
+    setLocation({
+      latitude: mapFocus.lat,
+      longitude: mapFocus.lng,
+      area: mapFocus.presenceArea || mapFocus.name,
+    });
+  }, [
+    mapFocus.lat,
+    mapFocus.lng,
+    mapFocus.name,
+    mapFocus.presenceArea,
+    setLocation,
+  ]);
   function pickHotspot(h: WorldHotspot) {
     setInterior(null);
     setMapHotspot(h);
@@ -420,6 +436,19 @@ function RoamExperience() {
           onHotspot={pickHotspot}
           interior={interior}
           onExitInterior={leaveRoom}
+          peers={peers}
+        />
+        <MultiplayerDock
+          onSelect={(peer) =>
+            setMapFocus({
+              lat: peer.latitude,
+              lng: peer.longitude,
+              name: `@${peer.handle} · ${peer.area}`,
+              range: 18,
+              peerId: peer.id,
+              presenceArea: peer.area,
+            })
+          }
         />
         <div className="map-tools">
           <button onClick={() => setPanel("map-search")}>
@@ -1414,8 +1443,8 @@ function RoamExperience() {
             <span>
               {scenarios.length} authored scenarios · a continuous Lisbon–Sintra
               world. Energy, inspiration, and connection are game meters. Inês,
-              Tomás, and Noor are fictional characters. Multiplayer is planned
-              for a later release.
+              Tomás, and Noor are fictional characters. Signed-in players can
+              now see one another through live city presence.
             </span>
             <span>
               Costs and durations are illustrative, not current prices. Sources

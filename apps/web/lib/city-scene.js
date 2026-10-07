@@ -85,6 +85,7 @@ export function createCity(host, options) {
     focus = options.focus,
     player = null,
     playerTarget = null,
+    peerActors = [],
     agents = [],
     vehicles = [],
     lastTime = 0,
@@ -102,6 +103,7 @@ export function createCity(host, options) {
     markerMeshes = [],
     venueMeshes = [],
     personMeshes = [],
+    peerMeshes = [],
     labels = [];
   let markerSelection = "",
     populationCentre = null,
@@ -112,6 +114,8 @@ export function createCity(host, options) {
   scene.add(markers);
   const population = new THREE.Group();
   scene.add(population);
+  let peerPopulation = new THREE.Group();
+  scene.add(peerPopulation);
   const materials = new Map();
   const sharedMaterials = new Set([
     ...architecture.wallMaterials,
@@ -661,6 +665,67 @@ export function createCity(host, options) {
     markerSelection = "";
     refreshMarkers();
   }
+  function setPeers(peers) {
+    options.peers = Array.isArray(peers) ? peers : [];
+    disposeGroup(peerPopulation);
+    peerPopulation = new THREE.Group();
+    scene.add(peerPopulation);
+    peerMeshes.length = 0;
+    peerActors = [];
+    if (!manifest || indoor.active) return;
+    const shirts = ["#bd7557", "#4f7370", "#77748c", "#c19a4b", "#52735b"];
+    const skins = ["#a87955", "#76513b", "#d5af8b", "#5b3d30"];
+    options.peers.slice(0, 40).forEach((peer, index) => {
+      if (
+        !containsGeo(manifest.bounds, [peer.longitude, peer.latitude]) ||
+        !peer.handle
+      )
+        return;
+      const seed = [...peer.handle].reduce(
+        (total, character) => total + character.charCodeAt(0),
+        0,
+      );
+      const character = createCharacter({
+        shirt: shirts[seed % shirts.length],
+        skin: skins[seed % skins.length],
+        style: peer.userType === "local" ? "casual" : "tourist",
+        hairStyle: ["short", "curly", "bob", "bun"][seed % 4],
+      });
+      const target = point3([peer.longitude, peer.latitude]);
+      const nearest = nearestPath(target, true);
+      character.position.copy(
+        nearest
+          ? sample(nearest.line, nearest.d + 2.5 + index * 1.7, 1.2).v
+          : target,
+      );
+      character.position.y =
+        geoY(unprojectGeo(character.position.x, character.position.z)) + 0.2;
+      character.rotation.y = ((seed % 8) * Math.PI) / 4;
+      character.traverse((mesh) => {
+        if (!mesh.isMesh) return;
+        mesh.userData.peer = peer;
+        peerMeshes.push(mesh);
+      });
+      const label = canvasLabel(`@${peer.handle}`, "#446b5a");
+      label.position.y = 2.75;
+      label.scale.set(1.45, 0.32, 1);
+      label.userData.peer = peer;
+      character.add(label);
+      peerMeshes.push(label);
+      peerPopulation.add(character);
+      peerActors.push(character);
+      if (focus.peerId === peer.id) {
+        controls.target
+          .copy(character.position)
+          .add(new THREE.Vector3(0, 1, 0));
+        const distance = focus.range || 18;
+        camera.position
+          .copy(character.position)
+          .add(new THREE.Vector3(distance * 0.35, distance * 0.42, distance));
+        controls.update();
+      }
+    });
+  }
   function refreshMarkers() {
     const hotspots = options.hotspots || [];
     const range = camera.position.distanceTo(controls.target);
@@ -935,12 +1000,14 @@ export function createCity(host, options) {
     you.position.y = 2.6;
     you.scale.set(1.2, 0.27, 1);
     player.add(you);
+    setPeers(options.peers || []);
   }
   function restoreCity() {
     indoor.clear();
     city.visible = true;
     markers.visible = true;
     population.visible = true;
+    peerPopulation.visible = true;
     scene.background = new THREE.Color(atmosphere.horizon);
     atmosphere.sky.visible = true;
   }
@@ -1097,6 +1164,13 @@ export function createCity(host, options) {
     const personHit =
       population.visible &&
       ray.intersectObjects(personMeshes.filter(visible), false)[0];
+    const peerHit =
+      peerPopulation.visible &&
+      ray.intersectObjects(peerMeshes.filter(visible), false)[0];
+    if (peerHit) {
+      options.onPeer?.(peerHit.object.userData.peer);
+      return;
+    }
     if (personHit) {
       options.onPerson?.(personHit.object.userData.person);
       return;
@@ -1159,8 +1233,13 @@ export function createCity(host, options) {
       }
       animateCharacter(player, now / 1000, motion && distance > 0.1);
     }
+    if (!indoor.active)
+      peerActors.forEach((peer, index) =>
+        animateCharacter(peer, now / 1000 + index * 0.37, false),
+      );
     const range = camera.position.distanceTo(controls.target);
     population.visible = !characterGallery && !indoor.active && range < 900;
+    peerPopulation.visible = !characterGallery && !indoor.active && range < 900;
     renderer.shadowMap.enabled = range < 1200;
     atmosphere.update(
       camera,
@@ -1235,6 +1314,7 @@ export function createCity(host, options) {
       status("Loading the streets around you…");
       await setFocus(focus);
       if (destroyed) return;
+      setPeers(options.peers || []);
       status("");
       options.onReady?.();
       if (options.interior) setInterior(options.interior);
@@ -1279,6 +1359,7 @@ export function createCity(host, options) {
     city.visible = false;
     markers.visible = false;
     population.visible = false;
+    peerPopulation.visible = false;
     scene.background = new THREE.Color("#dcded5");
     atmosphere.sky.visible = false;
     controls.target.copy(centre).add(new THREE.Vector3(0, 0.95, 0));
@@ -1391,7 +1472,11 @@ export function createCity(host, options) {
     }
     generation++;
     indoor.enter(next, point3([focus.lng, focus.lat]));
-    city.visible = markers.visible = population.visible = false;
+    city.visible =
+      markers.visible =
+      population.visible =
+      peerPopulation.visible =
+        false;
     atmosphere.sky.visible = false;
     scene.background = new THREE.Color("#d9dfd3");
     status("");
@@ -1400,6 +1485,7 @@ export function createCity(host, options) {
     ready,
     setFocus,
     setMarkers,
+    setPeers,
     overview,
     characters,
     people,

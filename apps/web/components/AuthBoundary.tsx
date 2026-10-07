@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { LogOut, UserRound } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
+import { MultiplayerProvider } from "../lib/multiplayer";
 
 export default function AuthBoundary({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -55,7 +56,7 @@ export default function AuthBoundary({ children }: { children: ReactNode }) {
   }
   return (
     <>
-      {children}
+      <MultiplayerProvider user={user}>{children}</MultiplayerProvider>
       <aside className="auth-account" aria-label="Active account">
         <UserRound size={16} />
         <span>

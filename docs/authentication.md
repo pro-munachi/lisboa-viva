@@ -13,15 +13,18 @@ All authored authentication copy defaults to English. European Portuguese remain
 
 ## Endpoints
 
-| Browser endpoint | Go endpoint | Authorization | Purpose |
-| --- | --- | --- | --- |
-| `POST /api/auth/register` | `POST /v1/auth/register` | Public, rate limited | Create a user, password credential, `player` role, and session. |
-| `POST /api/auth/login` | `POST /v1/auth/login` | Public, rate limited | Verify a handle/email and password and create a session. |
-| `POST /api/auth/logout` | `POST /v1/auth/logout` | Session optional | Revoke the presented session and expire its cookie. |
-| `GET /api/auth/me` | `GET /v1/auth/me` | Valid session | Return the current account and roles. |
-| `PATCH /api/auth/me` | `PATCH /v1/auth/me` | Valid session | Change `userType` or `preferredLocale`. |
-| `GET /api/admin/users` | `GET /v1/admin/users` | `admin` role | Return up to 100 account summaries. |
-| — | `GET /v1/health` | Public | Check database connectivity. |
+| Browser endpoint                   | Go endpoint                       | Authorization        | Purpose                                                         |
+| ---------------------------------- | --------------------------------- | -------------------- | --------------------------------------------------------------- |
+| `POST /api/auth/register`          | `POST /v1/auth/register`          | Public, rate limited | Create a user, password credential, `player` role, and session. |
+| `POST /api/auth/login`             | `POST /v1/auth/login`             | Public, rate limited | Verify a handle/email and password and create a session.        |
+| `POST /api/auth/logout`            | `POST /v1/auth/logout`            | Session optional     | Revoke the presented session and expire its cookie.             |
+| `GET /api/auth/me`                 | `GET /v1/auth/me`                 | Valid session        | Return the current account and roles.                           |
+| `PATCH /api/auth/me`               | `PATCH /v1/auth/me`               | Valid session        | Change `userType` or `preferredLocale`.                         |
+| `PUT /api/multiplayer/presence`    | `PUT /v1/multiplayer/presence`    | Valid session        | Publish a bounded in-world location heartbeat.                  |
+| `DELETE /api/multiplayer/presence` | `DELETE /v1/multiplayer/presence` | Valid session        | Leave multiplayer immediately.                                  |
+| `GET /api/multiplayer/nearby`      | `GET /v1/multiplayer/nearby`      | Valid session        | List active nearby players without private account fields.      |
+| `GET /api/admin/users`             | `GET /v1/admin/users`             | `admin` role         | Return up to 100 account summaries.                             |
+| —                                  | `GET /v1/health`                  | Public               | Check database connectivity.                                    |
 
 Unknown JSON fields and oversized request bodies are rejected. Mutating browser proxy requests reject cross-origin `Origin` values. Each protected Go endpoint performs its own session or role check; the Next.js route gate is not treated as authorization.
 

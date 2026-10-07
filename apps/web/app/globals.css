@@ -37,6 +37,7 @@ body {
 }
 .landing-map .world-controls,
 .landing-map .local-card,
+.landing-map .peer-card,
 .landing-map .character-preview-label {
   display: none;
 }
@@ -545,6 +546,113 @@ body {
   color: #fff;
   background: #ffffff14;
 }
+.multiplayer-dock {
+  position: absolute;
+  z-index: 7;
+  left: 30px;
+  bottom: 104px;
+  width: 238px;
+  padding: 14px;
+  color: var(--ink);
+  border: 1px solid #ffffff9e;
+  border-radius: 15px;
+  background: #fffdf9eb;
+  box-shadow: 0 8px 30px #2929421f;
+  backdrop-filter: blur(12px);
+}
+.multiplayer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.multiplayer-heading > button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--muted);
+  background: #ebe9e2;
+}
+.multiplayer-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #8c6b31;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+.multiplayer-signal.online {
+  color: #477457;
+}
+.multiplayer-signal.hidden {
+  color: var(--muted);
+}
+.multiplayer-dock > strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.multiplayer-dock > p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.multiplayer-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+.multiplayer-list > button {
+  display: grid;
+  grid-template-columns: 7px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 9px;
+  text-align: left;
+  background: #efede7;
+}
+.online-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5b8b68;
+  box-shadow: 0 0 0 3px #5b8b6821;
+}
+.multiplayer-list span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.multiplayer-list b {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+.multiplayer-list small,
+.multiplayer-list em {
+  color: var(--muted);
+  font-size: 8px;
+  font-style: normal;
+}
+.multiplayer-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.peer-card {
+  border-color: #6b927a7a;
+}
+.peer-card .local-card-kicker {
+  color: #477457;
+}
 @media (max-width: 820px) {
   .auth-page {
     grid-template-columns: 1fr;
@@ -571,6 +679,13 @@ body {
   .auth-account {
     right: 14px;
     bottom: 14px;
+  }
+}
+@media (max-width: 600px) {
+  .multiplayer-dock {
+    left: 12px;
+    bottom: 270px;
+    width: min(220px, calc(100% - 24px));
   }
 }
 button,

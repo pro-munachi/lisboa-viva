@@ -19,6 +19,7 @@ import InteriorPanel from "./InteriorPanel";
 import { INTERIOR_ACTIVITIES, type InteriorVisit } from "../lib/interiors";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
 import type { WorldFocus, WorldHotspot } from "../lib/world-state";
+import type { MultiplayerPeer } from "../lib/multiplayer";
 type CityController = {
   ready: Promise<void>;
   setInterior: (visit: InteriorVisit | null) => void;
@@ -26,6 +27,7 @@ type CityController = {
   performInteriorAction: (id: string, duration?: number) => void;
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
+  setPeers: (peers: MultiplayerPeer[]) => void;
   overview: () => void;
   characters: () => void;
   people: () => void;
@@ -43,6 +45,7 @@ export default function World({
   onHotspot,
   interior,
   onExitInterior,
+  peers = [],
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -50,19 +53,21 @@ export default function World({
   onHotspot: (h: WorldHotspot) => void;
   interior: InteriorVisit | null;
   onExitInterior: () => void;
+  peers?: MultiplayerPeer[];
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
   const callback = useRef(onHotspot);
   callback.current = onHotspot;
-  const latest = useRef({ focus, shirt, hotspots, interior });
-  latest.current = { focus, shirt, hotspots, interior };
+  const latest = useRef({ focus, shirt, hotspots, interior, peers });
+  latest.current = { focus, shirt, hotspots, interior, peers };
   const [status, setStatus] = useState("Loading Lisbon’s streets…");
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
   const [google, setGoogle] = useState(false);
   const [gallery, setGallery] = useState(false);
   const [person, setPerson] = useState<LocalPerson | null>(null);
+  const [peer, setPeer] = useState<MultiplayerPeer | null>(null);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [activityState, setActivityState] = useState<
     "idle" | "walking" | "active"
@@ -94,8 +99,14 @@ export default function World({
             onStatus: setStatus,
             onStats: setStats,
             onPerson: (local: LocalPerson) => {
+              setPeer(null);
               setGallery(false);
               setPerson(local);
+            },
+            onPeer: (player: MultiplayerPeer) => {
+              setPerson(null);
+              setGallery(false);
+              setPeer(player);
             },
             onInteriorZone: (id: string) => {
               setSelectedZone(id);
@@ -141,6 +152,9 @@ export default function World({
   useEffect(() => {
     controller.current?.setMarkers(hotspots);
   }, [hotspots]);
+  useEffect(() => {
+    controller.current?.setPeers(peers);
+  }, [peers]);
   useEffect(() => {
     setGallery(false);
     setPerson(null);
@@ -357,6 +371,27 @@ export default function World({
             Olá! I’m out for a walk. Take your time and explore the streets
             around you.
           </p>
+        </aside>
+      )}
+      {!google && !gallery && peer && (
+        <aside className="local-card peer-card" aria-label="Nearby player">
+          <div className="local-card-header">
+            <div>
+              <span className="local-card-kicker">Player nearby</span>
+              <strong>@{peer.handle}</strong>
+            </div>
+            <button
+              className="local-card-close"
+              aria-label="Dismiss nearby player"
+              onClick={() => setPeer(null)}
+            >
+              <X size={17} />
+            </button>
+          </div>
+          <span className="local-card-label">
+            {peer.userType === "local" ? "Local" : "Tourist"} · {peer.area}
+          </span>
+          <p>This is another signed-in ROAM player who is online now.</p>
         </aside>
       )}
       <div
