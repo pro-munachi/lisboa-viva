@@ -23,6 +23,23 @@ func TestRegistrationRejectsUnknownUserType(t *testing.T) {
 	}
 }
 
+func TestAppearanceDefaultsAndValidation(t *testing.T) {
+	input, err := normalizeRegistration(registerInput{Handle: "pessoa", Email: "pessoa@example.com", Password: "uma-senha-segura", UserType: "local", AdultConfirmed: true})
+	if err != nil || input.Appearance == nil || *input.Appearance != defaultAppearance {
+		t.Fatalf("unexpected default appearance: %#v, %v", input.Appearance, err)
+	}
+	bad := defaultAppearance
+	bad.TopColor = "javascript:red"
+	if _, err = normalizeAppearance(bad); err == nil || err.Error() != "invalid_appearance" {
+		t.Fatalf("expected invalid_appearance, got %v", err)
+	}
+	custom := defaultAppearance
+	custom.OutfitStyle, custom.HairStyle, custom.SkinTone = "dress", "bun", "#5b3d30"
+	if normalized, err := normalizeAppearance(custom); err != nil || normalized != custom {
+		t.Fatalf("unexpected custom appearance: %#v, %v", normalized, err)
+	}
+}
+
 func TestTokensAreOpaqueAndHashStable(t *testing.T) {
 	one, err := newToken()
 	if err != nil {

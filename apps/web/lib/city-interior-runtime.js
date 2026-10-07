@@ -10,6 +10,7 @@ export function createInteriorRuntime({
   controls,
   disposeGroup,
   shirt,
+  appearance = null,
   onZone,
   onActivity,
 }) {
@@ -64,10 +65,13 @@ export function createInteriorRuntime({
     room = createInteriorScene(next.kind, { shirt });
     room.group.position.copy(origin);
     actor = createCharacter({
-      shirt: shirt || "#c58e59",
-      skin: "#a87955",
-      style: "tourist",
-      hairStyle: "short",
+      shirt: appearance?.topColor || shirt || "#c58e59",
+      trousers: appearance?.bottomColor,
+      hair: appearance?.hairColor,
+      skin: appearance?.skinTone || "#a87955",
+      shoes: appearance?.shoeColor,
+      style: appearance?.outfitStyle || "tourist",
+      hairStyle: appearance?.hairStyle || "short",
     });
     actor.position.set(room.spawn.x, 0.02, room.spawn.z);
     actor.rotation.y = Math.PI;

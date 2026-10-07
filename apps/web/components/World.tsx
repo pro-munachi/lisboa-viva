@@ -20,6 +20,8 @@ import { INTERIOR_ACTIVITIES, type InteriorVisit } from "../lib/interiors";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
 import type { WorldFocus, WorldHotspot } from "../lib/world-state";
 import type { MultiplayerPeer } from "../lib/multiplayer";
+import type { CharacterAppearance } from "../lib/appearance";
+import { DEFAULT_APPEARANCE } from "../lib/appearance";
 type CityController = {
   ready: Promise<void>;
   setInterior: (visit: InteriorVisit | null) => void;
@@ -41,6 +43,7 @@ type LocalPerson = { name: string; label: string };
 export default function World({
   focus,
   shirt,
+  appearance = DEFAULT_APPEARANCE,
   hotspots,
   onHotspot,
   interior,
@@ -49,6 +52,7 @@ export default function World({
 }: {
   focus: WorldFocus;
   shirt: string;
+  appearance?: CharacterAppearance;
   hotspots: WorldHotspot[];
   onHotspot: (h: WorldHotspot) => void;
   interior: InteriorVisit | null;
@@ -59,8 +63,15 @@ export default function World({
   const controller = useRef<CityController | null>(null);
   const callback = useRef(onHotspot);
   callback.current = onHotspot;
-  const latest = useRef({ focus, shirt, hotspots, interior, peers });
-  latest.current = { focus, shirt, hotspots, interior, peers };
+  const latest = useRef({
+    focus,
+    shirt,
+    appearance,
+    hotspots,
+    interior,
+    peers,
+  });
+  latest.current = { focus, shirt, appearance, hotspots, interior, peers };
   const [status, setStatus] = useState("Loading Lisbon’s streets…");
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
@@ -143,7 +154,7 @@ export default function World({
       controller.current?.dispose();
       controller.current = null;
     };
-  }, [google, shirt]);
+  }, [google, shirt, appearance]);
   useEffect(() => {
     setGallery(false);
     setPerson(null);

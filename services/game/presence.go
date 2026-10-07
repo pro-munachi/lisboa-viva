@@ -24,14 +24,15 @@ type presenceInput struct {
 }
 
 type nearbyPlayer struct {
-	ID             string    `json:"id"`
-	Handle         string    `json:"handle"`
-	UserType       string    `json:"userType"`
-	Latitude       float64   `json:"latitude"`
-	Longitude      float64   `json:"longitude"`
-	Area           string    `json:"area"`
-	DistanceMetres int       `json:"distanceMetres"`
-	LastSeenAt     time.Time `json:"lastSeenAt"`
+	ID             string              `json:"id"`
+	Handle         string              `json:"handle"`
+	UserType       string              `json:"userType"`
+	Latitude       float64             `json:"latitude"`
+	Longitude      float64             `json:"longitude"`
+	Area           string              `json:"area"`
+	DistanceMetres int                 `json:"distanceMetres"`
+	LastSeenAt     time.Time           `json:"lastSeenAt"`
+	Appearance     characterAppearance `json:"appearance"`
 }
 
 func normalizePresence(input presenceInput) (presenceInput, error) {
@@ -110,8 +111,9 @@ func (s *server) nearbyPlayers(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(r.Context(), `SELECT u.id::text,u.handle,u.user_type::text,
 		p.latitude,p.longitude,p.area,
 		ROUND(SQRT(POWER((p.latitude-$2)*111320,2)+POWER((p.longitude-$3)*87300,2)))::int AS distance_metres,
-		p.last_seen_at
+		p.last_seen_at,ca.outfit_style,ca.top_color,ca.bottom_color,ca.hair_style,ca.hair_color,ca.skin_tone,ca.shoe_color
 		FROM player_presence p JOIN users u ON u.id=p.user_id
+		JOIN character_appearances ca ON ca.user_id=u.id
 		WHERE p.user_id<>$1 AND u.account_status='active' AND p.last_seen_at>$4
 		AND POWER((p.latitude-$2)*111320,2)+POWER((p.longitude-$3)*87300,2)<=POWER($5::double precision,2)
 		ORDER BY distance_metres,p.last_seen_at DESC LIMIT 40`, user.ID, latitude, longitude, s.now().Add(-presenceTTL), radius)
@@ -123,7 +125,9 @@ func (s *server) nearbyPlayers(w http.ResponseWriter, r *http.Request) {
 	players := []nearbyPlayer{}
 	for rows.Next() {
 		var player nearbyPlayer
-		if err = rows.Scan(&player.ID, &player.Handle, &player.UserType, &player.Latitude, &player.Longitude, &player.Area, &player.DistanceMetres, &player.LastSeenAt); err != nil {
+		if err = rows.Scan(&player.ID, &player.Handle, &player.UserType, &player.Latitude, &player.Longitude, &player.Area, &player.DistanceMetres, &player.LastSeenAt,
+			&player.Appearance.OutfitStyle, &player.Appearance.TopColor, &player.Appearance.BottomColor,
+			&player.Appearance.HairStyle, &player.Appearance.HairColor, &player.Appearance.SkinTone, &player.Appearance.ShoeColor); err != nil {
 			fail(w, err)
 			return
 		}

@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import type { AuthUser } from "./auth";
+import type { CharacterAppearance } from "./appearance";
 
 export type MultiplayerPeer = {
   id: string;
@@ -20,6 +21,7 @@ export type MultiplayerPeer = {
   area: string;
   distanceMetres: number;
   lastSeenAt: string;
+  appearance: CharacterAppearance;
 };
 
 type PresenceLocation = {
@@ -34,6 +36,7 @@ type MultiplayerState = {
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
   setLocation: (location: PresenceLocation) => void;
+  appearance: CharacterAppearance;
 };
 
 const MultiplayerContext = createContext<MultiplayerState | null>(null);
@@ -120,8 +123,15 @@ export function MultiplayerProvider({
   }, [enabled, location, user.id]);
 
   const value = useMemo(
-    () => ({ peers, status, enabled, setEnabled, setLocation }),
-    [peers, status, enabled, setLocation],
+    () => ({
+      peers,
+      status,
+      enabled,
+      setEnabled,
+      setLocation,
+      appearance: user.appearance,
+    }),
+    [peers, status, enabled, setLocation, user.appearance],
   );
   return (
     <MultiplayerContext.Provider value={value}>

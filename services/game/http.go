@@ -47,6 +47,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/logout", s.logout)
 	mux.Handle("GET /v1/auth/me", s.requireSession(http.HandlerFunc(s.me)))
 	mux.Handle("PATCH /v1/auth/me", s.requireSession(http.HandlerFunc(s.updateMe)))
+	mux.Handle("PATCH /v1/auth/appearance", s.requireSession(http.HandlerFunc(s.updateAppearance)))
 	mux.Handle("PUT /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.updatePresence)))
 	mux.Handle("DELETE /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.clearPresence)))
 	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
@@ -95,8 +96,9 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_locale":              http.StatusBadRequest, "handle_taken": http.StatusConflict,
 			"email_taken": http.StatusConflict, "credentials": http.StatusUnauthorized,
 			"session_expired": http.StatusUnauthorized, "forbidden": http.StatusForbidden,
-			"invalid_presence": http.StatusBadRequest,
-			"rate_limited":     http.StatusTooManyRequests,
+			"invalid_presence":   http.StatusBadRequest,
+			"invalid_appearance": http.StatusBadRequest,
+			"rate_limited":       http.StatusTooManyRequests,
 		}[code]
 	}
 	if status == 0 {
@@ -182,6 +184,13 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err = tx.Exec(r.Context(), "INSERT INTO password_credentials(user_id,password_hash) VALUES($1,$2)", id, string(password)); err == nil {
 		_, err = tx.Exec(r.Context(), "INSERT INTO user_roles(user_id,role) VALUES($1,'player')", id)
+	}
+	if err == nil {
+		a := input.Appearance
+		_, err = tx.Exec(r.Context(), `INSERT INTO character_appearances
+			(user_id,outfit_style,top_color,bottom_color,hair_style,hair_color,skin_tone,shoe_color)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, id, a.OutfitStyle, a.TopColor, a.BottomColor,
+			a.HairStyle, a.HairColor, a.SkinTone, a.ShoeColor)
 	}
 	if err == nil {
 		_, err = tx.Exec(r.Context(), `INSERT INTO sessions(user_id,token_hash,expires_at)
@@ -336,6 +345,35 @@ func (s *server) updateMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := s.db.Exec(r.Context(), "UPDATE users SET user_type=$2,preferred_locale=$3 WHERE id=$1", user.ID, userType, locale); err != nil {
+		fail(w, err)
+		return
+	}
+	updated, err := loadUser(r.Context(), s.db, "u.id=$1", user.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	respond(w, http.StatusOK, updated)
+}
+
+func (s *server) updateAppearance(w http.ResponseWriter, r *http.Request) {
+	var input characterAppearance
+	if err := decodeJSON(r, &input); err != nil {
+		fail(w, err)
+		return
+	}
+	input, err := normalizeAppearance(input)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	user := currentUser(r)
+	_, err = s.db.Exec(r.Context(), `UPDATE character_appearances SET
+		outfit_style=$2,top_color=$3,bottom_color=$4,hair_style=$5,
+		hair_color=$6,skin_tone=$7,shoe_color=$8 WHERE user_id=$1`, user.ID,
+		input.OutfitStyle, input.TopColor, input.BottomColor, input.HairStyle,
+		input.HairColor, input.SkinTone, input.ShoeColor)
+	if err != nil {
 		fail(w, err)
 		return
 	}

@@ -4,7 +4,7 @@ The account service is a Go HTTP service backed by PostgreSQL. Next.js exposes s
 
 ## Browser screens
 
-- `/register` creates an adult account and requires `tourist` or `local`.
+- `/register` creates an adult account, requires `tourist` or `local`, and saves the player's chosen outfit and colours.
 - `/login` accepts a handle or email and password.
 - `/` is a public map-led landing page. `/play` redirects to `/login` when no session cookie exists, then validates the session through the protected `me` endpoint before rendering the city.
 - The account control identifies the active handle and user type and provides logout.
@@ -20,6 +20,7 @@ All authored authentication copy defaults to English. European Portuguese remain
 | `POST /api/auth/logout`            | `POST /v1/auth/logout`            | Session optional     | Revoke the presented session and expire its cookie.             |
 | `GET /api/auth/me`                 | `GET /v1/auth/me`                 | Valid session        | Return the current account and roles.                           |
 | `PATCH /api/auth/me`               | `PATCH /v1/auth/me`               | Valid session        | Change `userType` or `preferredLocale`.                         |
+| `PATCH /api/auth/appearance`       | `PATCH /v1/auth/appearance`       | Valid session        | Replace the player's validated appearance.                      |
 | `PUT /api/multiplayer/presence`    | `PUT /v1/multiplayer/presence`    | Valid session        | Publish a bounded in-world location heartbeat.                  |
 | `DELETE /api/multiplayer/presence` | `DELETE /v1/multiplayer/presence` | Valid session        | Leave multiplayer immediately.                                  |
 | `GET /api/multiplayer/nearby`      | `GET /v1/multiplayer/nearby`      | Valid session        | List active nearby players without private account fields.      |
@@ -27,6 +28,8 @@ All authored authentication copy defaults to English. European Portuguese remain
 | —                                  | `GET /v1/health`                  | Public               | Check database connectivity.                                    |
 
 Unknown JSON fields and oversized request bodies are rejected. Mutating browser proxy requests reject cross-origin `Origin` values. Each protected Go endpoint performs its own session or role check; the Next.js route gate is not treated as authorization.
+
+Each account has one `character_appearances` row linked by `user_id` with `ON DELETE CASCADE`. The API accepts only the outfit, hairstyle, skin tone, and clothing colour values rendered by the client. Authenticated user responses and nearby-player responses include this appearance so every client renders the same player look.
 
 ## Session and password rules
 

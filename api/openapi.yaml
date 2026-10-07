@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Lisboa Viva Account and Multiplayer API
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: /api
 paths:
@@ -66,6 +66,25 @@ paths:
       responses:
         "200":
           description: Updated account
+  /auth/appearance:
+    patch:
+      summary: Replace the current player's saved appearance
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Appearance"
+      responses:
+        "200":
+          description: Updated account and appearance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /admin/users:
     get:
       summary: List account summaries
@@ -159,6 +178,35 @@ components:
         password: { type: string, minLength: 10, maxLength: 72 }
         userType: { type: string, enum: [tourist, local] }
         adultConfirmed: { type: boolean, const: true }
+        appearance: { $ref: "#/components/schemas/Appearance" }
+    Appearance:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          outfitStyle,
+          topColor,
+          bottomColor,
+          hairStyle,
+          hairColor,
+          skinTone,
+          shoeColor,
+        ]
+      properties:
+        outfitStyle: { type: string, enum: [casual, jacket, dress, tourist] }
+        topColor:
+          {
+            type: string,
+            enum: ["#ece7df", "#687f73", "#b47459", "#777791", "#c19a4b"],
+          }
+        bottomColor:
+          { type: string, enum: ["#34444f", "#4e504b", "#6b5147", "#30324a"] }
+        hairStyle: { type: string, enum: [short, curly, bob, bun] }
+        hairColor:
+          { type: string, enum: ["#302823", "#6a4430", "#b98452", "#171719"] }
+        skinTone:
+          { type: string, enum: ["#5b3d30", "#76513b", "#a87955", "#d5af8b"] }
+        shoeColor: { type: string, enum: ["#eee8df", "#5c4b42", "#292d31"] }
     Login:
       type: object
       additionalProperties: false
@@ -186,6 +234,7 @@ components:
           area,
           distanceMetres,
           lastSeenAt,
+          appearance,
         ]
       properties:
         id: { type: string, format: uuid }
@@ -196,6 +245,7 @@ components:
         area: { type: string }
         distanceMetres: { type: integer, minimum: 0 }
         lastSeenAt: { type: string, format: date-time }
+        appearance: { $ref: "#/components/schemas/Appearance" }
     User:
       type: object
       required:
@@ -208,6 +258,7 @@ components:
           preferredLocale,
           timezone,
           roles,
+          appearance,
         ]
       properties:
         id: { type: string, format: uuid }
@@ -218,6 +269,7 @@ components:
           { type: string, enum: [active, suspended, banned, deletion_pending] }
         preferredLocale: { type: string, enum: [en, pt-PT], default: en }
         timezone: { type: string }
+        appearance: { $ref: "#/components/schemas/Appearance" }
         roles:
           type: array
           items: { type: string }

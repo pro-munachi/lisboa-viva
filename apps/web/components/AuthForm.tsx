@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ArrowRight, Compass, Home, MapPin } from "lucide-react";
 import { authError } from "../lib/auth";
+import AppearanceCustomizer from "./AppearanceCustomizer";
+import { DEFAULT_APPEARANCE } from "../lib/appearance";
 
 type Mode = "login" | "register";
 
@@ -13,6 +15,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [userType, setUserType] = useState<"tourist" | "local">("tourist");
+  const [appearance, setAppearance] = useState(DEFAULT_APPEARANCE);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,6 +34,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
             password: data.get("password"),
             userType,
             adultConfirmed: data.get("adultConfirmed") === "on",
+            appearance,
           };
     try {
       const response = await fetch(`/api/auth/${mode}`, {
@@ -146,6 +150,10 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                     <span>Lisbon is part of my daily life.</span>
                   </button>
                 </fieldset>
+                <AppearanceCustomizer
+                  value={appearance}
+                  onChange={setAppearance}
+                />
               </>
             ) : (
               <label>

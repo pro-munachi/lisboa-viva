@@ -118,7 +118,7 @@ const iconFor = (id: PlaceId) =>
     sintra: Camera,
   })[id];
 function RoamExperience() {
-  const { peers, setLocation } = useMultiplayer();
+  const { peers, setLocation, appearance } = useMultiplayer();
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -432,6 +432,7 @@ function RoamExperience() {
         <World
           focus={mapFocus}
           shirt={trip?.setup.shirt || setup.shirt}
+          appearance={appearance}
           hotspots={worldHotspots}
           onHotspot={pickHotspot}
           interior={interior}

@@ -167,7 +167,8 @@ export function createCity(host, options) {
     camera,
     controls,
     disposeGroup,
-    shirt: options.shirt,
+    shirt: options.appearance?.topColor || options.shirt,
+    appearance: options.appearance,
     onZone: options.onInteriorZone,
     onActivity: options.onInteriorActivity,
   });
@@ -686,10 +687,17 @@ export function createCity(host, options) {
         0,
       );
       const character = createCharacter({
-        shirt: shirts[seed % shirts.length],
-        skin: skins[seed % skins.length],
-        style: peer.userType === "local" ? "casual" : "tourist",
-        hairStyle: ["short", "curly", "bob", "bun"][seed % 4],
+        shirt: peer.appearance?.topColor || shirts[seed % shirts.length],
+        trousers: peer.appearance?.bottomColor,
+        hair: peer.appearance?.hairColor,
+        skin: peer.appearance?.skinTone || skins[seed % skins.length],
+        shoes: peer.appearance?.shoeColor,
+        style:
+          peer.appearance?.outfitStyle ||
+          (peer.userType === "local" ? "casual" : "tourist"),
+        hairStyle:
+          peer.appearance?.hairStyle ||
+          ["short", "curly", "bob", "bun"][seed % 4],
       });
       const target = point3([peer.longitude, peer.latitude]);
       const nearest = nearestPath(target, true);
@@ -965,10 +973,13 @@ export function createCity(host, options) {
     if (savedPlayer) disposeGroup(savedPlayer);
     player = null;
     player = createCharacter({
-      shirt: options.shirt || "#ece7df",
-      skin: "#a87955",
-      style: "tourist",
-      hairStyle: "short",
+      shirt: options.appearance?.topColor || options.shirt || "#ece7df",
+      trousers: options.appearance?.bottomColor,
+      hair: options.appearance?.hairColor,
+      skin: options.appearance?.skinTone || "#a87955",
+      shoes: options.appearance?.shoeColor,
+      style: options.appearance?.outfitStyle || "tourist",
+      hairStyle: options.appearance?.hairStyle || "short",
     });
     const nearest = nearestPath(target, true);
     const safe =

@@ -236,45 +236,47 @@ Create migrations only for the active milestone. The P2 and P3 entities below de
 
 The first active schema should cover these tables or equivalent aggregates. Names are provisional but relationships and integrity rules are required.
 
-| Domain | Initial tables | Key integrity rules |
-| --- | --- | --- |
-| Identity | `users`, `password_credentials`, `sessions`, `user_roles`, `user_settings`, `terms_acceptances` | Normalized handle unique; sessions hashed, expiring, revocable; admin roles separate from game roles. |
-| Character | `characters`, `character_appearance`, `character_interests`, `character_needs`, `skill_definitions`, `character_skills`, `reputation_accounts`, `status_effects` | Needs bounded; one active character per user initially; grants carry provenance. |
-| World | `regions`, `hubs`, `venues`, `venue_opening_windows`, `venue_rules`, `npc_definitions`, `npc_schedules`, `research_sources`, `content_versions` | Stable IDs; valid coordinates; opening windows support midnight crossing; published content immutable by version. |
-| Simulation | `game_clock`, `weather_periods`, `world_events`, `balance_versions` | One authoritative active clock/config; event application idempotent. |
-| Actions | `action_definitions`, `actions`, `action_effects`, `cooldowns`, `idempotency_requests`, `jobs_queue`, `outbox_events` | One exclusive running action per character; due-job claims leased; effects and completion commit together. |
-| Transport | `transport_stops`, `transport_routes`, `route_stops`, `service_windows`, `walking_links`, `fare_products`, `journeys`, `journey_legs` | Stops ordered per route; final location changes only on completed journey; fare settlement atomic. |
-| Economy | `wallets`, `financial_transactions`, `ledger_entries` | Amounts are bigint cents; user wallets nonnegative; each transaction balances to zero; idempotency key unique per actor. |
-| Items | `item_definitions`, `inventory_containers`, `inventory_stacks`, `item_instances`, `item_movements` | Quantity nonnegative; unique item has one owner/container; movement and payment settle together. |
-| Jobs | `job_definitions`, `job_requirements`, `shift_templates`, `shift_instances`, `shift_participations` | Workplace/location required; one completion and wage per participation. |
-| Education | `schools`, `course_definitions`, `course_sessions`, `enrollments`, `assessment_attempts`, `qualification_definitions`, `character_qualifications` | Qualification unique per character/definition; completion transaction grants once. |
-| Housing | `housing_units`, `rooms`, `occupancies` | One primary occupied room per character; venue/home link valid. |
-| Quests | `quest_definitions`, `quest_steps`, `quest_instances`, `quest_progress`, `reward_grants` | Reward grant unique by source and character. |
-| Social | `presence`, `messages`, `conversation_members`, `message_receipts`, `blocks`, `mutes` | Direct-message authorization checked on send and read; room membership derives from location; client message ID deduplicates. |
-| Crime | `crime_encounters`, `encounter_choices`, `encounter_outcomes`, `protection_windows` | Participants distinct and co-located; one resolution; cash result and outcome commit together. |
-| Justice | `cases`, `case_participants`, `evidence`, `case_events`, `hearings`, `judgments`, `appeals`, `detentions`, `community_service_assignments` | Evidence source authenticated; decision append-only; detention has bounded release time. |
-| Operations | `notifications`, `moderation_reports`, `moderation_actions`, `audit_events`, `runtime_settings` | Privileged changes audited; balance correction references a ledger transaction. |
+| Domain     | Initial tables                                                                                                                                                                  | Key integrity rules                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Identity   | `users`, `password_credentials`, `sessions`, `user_roles`, `user_settings`, `terms_acceptances`                                                                                 | Normalized handle unique; sessions hashed, expiring, revocable; admin roles separate from game roles.                         |
+| Character  | `character_appearances` (active), then `characters`, `character_interests`, `character_needs`, `skill_definitions`, `character_skills`, `reputation_accounts`, `status_effects` | One validated appearance per account today; needs bounded; one active character per user initially; grants carry provenance.  |
+| World      | `regions`, `hubs`, `venues`, `venue_opening_windows`, `venue_rules`, `npc_definitions`, `npc_schedules`, `research_sources`, `content_versions`                                 | Stable IDs; valid coordinates; opening windows support midnight crossing; published content immutable by version.             |
+| Simulation | `game_clock`, `weather_periods`, `world_events`, `balance_versions`                                                                                                             | One authoritative active clock/config; event application idempotent.                                                          |
+| Actions    | `action_definitions`, `actions`, `action_effects`, `cooldowns`, `idempotency_requests`, `jobs_queue`, `outbox_events`                                                           | One exclusive running action per character; due-job claims leased; effects and completion commit together.                    |
+| Transport  | `transport_stops`, `transport_routes`, `route_stops`, `service_windows`, `walking_links`, `fare_products`, `journeys`, `journey_legs`                                           | Stops ordered per route; final location changes only on completed journey; fare settlement atomic.                            |
+| Economy    | `wallets`, `financial_transactions`, `ledger_entries`                                                                                                                           | Amounts are bigint cents; user wallets nonnegative; each transaction balances to zero; idempotency key unique per actor.      |
+| Items      | `item_definitions`, `inventory_containers`, `inventory_stacks`, `item_instances`, `item_movements`                                                                              | Quantity nonnegative; unique item has one owner/container; movement and payment settle together.                              |
+| Jobs       | `job_definitions`, `job_requirements`, `shift_templates`, `shift_instances`, `shift_participations`                                                                             | Workplace/location required; one completion and wage per participation.                                                       |
+| Education  | `schools`, `course_definitions`, `course_sessions`, `enrollments`, `assessment_attempts`, `qualification_definitions`, `character_qualifications`                               | Qualification unique per character/definition; completion transaction grants once.                                            |
+| Housing    | `housing_units`, `rooms`, `occupancies`                                                                                                                                         | One primary occupied room per character; venue/home link valid.                                                               |
+| Quests     | `quest_definitions`, `quest_steps`, `quest_instances`, `quest_progress`, `reward_grants`                                                                                        | Reward grant unique by source and character.                                                                                  |
+| Social     | `presence`, `messages`, `conversation_members`, `message_receipts`, `blocks`, `mutes`                                                                                           | Direct-message authorization checked on send and read; room membership derives from location; client message ID deduplicates. |
+| Crime      | `crime_encounters`, `encounter_choices`, `encounter_outcomes`, `protection_windows`                                                                                             | Participants distinct and co-located; one resolution; cash result and outcome commit together.                                |
+| Justice    | `cases`, `case_participants`, `evidence`, `case_events`, `hearings`, `judgments`, `appeals`, `detentions`, `community_service_assignments`                                      | Evidence source authenticated; decision append-only; detention has bounded release time.                                      |
+| Operations | `notifications`, `moderation_reports`, `moderation_actions`, `audit_events`, `runtime_settings`                                                                                 | Privileged changes audited; balance correction references a ledger transaction.                                               |
 
 ### 4.1 Proposed `users` table
 
 The account record identifies the human account. Character name, appearance, biography, starting story, current location, skills, needs, and game progress belong to character tables. Password hashes belong to `password_credentials`; permissions belong to `user_roles`; detailed preferences belong to `user_settings`.
 
-| Column | PostgreSQL type | Null/default | Purpose and constraint |
-| --- | --- | --- | --- |
-| `id` | `uuid` | Not null; generated | Primary key. Stable internal account identifier. |
-| `handle` | `varchar(24)` | Not null | Public unique game handle. Normalize to lowercase, validate `^[a-z0-9_]{3,24}$`, and enforce case-insensitive uniqueness. |
-| `email` | `varchar(320)` | Nullable | Private login/recovery address. Enforce case-insensitive uniqueness only when present. Never expose it as profile data. |
-| `user_type` | `user_type` enum | Not null; no implicit default | Explicit selection: `tourist` or `local`. It may be changed through an authenticated profile action. |
-| `account_status` | `account_status` enum | Not null; `active` | `active`, `suspended`, `banned`, or `deletion_pending`. Moderation details remain in moderation tables. |
-| `preferred_locale` | `varchar(10)` | Not null; `en` | Player-facing locale. Initially accepts `en` or `pt-PT`. |
-| `timezone` | `text` | Not null; `Europe/Lisbon` | IANA timezone used for account-facing real-time displays; game-world time remains separate. |
-| `adult_confirmed_at` | `timestamptz` | Nullable | Records the adult-player confirmation required before social features are enabled without storing a date of birth unnecessarily. |
-| `email_verified_at` | `timestamptz` | Nullable | Set after ownership of a supplied email is verified. |
-| `onboarding_completed_at` | `timestamptz` | Nullable | Marks completion of account and character onboarding. |
-| `last_login_at` | `timestamptz` | Nullable | Updated after successful authentication; useful for account security and operations. |
-| `created_at` | `timestamptz` | Not null; `now()` | Account creation timestamp in UTC. |
-| `updated_at` | `timestamptz` | Not null; `now()` | Last account-record update timestamp in UTC. |
-| `deleted_at` | `timestamptz` | Nullable | Soft-deletion/anonymization workflow timestamp. It is not a substitute for the deletion job. |
+The current multiplayer slice stores the one-to-one appearance in `character_appearances`, whose `user_id` is both its primary key and an external reference to `users(id)`. It holds the rendered outfit and hair styles plus top, bottom, hair, skin, and shoe colours. A later multi-character model can move that relation from the account to `characters` without adding presentation fields to `users`.
+
+| Column                    | PostgreSQL type       | Null/default                  | Purpose and constraint                                                                                                           |
+| ------------------------- | --------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                      | `uuid`                | Not null; generated           | Primary key. Stable internal account identifier.                                                                                 |
+| `handle`                  | `varchar(24)`         | Not null                      | Public unique game handle. Normalize to lowercase, validate `^[a-z0-9_]{3,24}$`, and enforce case-insensitive uniqueness.        |
+| `email`                   | `varchar(320)`        | Nullable                      | Private login/recovery address. Enforce case-insensitive uniqueness only when present. Never expose it as profile data.          |
+| `user_type`               | `user_type` enum      | Not null; no implicit default | Explicit selection: `tourist` or `local`. It may be changed through an authenticated profile action.                             |
+| `account_status`          | `account_status` enum | Not null; `active`            | `active`, `suspended`, `banned`, or `deletion_pending`. Moderation details remain in moderation tables.                          |
+| `preferred_locale`        | `varchar(10)`         | Not null; `en`                | Player-facing locale. Initially accepts `en` or `pt-PT`.                                                                         |
+| `timezone`                | `text`                | Not null; `Europe/Lisbon`     | IANA timezone used for account-facing real-time displays; game-world time remains separate.                                      |
+| `adult_confirmed_at`      | `timestamptz`         | Nullable                      | Records the adult-player confirmation required before social features are enabled without storing a date of birth unnecessarily. |
+| `email_verified_at`       | `timestamptz`         | Nullable                      | Set after ownership of a supplied email is verified.                                                                             |
+| `onboarding_completed_at` | `timestamptz`         | Nullable                      | Marks completion of account and character onboarding.                                                                            |
+| `last_login_at`           | `timestamptz`         | Nullable                      | Updated after successful authentication; useful for account security and operations.                                             |
+| `created_at`              | `timestamptz`         | Not null; `now()`             | Account creation timestamp in UTC.                                                                                               |
+| `updated_at`              | `timestamptz`         | Not null; `now()`             | Last account-record update timestamp in UTC.                                                                                     |
+| `deleted_at`              | `timestamptz`         | Nullable                      | Soft-deletion/anonymization workflow timestamp. It is not a substitute for the deletion job.                                     |
 
 Proposed PostgreSQL definition:
 

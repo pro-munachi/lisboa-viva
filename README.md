@@ -44,8 +44,8 @@ Root npm scripts delegate to `apps/web`; the lockfile lives there. Run `go test 
 - **Choices and consequences:** 45 scenarios with two choices each across food, craft, stories, music, viewpoints and rest. Previews show cost, duration and energy. Exact-once actions keep money nonnegative, energy bounded and simulated activities from overlapping. Each scenario supplies one unique experience per run.
 - **Travel and memories:** illustrative walk/cycle/tram travel, with an intercity train option and longer walk/cycle estimates for Sintra. Tram travel is unavailable for Sintra. District passport, three optional challenges, confirmed-action journal, recap, early finish and private itinerary download remain playable. Free breaks and overnight rest provide a route forward.
 - **Saved progress:** validated same-browser save/resume, the current trip plus four earlier chapters, replay/new trip and explicit deletion. Invalid saves receive a visible message. Custom pins are separately validated and capped at 16.
-- **Authenticated access:** English registration and login screens distinguish tourists from locals. Opaque seven-day sessions use HttpOnly cookies; the Go service owns password hashing, session validation and role checks. The app route verifies the session before rendering.
-- **Live player presence:** signed-in players publish their current in-world area while `/play` is open. The nearby panel and 3D map show other active players, with a control to leave or rejoin multiplayer. Presence expires after 45 seconds without a heartbeat and is removed on logout.
+- **Authenticated access:** English registration and login screens distinguish tourists from locals. Registration also saves a player appearance with outfit, hair, skin and clothing colours. Opaque seven-day sessions use HttpOnly cookies; the Go service owns password hashing, session validation and role checks. The app route verifies the session before rendering.
+- **Live player presence:** signed-in players publish their current in-world area while `/play` is open. The nearby panel and 3D map show other active players with their saved appearance, with a control to leave or rejoin multiplayer. Presence expires after 45 seconds without a heartbeat and is removed on logout.
 - **Accessible alternatives:** responsive layouts, native modal focus management, reduced-motion support, semantic meters, camera buttons and list-based hotspot/activity selection. Trip experiences remain available if 3D cannot load.
 
 ## Accuracy and privacy
@@ -66,7 +66,7 @@ The budget excludes flights and accommodation. Accounts and short-lived coarse i
 - `apps/web/lib/interiors.ts`, `city-interiors.js`, `city-interior-runtime.js` and `city-room-navigation.js`: original room catalog, geometry, local activity poses and furniture-aware walking. `InteriorPanel` supplies the room controls.
 - `apps/web/public/data`: compressed derived database; `scripts/geography-build.py` and `geography-validate.py`: acquisition and validation.
 - `apps/web/tests`: engine, geography, character and pin regression checks.
-- `services/game`: Go authentication, authorization and multiplayer presence API; `db/migrations`: PostgreSQL account and presence schema.
+- `services/game`: Go authentication, authorization and multiplayer presence API; `db/migrations`: PostgreSQL account, appearance and presence schema.
 - [docs/authentication.md](docs/authentication.md): account endpoints, security boundary, local setup and staging configuration. [docs/multiplayer.md](docs/multiplayer.md) covers presence behavior and privacy.
 - `docs/PRD.md`: preserved original requirements; [docs/scope.md](docs/scope.md): current scope; [docs/verification.md](docs/verification.md): checks and limits.
 - [docs/backend-schema-plan.md](docs/backend-schema-plan.md): feature inventory and staged PostgreSQL schema boundary for rebuilding the persistent Lisboa Viva backend.

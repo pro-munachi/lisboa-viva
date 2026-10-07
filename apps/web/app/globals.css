@@ -471,6 +471,156 @@ body {
   font-size: 11px;
   line-height: 1.4;
 }
+.appearance-customizer {
+  border: 1px solid #ddd7d1;
+  border-radius: 14px;
+  padding: 15px;
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 16px;
+  background: #f8f5f0;
+}
+.appearance-customizer legend {
+  grid-column: 1 / -1;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.appearance-preview {
+  width: 76px;
+  height: 154px;
+  position: relative;
+  align-self: center;
+  justify-self: center;
+}
+.appearance-preview span {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.appearance-head {
+  width: 34px;
+  height: 41px;
+  top: 20px;
+  border-radius: 45% 45% 48% 48%;
+}
+.appearance-hair {
+  width: 36px;
+  height: 21px;
+  top: 14px;
+  border-radius: 50% 50% 25% 25%;
+  z-index: 2;
+}
+.appearance-hair.hair-curly {
+  width: 41px;
+  height: 27px;
+  border-radius: 50%;
+}
+.appearance-hair.hair-bob {
+  height: 39px;
+  border-radius: 45% 45% 36% 36%;
+}
+.appearance-hair.hair-bun::before {
+  content: "";
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: inherit;
+  left: 10px;
+  top: -9px;
+}
+.appearance-top {
+  width: 50px;
+  height: 49px;
+  top: 58px;
+  border-radius: 12px 12px 5px 5px;
+}
+.appearance-top.outfit-jacket {
+  box-shadow: inset 0 0 0 4px #fff4;
+}
+.appearance-top.outfit-dress {
+  width: 60px;
+  height: 67px;
+  clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
+}
+.appearance-top.outfit-tourist::after {
+  content: "";
+  position: absolute;
+  width: 25px;
+  height: 30px;
+  border: 4px solid #d39c49;
+  border-left: 0;
+  left: 23px;
+  top: 6px;
+  border-radius: 0 12px 12px 0;
+}
+.appearance-legs {
+  width: 38px;
+  height: 43px;
+  top: 103px;
+  border-left: 15px solid currentColor;
+  border-right: 15px solid currentColor;
+  box-sizing: border-box;
+}
+.appearance-shoes {
+  width: 49px;
+  height: 9px;
+  top: 143px;
+  border-left: 21px solid currentColor;
+  border-right: 21px solid currentColor;
+  box-sizing: border-box;
+  border-radius: 4px;
+}
+.appearance-controls {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.appearance-choice > span,
+.appearance-colors > span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+.appearance-choice > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.appearance-choice button {
+  padding: 5px 8px;
+  border: 1px solid #d5d0ca;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 10px;
+}
+.appearance-choice button[aria-pressed="true"] {
+  background: #292942;
+  color: #fff;
+  border-color: #292942;
+}
+.appearance-swatches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+.appearance-colors > div {
+  display: flex;
+  gap: 5px;
+}
+.appearance-colors button {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #cfc8c0;
+}
+.appearance-colors button[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px #292942;
+}
 .auth-check {
   grid-template-columns: 18px 1fr !important;
   align-items: start;
