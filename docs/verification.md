@@ -2,6 +2,14 @@
 
 Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, React 19.2.4, TypeScript 5.9.3 and Three.js 0.160.0. The project supports Node 22 or newer; GitHub Actions is configured for Node 22.
 
+## City appearance, transport cameras and beaches — 7 October 2026
+
+The current increment passes **211 web tests**, the typechecked production build, the full Go race suite with real loopback PostgreSQL integrations, `go vet` and `git diff --check`. New checks cover seven architecture families, source footprint and height envelopes, four bounded overview prototypes, shared lighting/resource cleanup, outdoor beach provenance/placement, transport camera visibility, all vehicle modes, reduced motion, skip/cancel/replacement and stale completion protection.
+
+The production preview at `http://localhost:3046/play` includes self-hosted Outfit/DM Sans, colourful hotspot signs and category icons, distinct nearby façades/roofs and 24 coastal beaches. An isolated browser origin/account was used for the arrival and metro ledger checks, preserving the user's existing trip. Airport landing reached the arrivals journey controls. Metro boarding visibly showed the traveller and train, then movement and arrival in Baixa. Booking and 30-minute travel charges applied once; reload retained the ledger without replaying travel. The beach filter returned all 24 records; Tamariz's source and outdoor-only controls were inspected.
+
+Desktop font loading and 1218px page/viewport widths were confirmed. At 390 × 844, beach discovery had no horizontal overflow; the transport Skip button measured 44px high, was uncovered by the account badge and Enter ended the sequence correctly. Captured checks showed no warning/error logs. Evidence is saved under `/private/tmp/roam-city-refresh/`; see [ordered request review](city-refresh.md) and [beach coverage](beaches.md). Remaining limits include physical-device performance, a full accessibility audit, hosted staging, surveyed city detail and live travel booking. Earlier records below retain their historical counts.
+
 ## Place-connected chat — 7 October 2026
 
 The chat increment passed all **176 web tests**, TypeScript and the production build. The full Go race run passed all **29 top-level tests**, including both opt-in integrations against the running loopback PostgreSQL database. Those integrations use isolated schemas and test real account/session enforcement, concurrent idempotent retries, changed-payload conflicts, room isolation, latest/forward pagination, revocation/suspension, invalid input and room-transaction ordering before sequence allocation. The generated Go roster matches the frontend's 621 city/place rooms. `go vet` and `git diff --check` passed.

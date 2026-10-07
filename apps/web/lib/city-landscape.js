@@ -584,8 +584,8 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
     (tree, c) =>
       c.setHSL(
         0.22 + tree.tint * 0.055,
-        0.22 + tree.tint * 0.12,
-        0.3 + tree.tint * 0.07,
+        0.42 + tree.tint * 0.18,
+        0.26 + tree.tint * 0.09,
       ),
   );
   batch(
@@ -598,13 +598,13 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
       obj.scale.setScalar(tree.scale);
     },
     (tree, c) =>
-      c.setHSL(0.29, 0.25 + tree.tint * 0.08, 0.23 + tree.tint * 0.07),
+      c.setHSL(0.29, 0.4 + tree.tint * 0.12, 0.23 + tree.tint * 0.07),
   );
   batch(
     "Riverside palm crowns",
     trees.filter((tree) => tree.type === "palm"),
     palmFronds(),
-    material("#597e47", { side: THREE.DoubleSide }),
+    material("#2b7859", { side: THREE.DoubleSide }),
     (tree, obj, ground) => {
       obj.position.y = ground + 6.5 * tree.scale;
       obj.scale.setScalar(tree.scale);

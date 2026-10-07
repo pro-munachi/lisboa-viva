@@ -10,7 +10,7 @@ Conversation starters fill the composer with a question for a local, a coffee in
 
 Both endpoints use Go’s existing session middleware and active-account checks. Go derives the author from the session; the browser cannot submit a username, role or user ID. Public identity contains only account ID, username and tourist/local category. Emails, session tokens and roles are excluded.
 
-Migration `004_chat.sql` creates PostgreSQL message storage through the ordered, checksum-checked startup runner. Go embeds `services/game/chat_rooms.json`: one Lisbon room plus 620 mapped-place rooms. A parity test checks this against the frontend directory. After changing the mapped directory, regenerate it with:
+Migration `004_chat.sql` creates PostgreSQL message storage through the ordered, checksum-checked startup runner. Go embeds `services/game/chat_rooms.json`: one Lisbon room plus 644 mapped-place rooms, including 24 beaches. A parity test checks this against the frontend directory. After changing the mapped directory, regenerate it with:
 
 ```sh
 node --import ./apps/web/node_modules/tsx/dist/loader.mjs scripts/chat-rooms-build.cjs

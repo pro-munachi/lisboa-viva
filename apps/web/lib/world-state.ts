@@ -101,7 +101,10 @@ export function fromVenue(venue: MappedVenue): WorldHotspot {
     mapVenue: true,
     area: venue.city || "Lisbon region",
     address: venue.street,
-    description: `A mapped ${venue.category === "gym" ? "gym or fitness studio" : venue.category} in the Lisbon region. Venue details are from OpenStreetMap; opening status and services have not been verified.`,
+    description:
+      venue.category === "beach"
+        ? "A named coastal beach mapped in the Lisbon region. The map focus is an approximate OpenStreetMap polygon centre, not an entrance. Check local beach information for current conditions and access."
+        : `A mapped ${venue.category === "gym" ? "gym or fitness studio" : venue.category} in the Lisbon region. Venue details are from OpenStreetMap; opening status and services have not been verified.`,
     sourceUrl: venue.sourceUrl,
     mapsUrl: venueMapsUrl(venue),
   };

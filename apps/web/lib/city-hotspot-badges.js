@@ -11,6 +11,10 @@ const ICONS = {
   ],
   gym: ["M7 12h10M4 7v10m3-12v14m10-14v14m3-12v10M3 9h4m10 0h4M3 15h4m10 0h4"],
   shop: ["M4 8h16l-1 13H5ZM8 8V6a4 4 0 0 1 8 0v2"],
+  beach: [
+    "M3 11a9 9 0 0 1 18 0ZM12 2v15M7 11c0-4 2-9 5-9s5 5 5 9",
+    "M2 21c2-2 4 2 6 0s4 2 6 0 4 2 6 0",
+  ],
   bar: ["M4 4h16l-8 9Zm8 9v8m-4 0h8M15 4l3-2"],
   museum: ["M3 8 12 3l9 5ZM5 11v8m7-8v8m7-8v8M3 21h18M3 9h18"],
   culture: ["M4 4h16v16H4ZM7 15l4-5 3 3 3-4M16 7h.01"],
@@ -67,30 +71,41 @@ ICONS.weights = ICONS.gym;
 ICONS.platform = [...ICONS.transport, "M2 23h20"];
 
 const TONES = {
-  cafe: "ochre",
-  restaurant: "ochre",
-  espresso: "ochre",
-  pastry: "ochre",
-  kitchen: "ochre",
-  rest: "ochre",
-  table: "ochre",
-  lounge: "ochre",
-  gym: "sage",
-  treadmill: "sage",
-  weights: "sage",
-  stretch: "sage",
-  custom: "sage",
-  shop: "rose",
-  browse: "rose",
-  "try-on": "rose",
-  bar: "rose",
-  listen: "rose",
-  counter: "rose",
-  market: "ochre",
-  street: "rose",
-  card: "ochre",
-  "check-in": "ochre",
-  board: "sage",
+  cafe: "coral",
+  restaurant: "amber",
+  espresso: "coral",
+  pastry: "coral",
+  kitchen: "amber",
+  rest: "amber",
+  table: "coral",
+  lounge: "violet",
+  gym: "lime",
+  treadmill: "lime",
+  weights: "lime",
+  stretch: "lime",
+  custom: "teal",
+  shop: "cobalt",
+  beach: "aqua",
+  browse: "cobalt",
+  "try-on": "cobalt",
+  bar: "violet",
+  listen: "violet",
+  counter: "cobalt",
+  market: "amber",
+  street: "coral",
+  museum: "teal",
+  culture: "teal",
+  gallery: "teal",
+  tiles: "teal",
+  landmark: "amber",
+  viewpoint: "violet",
+  transport: "cobalt",
+  tickets: "cobalt",
+  timetable: "cobalt",
+  platform: "cobalt",
+  card: "amber",
+  "check-in": "amber",
+  board: "lime",
 };
 
 /** Project a world anchor into CSS pixels. Call after camera matrices update. */
@@ -360,7 +375,8 @@ export function createHotspotBadgeLayer(host, { onSelect } = {}) {
       if (category !== record.category) {
         record.tile.replaceChildren(createGlyph(doc, category));
         record.category = category;
-        record.button.setAttribute("data-tone", TONES[category] || "blue");
+        record.button.setAttribute("data-tone", TONES[category] || "cobalt");
+        record.button.setAttribute("data-category", category);
       }
       const name =
         typeof item.name === "string" ? item.name.trim().slice(0, 140) : "";

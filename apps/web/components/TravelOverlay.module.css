@@ -1,0 +1,110 @@
+.panel {
+  position: fixed;
+  z-index: 45;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  width: min(640px, calc(100% - 36px));
+  padding: 18px;
+  border: 1px solid #fff;
+  border-radius: 20px;
+  color: var(--ink, #213052);
+  background: #fffefbf5;
+  box-shadow: 0 10px 45px #21305230;
+}
+.icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 13px;
+  color: #213052;
+  background: var(--roam-lime, #d7ee83);
+}
+.copy {
+  flex: 1;
+  min-width: 0;
+}
+.copy > span {
+  color: #193faf;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.copy h2 {
+  margin: 5px 0 6px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.copy p {
+  color: #50617c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.copy small {
+  display: block;
+  margin-top: 7px;
+  color: #647089;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.panel button {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  background: #2456d8;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.panel button:focus-visible {
+  outline: 3px solid #2456d8;
+  outline-offset: 3px;
+}
+.panel button:active:focus-visible {
+  transform: none;
+}
+@media (max-width: 600px) {
+  .panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    transform: none;
+    width: auto;
+    flex-wrap: wrap;
+    gap: 11px;
+    padding: 15px;
+  }
+  .copy h2 {
+    font-size: 18px;
+  }
+  .panel button {
+    margin-left: auto;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .panel button:hover {
+    background: #193faf;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel button {
+    transition: none;
+  }
+  .panel button:active {
+    transform: none;
+  }
+}

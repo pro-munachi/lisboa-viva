@@ -16,8 +16,27 @@
   --line: #dce3ef;
   --accent: var(--roam-cobalt);
   --green: #327159;
-  font-family: "Avenir Next", Avenir, "Segoe UI", Arial, sans-serif;
+  font-family: var(--font-roam-app), "Avenir Next", "Segoe UI", sans-serif;
   background: #f6f7fb;
+}
+
+h1,
+h2,
+h3,
+.brand,
+.landing-brand,
+.auth-brand,
+.mission-symbol,
+.nav button,
+.roam-badge-label,
+.eyebrow {
+  font-family: var(--font-roam-game), var(--font-roam-app), sans-serif;
+}
+.clock,
+.wallet,
+.trip-stat,
+.travel-overlay {
+  font-variant-numeric: tabular-nums;
 }
 
 .brand,

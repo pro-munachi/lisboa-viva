@@ -126,14 +126,15 @@ test("room actions have distinct concrete CTAs, descriptions, results and short 
   }
 });
 
-test("actual mapped OSM venue categories select their corresponding original rooms", () => {
-  const expected: Record<VenueCategory, InteriorKind> = {
+test("actual mapped OSM venue categories select their corresponding original rooms while beaches stay outdoors", () => {
+  const expected: Record<VenueCategory, InteriorKind | null> = {
     cafe: "cafe",
     restaurant: "cafe",
     gym: "gym",
     shop: "shop",
     culture: "museum",
     bar: "bar",
+    beach: null,
   };
   for (const [category, kind] of Object.entries(expected)) {
     const venue = VENUES.find((item) => item.category === category);

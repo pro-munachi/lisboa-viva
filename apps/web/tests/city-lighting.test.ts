@@ -27,6 +27,9 @@ function withCanvas(run: (draws: any[][]) => void) {
           fillRect(...args: number[]) {
             ops.push({ fill: this.fillStyle, args });
           },
+          fill() {
+            ops.push({ fill: this.fillStyle, args: [] });
+          },
           createLinearGradient() {
             return { addColorStop() {} };
           },
@@ -177,28 +180,28 @@ test("all façade variants share one clock uniform and only mapped glass emits a
   withCanvas((draws) => {
     const palette = createArchitecturePalette();
     const shared = palette.wallMaterials[0].userData.nightUniform;
-    const mask = palette.wallMaterials[0].emissiveMap;
+    const masks = [
+      ...new Set(
+        palette.wallMaterials.map((material: any) => material.emissiveMap),
+      ),
+    ];
     const resources = [
       ...palette.wallMaterials,
       ...palette.wallMaterials.map((material: any) => material.map),
-      mask,
-      palette.roofMaterial,
-      palette.roofMaterial.map,
+      ...masks,
+      ...palette.roofMaterials,
+      ...palette.roofMaterials.map((material: any) => material.map),
+      palette.detailMaterial,
     ];
     const verify = auditDisposal(resources);
     try {
-      assert.equal(draws[0][0].fill, "#000000");
-      assert.deepEqual(draws[0][0].args, [0, 0, 256, 256]);
-      assert.deepEqual(
-        draws[0]
-          .filter((draw) => draw.fill === "#ffffff")
-          .map((draw) => draw.args),
-        [
-          [89, 24, 78, 61],
-          [55, 157, 65, 69],
-          [132, 157, 65, 69],
-        ],
-      );
+      assert.equal(masks.length, 7);
+      for (const maskDraw of draws.slice(0, 7)) {
+        assert.equal(maskDraw[0].fill, "#000000");
+        assert.deepEqual(maskDraw[0].args, [0, 0, 256, 256]);
+        assert.ok(maskDraw.some((draw) => draw.fill === "#ffffff"));
+      }
+      const familyMasks = new Map();
       for (const material of palette.wallMaterials) {
         const shader: any = {
           uniforms: {},
@@ -206,7 +209,10 @@ test("all façade variants share one clock uniform and only mapped glass emits a
         };
         material.onBeforeCompile(shader, {} as any);
         assert.equal(shader.uniforms.roamNight, shared);
-        assert.equal(material.emissiveMap, mask);
+        const family = material.userData.family;
+        if (familyMasks.has(family))
+          assert.equal(material.emissiveMap, familyMasks.get(family));
+        else familyMasks.set(family, material.emissiveMap);
         assert.match(
           shader.fragmentShader,
           /emissiveMap, vec2\(vEmissiveMapUv.x, roamFacadeV\(vEmissiveMapUv.y\)\)/,

@@ -5,12 +5,62 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 // The names/locations are sourced; facade signs and seating are not surveys.
 const CELL = 64;
 const STYLES = {
-  cafe: { label: "CAFÉ", color: "#82634a", stripe: "#b58962" },
-  restaurant: { label: "RESTAURANTE", color: "#9d6349", stripe: "#b17551" },
-  bar: { label: "BAR", color: "#425967", stripe: "#526e7c" },
-  gym: { label: "GYM · FITNESS", color: "#3e6a63", stripe: "#598278" },
-  shop: { label: "LOJA", color: "#7c6479", stripe: "#967c8e" },
-  culture: { label: "CULTURA", color: "#697752", stripe: "#7d8966" },
+  cafe: {
+    label: "CAFÉ",
+    color: "#df513f",
+    stripe: "#f27852",
+    accent: "#ffc64e",
+    glass: "#315c69",
+    ink: "#ffffff",
+  },
+  restaurant: {
+    label: "RESTAURANTE",
+    color: "#b86028",
+    stripe: "#ffc64e",
+    accent: "#ef704f",
+    glass: "#455d58",
+    ink: "#ffffff",
+  },
+  bar: {
+    label: "BAR",
+    color: "#8150d5",
+    stripe: "#bc72ee",
+    accent: "#ed78bb",
+    glass: "#333d68",
+    ink: "#ffffff",
+  },
+  gym: {
+    label: "GYM · FITNESS",
+    color: "#356957",
+    stripe: "#b7ed57",
+    accent: "#b7ed57",
+    glass: "#33586a",
+    ink: "#ffffff",
+  },
+  shop: {
+    label: "LOJA",
+    color: "#3358db",
+    stripe: "#61b6ef",
+    accent: "#ffc64e",
+    glass: "#335469",
+    ink: "#ffffff",
+  },
+  culture: {
+    label: "CULTURA",
+    color: "#087d89",
+    stripe: "#71c9c9",
+    accent: "#ffc64e",
+    glass: "#344c66",
+    ink: "#ffffff",
+  },
+  beach: {
+    label: "PRAIA",
+    color: "#087d89",
+    stripe: "#65dae0",
+    accent: "#ffc64e",
+    glass: "#344c66",
+    ink: "#ffffff",
+  },
 };
 
 function boundsOf(points) {
@@ -89,19 +139,158 @@ function box(w, h, d, x, y, z) {
   return new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 }
 
-function cafeTable() {
+function colored(geometry, value) {
+  const color = new THREE.Color(value);
+  const values = new Float32Array(geometry.attributes.position.count * 3);
+  for (let i = 0; i < values.length; i += 3) {
+    values[i] = color.r;
+    values[i + 1] = color.g;
+    values[i + 2] = color.b;
+  }
+  geometry.setAttribute("color", new THREE.BufferAttribute(values, 3));
+  return geometry;
+}
+
+function cafeTable(category) {
+  const style = STYLES[category] || STYLES.cafe;
   return combine([
-    new THREE.CylinderGeometry(0.48, 0.48, 0.07, 10).translate(0, 0.77, 0),
-    new THREE.CylinderGeometry(0.04, 0.06, 0.73, 6).translate(0, 0.37, 0),
-    new THREE.CylinderGeometry(0.25, 0.25, 0.055, 8).translate(0, 0.04, 0),
+    colored(
+      new THREE.CylinderGeometry(0.48, 0.48, 0.07, 10).translate(0, 0.77, 0),
+      "#fff0cb",
+    ),
+    colored(
+      new THREE.CylinderGeometry(0.04, 0.06, 0.73, 6).translate(0, 0.37, 0),
+      "#35485b",
+    ),
+    colored(
+      new THREE.CylinderGeometry(0.25, 0.25, 0.055, 8).translate(0, 0.04, 0),
+      "#35485b",
+    ),
     ...[-0.77, 0.77].flatMap((x) => [
-      box(0.38, 0.045, 0.38, x, 0.46, 0),
-      box(0.38, 0.29, 0.045, x, 0.63, -0.18),
+      colored(box(0.38, 0.045, 0.38, x, 0.46, 0), style.stripe),
+      colored(box(0.38, 0.29, 0.045, x, 0.63, -0.18), style.color),
       ...[-0.14, 0.14].flatMap((dx) =>
-        [-0.14, 0.14].map((z) => box(0.035, 0.43, 0.035, x + dx, 0.23, z)),
+        [-0.14, 0.14].map((z) =>
+          colored(box(0.035, 0.43, 0.035, x + dx, 0.23, z), "#35485b"),
+        ),
       ),
     ]),
   ]);
+}
+
+function beachFurniture() {
+  const parts = [
+    colored(
+      new THREE.CylinderGeometry(0.04, 0.04, 2.3, 6).translate(0, 1.15, 0),
+      "#f5ead0",
+    ),
+    colored(
+      new THREE.ConeGeometry(1.3, 0.65, 12).translate(0, 2.25, 0),
+      "#65dae0",
+    ),
+    colored(
+      new THREE.ConeGeometry(1.05, 0.3, 12).translate(0, 2.62, 0),
+      "#ffc64e",
+    ),
+  ];
+  for (const x of [-0.65, 0.65]) {
+    parts.push(colored(box(0.48, 0.08, 1.2, x, 0.3, 0.15), "#fff0cb"));
+    parts.push(
+      colored(box(0.48, 0.58, 0.07, x, 0.59, -0.42).rotateX(-0.15), "#087d89"),
+    );
+    for (const z of [-0.25, 0.55])
+      parts.push(colored(box(0.38, 0.26, 0.07, x, 0.17, z), "#db9b65"));
+  }
+  return combine(parts);
+}
+
+// Flush, shallow entry details stay on the chosen mapped facade. They make the
+// category readable without adding freestanding objects in the walking corridor.
+function entryGeometry(category, width, signY) {
+  const style = STYLES[category] || STYLES.culture;
+  const height = Math.max(0.95, Math.min(2.55, signY - 0.68));
+  const parts = [];
+  const part = (w, h, d, x, y, z, color) =>
+    parts.push(colored(box(w, h, d, x, y, z), color));
+  part(width, height, 0.04, 0, height / 2, 0.015, style.color);
+  part(
+    width - 0.22,
+    height - 0.17,
+    0.045,
+    0,
+    height / 2 + 0.01,
+    0.05,
+    style.glass,
+  );
+  for (const x of [-width / 2 + 0.065, width / 2 - 0.065])
+    part(0.13, height + 0.12, 0.11, x, height / 2, 0.085, style.stripe);
+  part(width + 0.06, 0.11, 0.11, 0, height + 0.025, 0.085, style.stripe);
+  part(width, 0.18, 0.14, 0, 0.09, 0.08, "#f5ead0");
+  part(
+    0.09,
+    height - 0.16,
+    0.08,
+    width * 0.1,
+    height / 2 + 0.01,
+    0.1,
+    "#f5ead0",
+  );
+  part(
+    0.045,
+    0.23,
+    0.05,
+    width * 0.1 + 0.15,
+    height * 0.43,
+    0.17,
+    style.accent,
+  );
+
+  if (category === "gym") {
+    // A lime training stripe and a sculpted weight visible through the glazing.
+    part(width - 0.3, 0.12, 0.05, 0, height * 0.75, 0.1, style.accent);
+    part(
+      width * 0.26,
+      0.07,
+      0.07,
+      -width * 0.2,
+      height * 0.45,
+      0.13,
+      "#dce3eb",
+    );
+    for (const x of [-width * 0.33, -width * 0.07])
+      part(0.16, height * 0.34, 0.09, x, height * 0.45, 0.14, style.accent);
+  } else if (category === "shop") {
+    // Two original display pedestals and contrasting packages in the window.
+    for (const [x, color] of [
+      [-width * 0.3, style.accent],
+      [-width * 0.08, "#ea78a3"],
+    ]) {
+      part(width * 0.13, 0.1, 0.08, x, height * 0.2, 0.13, "#f5ead0");
+      part(width * 0.1, height * 0.23, 0.09, x, height * 0.36, 0.13, color);
+    }
+  } else if (category === "culture") {
+    // A compact azulejo-inspired entry plinth, not a copy of any museum facade.
+    for (let row = 0; row < 3; row++)
+      for (let column = 0; column < 7; column++)
+        part(
+          width / 7 - 0.025,
+          0.12,
+          0.04,
+          -width / 2 + ((column + 0.5) * width) / 7,
+          0.27 + row * 0.14,
+          0.1,
+          (row + column) % 2 ? "#e6f3e3" : style.stripe,
+        );
+  } else if (category === "bar") {
+    // Tall contrasting entry strips make evening venues recognizable by day.
+    for (const x of [-width * 0.32, -width * 0.23])
+      part(0.1, height * 0.67, 0.08, x, height * 0.55, 0.12, style.accent);
+    part(width - 0.25, 0.12, 0.09, 0, height + 0.16, 0.11, style.accent);
+  } else {
+    part(width * 0.48, 0.32, 0.08, -width * 0.19, 0.33, 0.12, style.stripe);
+    part(width * 0.42, 0.05, 0.09, -width * 0.19, 0.54, 0.14, "#f5ead0");
+  }
+  return combine(parts);
 }
 
 function categoryIcon(ctx, category, x, y) {
@@ -111,7 +300,19 @@ function categoryIcon(ctx, category, x, y) {
   ctx.fillStyle = "#fff6e7";
   ctx.lineWidth = 2;
   ctx.lineCap = "round";
-  if (category === "gym") {
+  if (category === "beach") {
+    ctx.beginPath();
+    ctx.arc(0, 0, 14, Math.PI, 0);
+    ctx.lineTo(-14, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.lineTo(0, 13);
+    ctx.moveTo(-13, 15);
+    ctx.quadraticCurveTo(-6, 9, 0, 15);
+    ctx.quadraticCurveTo(6, 21, 13, 15);
+    ctx.stroke();
+  } else if (category === "gym") {
     ctx.fillRect(-12, -2, 24, 4);
     for (const side of [-1, 1]) {
       ctx.fillRect(side * 10 - 3, -10, 6, 20);
@@ -194,10 +395,10 @@ function signAtlas(venues) {
       y = Math.floor(slot / 4) * 64;
     ctx.fillStyle = style.color;
     ctx.fillRect(x, y, 256, 64);
-    ctx.fillStyle = "#f4ead7";
-    ctx.fillRect(x + 48, y + 3, 205, 58);
+    ctx.fillStyle = style.stripe;
+    ctx.fillRect(x + 47, y + 9, 2, 46);
     categoryIcon(ctx, venue.category, x + 24, y + 31);
-    ctx.fillStyle = style.color;
+    ctx.fillStyle = style.ink;
     ctx.font = "700 9px Arial";
     ctx.fillText(style.label, x + 58, y + 19);
     const name =
@@ -211,8 +412,8 @@ function signAtlas(venues) {
       size--;
     }
     ctx.fillText(name, x + 58, y + 42, 185);
-    ctx.fillStyle = style.stripe;
-    ctx.fillRect(x + 58, y + 50, 24, 2);
+    ctx.fillStyle = style.accent;
+    ctx.fillRect(x + 58, y + 50, 55, 3);
   });
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -368,6 +569,9 @@ export function createVenueDecorations(
   ];
   const buildings = index(),
     roads = index();
+  const beachSurfaces = (chunk.surfaces || [])
+    .filter((surface) => surface.kind === "sand")
+    .map((surface) => ({ id: surface.id, ring: surface.ring.map(projectGeo) }));
   for (const building of chunk.buildings || []) {
     const ring = building.ring.map(projectGeo);
     if (ring.length < 3) continue;
@@ -392,7 +596,9 @@ export function createVenueDecorations(
   const occupied = [],
     seating = [],
     awnings = new Map(),
-    fixtures = [];
+    fixtures = [],
+    entries = [],
+    beachFurnishings = [];
   const signMaterial = signAtlas(selected.map(({ venue }) => venue));
   const roadDistance = (p) =>
     Math.min(
@@ -427,10 +633,24 @@ export function createVenueDecorations(
     return true;
   };
   let mounted = 0,
-    tables = 0;
+    tables = 0,
+    rendered = 0;
   selected.forEach(({ venue, p }, slot) => {
+    const beach = venue.category === "beach";
+    const beachSourceId = /^way:\d+$/.test(venue.id)
+      ? Number(venue.id.slice(4))
+      : null;
+    const beachSurface = beach
+      ? beachSurfaces.find(
+          (surface) => surface.id === beachSourceId && inside(p, surface.ring),
+        )
+      : null;
+    // The map bubble remains available even if a coarse/concave beach focus
+    // has no suitable sand footprint here. Never mount a beach on an inland
+    // building or invent a sand island around its marker.
+    if (beach && (!beachSurface || !clear(p, 0.3))) return;
     const candidates = [];
-    for (const b of buildings.at(p)) {
+    for (const b of beach ? [] : buildings.at(p)) {
       const contained = inside(p, b.ring);
       for (let i = 0; i < b.ring.length; i++) {
         const a = b.ring[i],
@@ -536,9 +756,15 @@ export function createVenueDecorations(
     sign.userData.terraceTables = [];
     decoration.add(sign);
     group.add(decoration);
+    rendered++;
     if (face) {
       occupied.push({ ...face.face, width });
       mounted++;
+      entries.push(
+        entryGeometry(venue.category, width, signY).applyMatrix4(
+          decoration.matrix,
+        ),
+      );
       if (
         ["cafe", "restaurant", "bar"].includes(venue.category) &&
         signY > 2.9
@@ -597,7 +823,7 @@ export function createVenueDecorations(
           obj.updateMatrix();
           seating.push({
             p: table,
-            geometry: cafeTable().applyMatrix4(obj.matrix),
+            geometry: cafeTable(venue.category).applyMatrix4(obj.matrix),
           });
           sign.userData.terraceTables.push({
             x: table.x,
@@ -616,7 +842,37 @@ export function createVenueDecorations(
         .applyMatrix4(decoration.matrix);
       fixtures.push(pole, base);
     }
+    if (beachSurface && beachFurnishings.length < 6) {
+      const candidate = [
+        { x: p.x + 3, z: p.z },
+        { x: p.x - 3, z: p.z },
+        { x: p.x, z: p.z + 3 },
+        { x: p.x, z: p.z - 3 },
+      ].find(
+        (at) =>
+          clear(at, 1.8) &&
+          inside(at, beachSurface.ring) &&
+          beachSurface.ring.every(
+            (edge, i, ring) =>
+              closest(at, edge, ring[(i + 1) % ring.length]).distance > 1.6,
+          ),
+      );
+      if (candidate) {
+        const placement = new THREE.Object3D();
+        placement.position.set(
+          candidate.x,
+          geoY(toGeo(candidate)) + 0.12,
+          candidate.z,
+        );
+        placement.updateMatrix();
+        beachFurnishings.push(beachFurniture().applyMatrix4(placement.matrix));
+      }
+    }
   });
+  if (!rendered) {
+    signMaterial.map.dispose();
+    signMaterial.dispose();
+  }
   for (const [category, parts] of awnings) {
     const mesh = new THREE.Mesh(combine(parts), awningMaterial(category));
     mesh.castShadow = mesh.receiveShadow = true;
@@ -625,8 +881,18 @@ export function createVenueDecorations(
   if (seating.length) {
     const mesh = new THREE.Mesh(
       combine(seating.map((s) => s.geometry)),
-      new THREE.MeshStandardMaterial({ color: "#8b6848", roughness: 0.85 }),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }),
     );
+    mesh.name = "Colored cafe terrace seating";
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  if (entries.length) {
+    const mesh = new THREE.Mesh(
+      combine(entries),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 }),
+    );
+    mesh.name = "Colorful mapped venue entrances";
     mesh.castShadow = mesh.receiveShadow = true;
     group.add(mesh);
   }
@@ -642,14 +908,27 @@ export function createVenueDecorations(
     mesh.castShadow = true;
     group.add(mesh);
   }
+  if (beachFurnishings.length) {
+    const mesh = new THREE.Mesh(
+      combine(beachFurnishings),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86 }),
+    );
+    mesh.name = "Umbrellas on mapped beach sand";
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+  }
   group.userData.venueDecorations = {
     count: selected.length,
+    rendered,
     mounted,
     tables,
+    beachScenes: beachFurnishings.length,
     drawCalls:
-      selected.length +
+      rendered +
       awnings.size +
       (seating.length ? 1 : 0) +
+      (entries.length ? 1 : 0) +
+      (beachFurnishings.length ? 1 : 0) +
       (fixtures.length ? 1 : 0),
   };
   return group;

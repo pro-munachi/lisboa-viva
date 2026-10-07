@@ -17,12 +17,14 @@ import {
 } from "lucide-react";
 import GoogleWorld from "./GoogleWorld";
 import InteriorPanel from "./InteriorPanel";
+import TravelOverlay from "./TravelOverlay";
 import { INTERIOR_ACTIVITIES, type InteriorVisit } from "../lib/interiors";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
 import { CITY, cityMinute } from "../lib/cities";
 import type { WorldFocus, WorldHotspot } from "../lib/world-state";
+import type { TravelPhase, TravelSequence } from "../lib/travel-sequence";
 type CityController = {
-  ready: Promise<void>;
+  ready: Promise<boolean>;
   setInterior: (visit: InteriorVisit | null) => void;
   selectInteriorZone: (id: string) => void;
   performInteriorAction: (id: string, duration?: number) => void;
@@ -36,6 +38,9 @@ type CityController = {
   setTime: (minute: number) => void;
   zoom: (multiplier: number) => void;
   rotate: (angle: number) => void;
+  startTravel: (sequence: TravelSequence) => boolean;
+  skipTravel: () => void;
+  cancelTravel: () => void;
   dispose: () => void;
 };
 type LocalPerson = { name: string; label: string };
@@ -48,6 +53,8 @@ export default function World({
   onExitInterior,
   onTransitAction,
   minute,
+  travelSequence = null,
+  onTravelComplete,
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -57,22 +64,51 @@ export default function World({
   onExitInterior: () => void;
   onTransitAction?: (id: string) => void;
   minute?: number;
+  travelSequence?: TravelSequence | null;
+  onTravelComplete?: (id: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
   const callback = useRef(onHotspot);
   callback.current = onHotspot;
+  const travelCallback = useRef(onTravelComplete);
+  travelCallback.current = onTravelComplete;
+  const startedTravel = useRef<string | null>(null);
+  const [travelPhase, setTravelPhase] = useState<TravelPhase | null>(null);
+  const [travelError, setTravelError] = useState("");
   const [cityClock, setCityClock] = useState(660);
   const [sceneTime, setSceneTime] = useState("live");
-  const sceneMinute = sceneTime === "trip" ? minute ?? cityClock :
-    sceneTime === "day" ? 720 : sceneTime === "golden" ? 1110 :
-    sceneTime === "night" ? 1260 : cityClock;
-  const latest = useRef({ focus, shirt, hotspots, interior, minute: sceneMinute });
-  latest.current = { focus, shirt, hotspots, interior, minute: sceneMinute };
+  const sceneMinute =
+    sceneTime === "trip"
+      ? (minute ?? cityClock)
+      : sceneTime === "day"
+        ? 720
+        : sceneTime === "golden"
+          ? 1110
+          : sceneTime === "night"
+            ? 1260
+            : cityClock;
+  const latest = useRef({
+    focus,
+    shirt,
+    hotspots,
+    interior,
+    minute: sceneMinute,
+    travelSequence,
+  });
+  latest.current = {
+    focus,
+    shirt,
+    hotspots,
+    interior,
+    minute: sceneMinute,
+    travelSequence,
+  };
   const [status, setStatus] = useState("Loading Lisbon’s streets…");
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
   const [google, setGoogle] = useState(false);
+  const googleVisible = google && !travelSequence;
   const [gallery, setGallery] = useState(false);
   const [person, setPerson] = useState<LocalPerson | null>(null);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
@@ -89,6 +125,42 @@ export default function World({
   } | null>(null);
   const ui = useRef({ gesture, motion });
   ui.current = { gesture, motion };
+  function startPendingTravel(instance: CityController) {
+    void instance.ready
+      .then((ready) => {
+        if (controller.current !== instance) return;
+        const sequence = latest.current.travelSequence;
+        if (!sequence || startedTravel.current === sequence.id) return;
+        if (!ready) {
+          setTravelError(
+            "The city geography could not load. Continue to your destination.",
+          );
+          return;
+        }
+        try {
+          instance.setInterior(null);
+          if (instance.startTravel(sequence)) {
+            startedTravel.current = sequence.id;
+          } else {
+            startedTravel.current = null;
+            setTravelError(
+              "This 3D journey could not start. Continue to your destination.",
+            );
+          }
+        } catch {
+          startedTravel.current = null;
+          setTravelError(
+            "This 3D journey could not start. Continue to your destination.",
+          );
+        }
+      })
+      .catch(() => {
+        if (controller.current === instance && latest.current.travelSequence)
+          setTravelError(
+            "This 3D journey could not load. Continue to your destination.",
+          );
+      });
+  }
   useEffect(() => {
     const update = () => {
       setCityClock(cityMinute(new Date()));
@@ -97,10 +169,12 @@ export default function World({
     const timer = setInterval(update, 60000);
     return () => clearInterval(timer);
   }, []);
-  useEffect(() => { controller.current?.setTime(sceneMinute); }, [sceneMinute]);
+  useEffect(() => {
+    controller.current?.setTime(sceneMinute);
+  }, [sceneMinute]);
   useEffect(() => {
     setPerson(null);
-    if (google) return;
+    if (googleVisible) return;
     let cancelled = false;
     import("../lib/city-scene.js")
       .then(({ createCity }) => {
@@ -110,12 +184,14 @@ export default function World({
             ...latest.current,
             city: CITY,
             onHotspot: (h: WorldHotspot) => {
+              if (latest.current.travelSequence) return;
               setPerson(null);
               callback.current(h);
             },
             onStatus: setStatus,
             onStats: setStats,
             onPerson: (local: LocalPerson) => {
+              if (latest.current.travelSequence) return;
               setGallery(false);
               setPerson(local);
             },
@@ -139,30 +215,71 @@ export default function World({
                     : [...list, event.zoneId!],
                 );
             },
+            onTravelPhase: (event: TravelPhase) => {
+              if (!cancelled && event.id === latest.current.travelSequence?.id)
+                setTravelPhase(event);
+            },
+            onTravelComplete: (event: { id: string; to: WorldFocus }) => {
+              if (!cancelled && event.id === latest.current.travelSequence?.id)
+                travelCallback.current?.(event.id);
+            },
           });
           controller.current?.setMode(ui.current.gesture);
           controller.current?.setMotion(ui.current.motion);
+          if (controller.current) startPendingTravel(controller.current);
         } catch {
           setStatus(
             "3D is unavailable on this device. Trip experiences still work.",
           );
+          if (latest.current.travelSequence)
+            setTravelError(
+              "3D is unavailable on this device. Continue to your destination.",
+            );
         }
       })
-      .catch(() => setStatus("The city could not load. Try reloading."));
+      .catch(() => {
+        setStatus("The city could not load. Try reloading.");
+        if (latest.current.travelSequence)
+          setTravelError(
+            "The 3D journey could not load. Continue to your destination.",
+          );
+      });
     return () => {
       cancelled = true;
       controller.current?.dispose();
       controller.current = null;
+      startedTravel.current = null;
     };
-  }, [google, shirt]);
+  }, [googleVisible, shirt]);
+  useEffect(() => {
+    setTravelPhase(null);
+    setTravelError("");
+    if (travelSequence) {
+      setGoogle(false);
+      setGallery(false);
+      setPerson(null);
+      if (
+        startedTravel.current &&
+        startedTravel.current !== travelSequence.id
+      ) {
+        controller.current?.cancelTravel();
+        startedTravel.current = null;
+      }
+      if (controller.current) startPendingTravel(controller.current);
+    } else {
+      controller.current?.cancelTravel();
+      startedTravel.current = null;
+    }
+  }, [travelSequence?.id]);
   useEffect(() => {
     setGallery(false);
     setPerson(null);
+    if (travelSequence) return;
     controller.current?.setFocus(focus);
     // A journey hub can update its map focus after entering a room. Restore
     // the requested interior after the focus command clears the previous view.
     controller.current?.setInterior(interior);
-  }, [focus, interior]);
+  }, [focus, interior, travelSequence]);
   useEffect(() => {
     controller.current?.setMarkers(hotspots);
   }, [hotspots]);
@@ -184,12 +301,14 @@ export default function World({
       <div
         className="world"
         aria-label={
-          interior
-            ? `${interior.name} original 3D interior. Choose a floating activity icon or a room corner to interact.`
-            : "Continuous Lisbon 3D world. Select a floating hotspot icon to explore a place. Drag to rotate, use Pan to move, or scroll to zoom."
+          travelSequence
+            ? `Simulated ${travelSequence.mode} journey to ${travelSequence.to.name}.`
+            : interior
+              ? `${interior.name} original 3D interior. Choose a floating activity icon or a room corner to interact.`
+              : "Continuous Lisbon 3D world. Select a floating hotspot icon to explore a place. Drag to rotate, use Pan to move, or scroll to zoom."
         }
       >
-        {google ? (
+        {googleVisible ? (
           <GoogleWorld
             focus={{ ...focus, label: focus.name }}
             hotspots={hotspots}
@@ -199,26 +318,33 @@ export default function World({
         ) : (
           <div ref={host} className="world-canvas" />
         )}
-        {status && (
+        {status && !travelSequence && (
           <p className="world-loading" role="status">
             {status}
           </p>
         )}
       </div>
-      {!google && (
+      {!googleVisible && !travelSequence && (
         <label className="world-time">
           <Clock3 size={15} />
-          <select aria-label="Scene time" value={sceneTime} onChange={(e) => setSceneTime(e.target.value)}>
+          <select
+            aria-label="Scene time"
+            value={sceneTime}
+            onChange={(e) => setSceneTime(e.target.value)}
+          >
             <option value="live">Live city time</option>
             {minute !== undefined && <option value="trip">Trip time</option>}
             <option value="day">Daylight preview</option>
             <option value="golden">Golden hour preview</option>
             <option value="night">Night preview</option>
           </select>
-          <span>{String(Math.floor(sceneMinute / 60)).padStart(2, "0")}:{String(sceneMinute % 60).padStart(2, "0")}</span>
+          <span>
+            {String(Math.floor(sceneMinute / 60)).padStart(2, "0")}:
+            {String(sceneMinute % 60).padStart(2, "0")}
+          </span>
         </label>
       )}
-      {!google && (
+      {!googleVisible && !travelSequence && (
         <div
           className={
             interior ? "world-controls interior-controls" : "world-controls"
@@ -345,7 +471,7 @@ export default function World({
           </button>
         </div>
       )}
-      {interior && (
+      {interior && !travelSequence && (
         <InteriorPanel
           visit={interior}
           selectedZone={selectedZone}
@@ -371,17 +497,17 @@ export default function World({
           onExit={onExitInterior}
         />
       )}
-      {interior && roomError && (
+      {interior && roomError && !travelSequence && (
         <p className="interior-error" role="alert">
           {roomError}
         </p>
       )}
-      {gallery && (
+      {gallery && !travelSequence && (
         <div className="character-preview-label">
           CHARACTER PREVIEW · ORIGINAL ROAM MODELS
         </div>
       )}
-      {!google && !gallery && person && (
+      {!googleVisible && !gallery && person && !travelSequence && (
         <aside className="local-card" aria-label="Simulated local conversation">
           <div className="local-card-header">
             <div>
@@ -413,7 +539,7 @@ export default function World({
         >
           © OpenStreetMap contributors
         </a>
-        {!interior && (
+        {!interior && !travelSequence && (
           <>
             <span>Building heights & façades approximate</span>
             <span title="Produced using Copernicus data and information funded by the European Union — EU-DEM layers">
@@ -426,7 +552,7 @@ export default function World({
             {!google && stats?.people !== undefined && (
               <span>{stats.people} simulated locals</span>
             )}
-            {isGoogleMapsConfigured && (
+            {isGoogleMapsConfigured && !travelSequence && (
               <button
                 onClick={() => {
                   setPerson(null);
@@ -440,6 +566,23 @@ export default function World({
           </>
         )}
       </div>
+      {travelSequence && (
+        <TravelOverlay
+          sequence={travelSequence}
+          phase={travelPhase?.id === travelSequence.id ? travelPhase : null}
+          error={travelError}
+          onSkip={() => {
+            const instance = controller.current;
+            if (
+              !travelError &&
+              startedTravel.current === travelSequence.id &&
+              instance
+            )
+              instance.skipTravel();
+            else travelCallback.current?.(travelSequence.id);
+          }}
+        />
+      )}
     </>
   );
 }
