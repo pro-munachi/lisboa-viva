@@ -11,8 +11,6 @@ import {
   RotateCcw,
   RotateCw,
   Globe2,
-  Waves,
-  Landmark,
 } from "lucide-react";
 import GoogleWorld from "./GoogleWorld";
 import { isGoogleMapsConfigured } from "../lib/google-maps";
@@ -21,8 +19,6 @@ type CityController = {
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
   overview: () => void;
-  coast: () => void;
-  bridge: () => void;
   characters: () => void;
   setMode: (mode: string) => void;
   setMotion: (value: boolean) => void;
@@ -51,7 +47,7 @@ export default function World({
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
   const [google, setGoogle] = useState(false);
-  const [gallery, setGallery] = useState<"" | "people" | "beach">("");
+  const [gallery,setGallery]=useState(false);
   const [stats, setStats] = useState<{
     buildings: number;
     roads: number;
@@ -88,8 +84,7 @@ export default function World({
     };
   }, [google, shirt]);
   useEffect(() => {
-    setGallery("");
-    controller.current?.setFocus(focus);
+    setGallery(false);controller.current?.setFocus(focus);
   }, [focus]);
   useEffect(() => {
     controller.current?.setMarkers(hotspots);
@@ -144,8 +139,7 @@ export default function World({
               <span>Pan</span>
             </button>
             <button
-              disabled={!!gallery}
-              aria-pressed={gesture === "walk"}
+              disabled={gallery} aria-pressed={gesture === "walk"}
               onClick={() => {
                 setGesture("walk");
                 controller.current?.setMode("walk");
@@ -183,50 +177,21 @@ export default function World({
           </div>
           <button
             aria-label="Street level"
-            onClick={() => {
-              setGallery("");
-              controller.current?.setFocus(focus, true);
-            }}
+            onClick={() => {setGallery(false);controller.current?.setFocus(focus, true);}}
           >
             <PersonStanding size={17} />
             <span>Street level</span>
           </button>
           <button
-            aria-label="People"
-            onClick={() => {
-              setGallery("people");
-              controller.current?.characters();
-            }}
+            aria-label="Characters"
+            onClick={() => {setGallery(true);controller.current?.characters();}}
           >
             <PersonStanding size={17} />
-            <span>People</span>
-          </button>
-          <button
-            aria-label="Lisbon beaches and ocean"
-            onClick={() => {
-              setGallery("beach");
-              controller.current?.coast();
-            }}
-          >
-            <Waves size={17} />
-            <span>Beaches</span>
-          </button>
-          <button
-            aria-label="Ponte 25 de Abril Lisbon bridge"
-            onClick={() => {
-              setGallery("");
-              controller.current?.bridge();
-            }}
-          >
-            <Landmark size={17} />
-            <span>Lisbon bridge</span>
+            <span>Characters</span>
           </button>
           <button
             aria-label="Whole region"
-            onClick={() => {
-              setGallery("");
-              controller.current?.overview();
-            }}
+            onClick={() => {setGallery(false);controller.current?.overview();}}
           >
             <Globe2 size={17} />
             <span>Whole region</span>
@@ -244,16 +209,7 @@ export default function World({
           </button>
         </div>
       )}
-      {gallery === "people" && (
-        <div className="character-preview-label">
-          PEOPLE · ORIGINAL ROAM CHARACTERS
-        </div>
-      )}
-      {gallery === "beach" && (
-        <div className="character-preview-label">
-          CARCAVELOS BEACH · ATLANTIC OCEAN
-        </div>
-      )}
+      {gallery&&<div className="character-preview-label">CHARACTER PREVIEW · ORIGINAL ROAM MODELS</div>}
       <div className="map-credits">
         <a
           href="https://www.openstreetmap.org/copyright"
