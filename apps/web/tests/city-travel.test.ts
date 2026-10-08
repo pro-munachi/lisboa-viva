@@ -425,6 +425,7 @@ test("detailed flight resources are disposed exactly once on replacement, cancel
 
 test("flight view changes preserve the running timeline and saved seated appearance", () => {
   const appearance = {
+    bodyType: "female",
     outfitStyle: "jacket",
     topColor: "#42b894",
     bottomColor: "#30324a",
@@ -464,6 +465,7 @@ test("flight view changes preserve the running timeline and saved seated appeara
   assert.equal(avatar.visible, true);
   assert.equal(avatar.userData.activity, "seated");
   assert.equal(avatar.userData.flightSeat, "3A");
+  assert.equal(avatar.userData.bodyType, "female");
   assert.equal(avatar.userData.style, "jacket");
   assert.equal(avatar.userData.hairStyle, "bun");
   for (const [name, color] of [
@@ -1000,9 +1002,10 @@ test("platform scenery leaves the boarding doorway and traveller visible from th
   }
 });
 
-test("boarding preserves the saved outfit, hair and skin identity with the chosen trip top colour", () => {
+test("boarding preserves the saved body type, clothing, hair and skin identity", () => {
   const env = setup();
   const appearance = {
+    bodyType: "female",
     outfitStyle: "jacket",
     topColor: "#42b894",
     bottomColor: "#30324a",
@@ -1015,6 +1018,7 @@ test("boarding preserves the saved outfit, hair and skin identity with the chose
     sequence("train", "saved-identity", { appearance, shirt: "#f15b50" }),
   );
   const avatar = stage(env).getObjectByName("traveller");
+  assert.equal(avatar.userData.bodyType, "female");
   assert.equal(avatar.userData.style, "jacket");
   assert.equal(avatar.userData.hairStyle, "bun");
   assert.equal(

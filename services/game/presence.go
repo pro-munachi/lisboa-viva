@@ -114,7 +114,7 @@ func (s *server) nearbyPlayers(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(r.Context(), `SELECT u.id::text,u.handle,u.user_type::text,
 		p.latitude,p.longitude,p.area,COALESCE(p.place_id,''),
 		ROUND(SQRT(POWER((p.latitude-$2)*111320,2)+POWER((p.longitude-$3)*87300,2)))::int AS distance_metres,
-		p.last_seen_at,ca.outfit_style,ca.top_color,ca.bottom_color,ca.hair_style,ca.hair_color,ca.skin_tone,ca.shoe_color
+		p.last_seen_at,ca.body_type,ca.outfit_style,ca.top_color,ca.bottom_color,ca.hair_style,ca.hair_color,ca.skin_tone,ca.shoe_color
 		FROM player_presence p JOIN users u ON u.id=p.user_id
 		JOIN character_appearances ca ON ca.user_id=u.id
 		WHERE p.user_id<>$1 AND u.account_status='active' AND p.last_seen_at>$4
@@ -129,7 +129,7 @@ func (s *server) nearbyPlayers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var player nearbyPlayer
 		if err = rows.Scan(&player.ID, &player.Handle, &player.UserType, &player.Latitude, &player.Longitude, &player.Area, &player.PlaceID, &player.DistanceMetres, &player.LastSeenAt,
-			&player.Appearance.OutfitStyle, &player.Appearance.TopColor, &player.Appearance.BottomColor,
+			&player.Appearance.BodyType, &player.Appearance.OutfitStyle, &player.Appearance.TopColor, &player.Appearance.BottomColor,
 			&player.Appearance.HairStyle, &player.Appearance.HairColor, &player.Appearance.SkinTone, &player.Appearance.ShoeColor); err != nil {
 			fail(w, err)
 			return

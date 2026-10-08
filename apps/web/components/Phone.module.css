@@ -1,0 +1,729 @@
+.dialog {
+  width: min(410px, calc(100vw - 20px));
+  height: min(780px, calc(100svh - 24px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  background: transparent;
+  color: #ffffff;
+  font-family: var(--font-roam-app), Arial, sans-serif;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog::backdrop {
+  background: #111c3866;
+  backdrop-filter: blur(6px);
+}
+
+.toolbar {
+  display: flex;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 8px;
+}
+
+.phoneLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  font-weight: 800;
+}
+
+.close {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border: 1px solid #ffffff5c;
+  border-radius: 24px;
+  color: #182549;
+  background: #fffdf5;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.handset {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 9px;
+  border: 1px solid #56617d;
+  border-radius: 44px;
+  background: #18203a;
+  box-shadow:
+    0 28px 70px #0c183b59,
+    inset 0 0 0 2px #252e4b;
+}
+
+.screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 35px;
+  background: #244be5;
+}
+
+.screen::before,
+.screen::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.screen::before {
+  width: 390px;
+  height: 390px;
+  top: 100px;
+  right: -295px;
+  background: #ff8874;
+  transform: rotate(-18deg);
+}
+
+.screen::after {
+  width: 480px;
+  height: 250px;
+  bottom: -175px;
+  left: -170px;
+  background: #d9ed82;
+  transform: rotate(-24deg);
+}
+
+.status {
+  position: relative;
+  display: flex;
+  flex: 0 0 48px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 23px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.notch {
+  position: absolute;
+  left: 50%;
+  top: 11px;
+  width: 94px;
+  height: 23px;
+  border-radius: 20px;
+  background: #18203a;
+  transform: translateX(-50%);
+}
+
+.statusMark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff80 transparent;
+}
+
+.launcher {
+  padding: 10px 22px 22px;
+}
+
+.launcherHeader {
+  margin-bottom: 26px;
+}
+
+.location {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid #ffffff52;
+  border-radius: 20px;
+  background: #1639bd45;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.clock {
+  margin: 16px 0 0;
+  font-family: var(--font-roam-game), var(--font-roam-app), sans-serif;
+  font-size: clamp(45px, 10vw, 62px);
+  font-weight: 600;
+  letter-spacing: -2.8px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.date {
+  margin: 8px 0 20px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.launcherHeader h2 {
+  margin: 0;
+  font-family: var(--font-roam-game), var(--font-roam-app), sans-serif;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+}
+
+.launcherHeader > p:last-child {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #eff3ff;
+}
+
+.apps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 12px;
+  row-gap: 19px;
+}
+
+.app {
+  display: flex;
+  min-height: 94px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 15px;
+  color: #ffffff;
+  background: transparent;
+  font: inherit;
+  text-align: center;
+}
+
+.appIcon {
+  position: relative;
+  display: grid;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 1px solid #ffffff3d;
+  border-radius: 19px;
+  color: #173177;
+  background: #e6edff;
+  box-shadow:
+    0 4px 10px #17349324,
+    inset 0 1px 0 #ffffffb3;
+}
+
+.appIcon[data-tone="1"] {
+  background: #d9ed82;
+  color: #253d34;
+}
+
+.appIcon[data-tone="2"] {
+  background: #ffb6a5;
+  color: #672e36;
+}
+
+.appIcon[data-tone="3"] {
+  background: #b9e8de;
+  color: #244942;
+}
+
+.appIcon[data-tone="4"] {
+  background: #e0c6ff;
+  color: #512f75;
+}
+
+.appIcon[data-tone="5"] {
+  background: #ffe3a3;
+  color: #705423;
+}
+
+.appName {
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px #0d238660;
+}
+
+.badge {
+  position: absolute;
+  display: grid;
+  top: -6px;
+  right: -6px;
+  min-width: 23px;
+  height: 23px;
+  place-items: center;
+  padding: 0 5px;
+  border: 2px solid #244be5;
+  border-radius: 16px;
+  background: #ff655e;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.footer {
+  display: flex;
+  flex: 0 0 59px;
+  padding: 0 18px 7px;
+}
+
+.home {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px 9px;
+  border: 0;
+  border-radius: 15px;
+  color: #ffffff;
+  background: #1438b54d;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.homeIndicator {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 85px;
+  height: 4px;
+  border-radius: 10px;
+  background: currentColor;
+  opacity: 0.7;
+  transform: translateX(-50%);
+}
+
+.appScreen {
+  background: #fffdf7;
+  color: #1d2b50;
+}
+
+.appScreen::before,
+.appScreen::after {
+  display: none;
+}
+
+.appScreen .scrollArea {
+  scrollbar-color: #9aa7cf transparent;
+}
+
+.appScreen .home {
+  color: #284cc8;
+  background: #edf1ff;
+}
+
+.appHeader {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 16px 14px;
+  border-bottom: 1px solid #e5e9f4;
+}
+
+.back {
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  color: #294ccb;
+  background: #edf1ff;
+}
+
+.appHeader h2 {
+  margin: 0;
+  font-family: var(--font-roam-game), var(--font-roam-app), sans-serif;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.4px;
+}
+
+.appHeader > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.appHeader p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #64718d;
+}
+
+.appContent {
+  min-width: 0;
+  padding: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.appContent :global(.setting) {
+  min-height: 48px;
+}
+
+.fillScroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.appContent.fillContent {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dialog button {
+  cursor: pointer;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.dialog button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.dialog button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.dialog button:focus-visible {
+  outline: 3px solid #d9ed82;
+  outline-offset: 4px;
+}
+
+.appScreen button:focus-visible,
+.close:focus-visible {
+  outline-color: #244be5;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app:hover:not(:disabled) .appIcon {
+    filter: brightness(1.05);
+  }
+
+  .close:hover,
+  .back:hover,
+  .home:hover {
+    filter: brightness(0.96);
+  }
+}
+
+@media (max-width: 430px) {
+  .dialog {
+    width: calc(100vw - 16px);
+    height: min(760px, calc(100svh - 16px));
+  }
+
+  .handset {
+    padding: 7px;
+    border-radius: 37px;
+  }
+
+  .screen {
+    border-radius: 29px;
+  }
+
+  .launcher {
+    padding-inline: 18px;
+  }
+
+  .appIcon {
+    flex-basis: 60px;
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+  }
+
+  .apps {
+    column-gap: 8px;
+    row-gap: 17px;
+  }
+}
+
+@media (max-height: 600px) {
+  .dialog {
+    height: calc(100svh - 16px);
+    gap: 5px;
+  }
+
+  .status {
+    flex-basis: 39px;
+  }
+
+  .notch {
+    top: 8px;
+    height: 21px;
+  }
+
+  .launcher {
+    padding-top: 4px;
+  }
+
+  .launcherHeader {
+    margin-bottom: 18px;
+  }
+
+  .clock {
+    margin-top: 12px;
+    font-size: 38px;
+    letter-spacing: -1.6px;
+  }
+
+  .date {
+    margin-bottom: 13px;
+  }
+
+  .apps {
+    row-gap: 14px;
+  }
+
+  .app {
+    min-height: 84px;
+  }
+
+  .appIcon {
+    flex-basis: 56px;
+    width: 56px;
+    height: 56px;
+    border-radius: 17px;
+  }
+
+  .appHeader {
+    padding-bottom: 10px;
+  }
+
+  .footer {
+    flex-basis: 51px;
+    padding-bottom: 3px;
+  }
+}
+
+@media (max-width: 600px),
+  (max-width: 950px) and (max-height: 500px) and (orientation: landscape) {
+  .dialog {
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    background: #244be5;
+  }
+
+  .dialog[open] {
+    gap: 0;
+  }
+
+  .toolbar {
+    flex-basis: calc(48px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 18px 0;
+  }
+
+  .phoneLabel {
+    font-size: 10px;
+  }
+
+  .close {
+    min-height: 44px;
+    padding-inline: 14px;
+  }
+
+  .handset {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .screen {
+    border-radius: 0;
+  }
+
+  .status {
+    flex-basis: 39px;
+    padding-inline: 24px;
+  }
+
+  .notch {
+    display: none;
+  }
+
+  .launcher {
+    width: min(100%, 500px);
+    margin-inline: auto;
+    padding: 20px 26px 28px;
+  }
+
+  .launcherHeader {
+    margin-bottom: 30px;
+  }
+
+  .clock {
+    font-size: clamp(54px, 13vw, 72px);
+  }
+
+  .apps {
+    column-gap: 14px;
+    row-gap: 22px;
+  }
+
+  .app {
+    min-height: 103px;
+    gap: 11px;
+  }
+
+  .appIcon {
+    flex-basis: 70px;
+    width: 70px;
+    height: 70px;
+    border-radius: 21px;
+  }
+
+  .appName {
+    font-size: 13px;
+  }
+
+  .footer {
+    flex-basis: calc(62px + env(safe-area-inset-bottom, 0px));
+    padding: 0 18px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .appContent {
+    padding: 20px;
+  }
+
+  .appHeader {
+    padding-inline: 20px;
+  }
+}
+
+@media (max-width: 950px) and (max-height: 500px) and (orientation: landscape) {
+  .toolbar {
+    flex-basis: calc(44px + env(safe-area-inset-top, 0px));
+    padding-inline: max(18px, env(safe-area-inset-left, 0px))
+      max(18px, env(safe-area-inset-right, 0px));
+  }
+
+  .status {
+    flex-basis: 29px;
+  }
+
+  .launcher {
+    display: grid;
+    grid-template-columns: minmax(170px, 0.8fr) minmax(0, 1.7fr);
+    width: min(100%, 850px);
+    align-items: center;
+    gap: 24px;
+    padding: 10px max(26px, env(safe-area-inset-right, 0px)) 20px
+      max(26px, env(safe-area-inset-left, 0px));
+  }
+
+  .launcherHeader {
+    margin-bottom: 0;
+  }
+
+  .clock {
+    font-size: 44px;
+  }
+
+  .date {
+    margin-bottom: 12px;
+  }
+
+  .apps {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    row-gap: 13px;
+  }
+
+  .app {
+    min-height: 87px;
+    gap: 8px;
+  }
+
+  .appIcon {
+    flex-basis: 58px;
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+  }
+
+  .appName {
+    font-size: 12px;
+  }
+
+  .footer {
+    flex-basis: calc(52px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 600px) and (orientation: landscape) {
+  .launcher {
+    display: block;
+  }
+
+  .launcherHeader {
+    margin-bottom: 18px;
+  }
+
+  .apps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog button {
+    transition: none;
+  }
+
+  .dialog button:active:not(:disabled) {
+    transform: none;
+  }
+}

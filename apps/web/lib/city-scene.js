@@ -7,7 +7,11 @@ import {
   surfaceElevationAt,
   containsGeo,
 } from "./geography";
-import { createCharacter, animateCharacter } from "./characters";
+import {
+  createCharacter,
+  animateCharacter,
+  replaceCharacterAppearance,
+} from "./characters";
 import {
   createArchitecturePalette,
   buildingArchitecture,
@@ -16,6 +20,7 @@ import {
 import { createBuildingOverview } from "./city-overview";
 import { createTravelRuntime } from "./city-travel";
 import { createLandscape, setLandscapeNight } from "./city-landscape";
+import { createStreetLife, setStreetLifeNight } from "./city-street-life";
 import { lightingForMinute, nearestLampAnchors } from "./city-lighting";
 import { createLandmarks, isLandmarkBuilding } from "./city-landmarks";
 import { createCityAtmosphere } from "./city-atmosphere";
@@ -31,6 +36,10 @@ import {
   advanceLocalWalker,
   sampleLocalWalker,
 } from "./city-population";
+import {
+  applyLocalDemographicVisuals,
+  poseLocalDemographic,
+} from "./npc-demographics";
 
 async function geographyFile(url, signal) {
   const r = await fetch(url, { signal });
@@ -293,6 +302,7 @@ export function createCity(host, options) {
     const anchors = [];
     for (const group of chunkGroups.values()) {
       for (const child of group.children) {
+        setStreetLifeNight(child, exterior ? state.night : 0);
         if (!child.userData.lighting) continue;
         setLandscapeNight(child, exterior ? state.night : 0);
         if (exterior && group.visible && child.visible)
@@ -659,22 +669,12 @@ export function createCity(host, options) {
             for (const child of [...group.children])
               if (
                 child.userData.venueDetail ||
+                child.userData.landscapeDetail ||
                 child.userData.architectureDetail
               )
                 disposeGroup(child);
             addNearBuildingDetails(data, group);
-            const storefronts = createVenueDecorations(
-              data,
-              (options.hotspots || []).filter((h) => h.mapVenue),
-              {
-                projectGeo,
-                geoY,
-                focusPoint: unprojectGeo(controls.target.x, controls.target.z),
-              },
-            );
-            storefronts.userData.streetDetail =
-              storefronts.userData.venueDetail = true;
-            group.add(storefronts);
+            addStreetDetails(data, group);
           }
           venueCentre = controls.target.clone();
         }
@@ -773,28 +773,31 @@ export function createCity(host, options) {
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
     });
-    const dressing = createLandscape(chunk, {
-      projectGeo,
-      geoY,
-      focusPoint: unprojectGeo(controls.target.x, controls.target.z),
-    });
-    setLandscapeNight(dressing, exteriorLighting.night);
-    dressing.userData.streetDetail = true;
-    group.add(dressing);
-    const storefronts = createVenueDecorations(
-      chunk,
-      (options.hotspots || []).filter((h) => h.mapVenue),
-      {
-        projectGeo,
-        geoY,
-        focusPoint: unprojectGeo(controls.target.x, controls.target.z),
-      },
-    );
-    storefronts.userData.streetDetail = storefronts.userData.venueDetail = true;
-    group.add(storefronts);
+    addStreetDetails(chunk, group);
     group.add(createLandmarks(chunk, { projectGeo, geoY }));
     city.add(group);
     chunkGroups.set(chunk.id, group);
+  }
+  function addStreetDetails(chunk, group) {
+    const focusPoint = unprojectGeo(controls.target.x, controls.target.z);
+    const storefronts = createVenueDecorations(
+      chunk,
+      (options.hotspots || []).filter((h) => h.mapVenue),
+      { projectGeo, geoY, focusPoint },
+    );
+    storefronts.userData.streetDetail = storefronts.userData.venueDetail = true;
+    const life = createStreetLife(chunk, storefronts, { projectGeo, geoY });
+    life.userData.streetDetail = life.userData.venueDetail = true;
+    setStreetLifeNight(life, exteriorLighting.night);
+    const dressing = createLandscape(chunk, {
+      projectGeo,
+      geoY,
+      focusPoint,
+      venueReservations: life.userData.streetLife.reservations,
+    });
+    setLandscapeNight(dressing, exteriorLighting.night);
+    dressing.userData.streetDetail = dressing.userData.landscapeDetail = true;
+    group.add(storefronts, life, dressing);
   }
   function addNearBuildingDetails(chunk, group) {
     // Ornament follows the camera, including within an already loaded chunk.
@@ -895,6 +898,7 @@ export function createCity(host, options) {
           0,
         );
         const character = createCharacter({
+          bodyType: peer.appearance?.bodyType,
           shirt: peer.appearance?.topColor || shirts[seed % shirts.length],
           trousers: peer.appearance?.bottomColor,
           hair: peer.appearance?.hairColor,
@@ -1129,10 +1133,27 @@ export function createCity(host, options) {
         (chunk) => chunk.buildings || [],
       ),
       projectGeo,
+      surfaces: [
+        ...(manifest?.surfaces || []),
+        ...[...chunkCache.values()].flatMap((chunk) => chunk.surfaces || []),
+      ],
+      reservations: [...chunkGroups.values()].flatMap((chunk) =>
+        chunk.children.flatMap((child) => [
+          ...(child.userData.streetLife?.reservations || []),
+          ...(child.userData.landscape?.parkDetails?.benches || []).map(
+            (point) => ({ ...point, radius: 1.25 }),
+          ),
+          ...(child.userData.landscape?.parkDetails?.flowerBeds || []).map(
+            (point) => ({ ...point, radius: 1.05 }),
+          ),
+        ]),
+      ),
       max: 28,
     });
     for (const profile of profiles) {
       const group = createCharacter(profile.character);
+      applyLocalDemographicVisuals(group, profile);
+      poseLocalDemographic(group, profile, 0);
       const initial = sampleLocalWalker(profile);
       group.position.set(
         initial.x,
@@ -1185,6 +1206,7 @@ export function createCity(host, options) {
     if (savedPlayer) disposeGroup(savedPlayer);
     player = null;
     player = createCharacter({
+      bodyType: options.appearance?.bodyType,
       shirt: options.appearance?.topColor || options.shirt || "#ece7df",
       trousers: options.appearance?.bottomColor,
       hair: options.appearance?.hairColor,
@@ -1224,6 +1246,13 @@ export function createCity(host, options) {
     you.scale.set(1.2, 0.27, 1);
     player.add(you);
     setPeers(options.peers || [], teleport);
+  }
+  function setAppearance(next) {
+    if (destroyed || !next) return;
+    options.appearance = { ...next };
+    options.shirt = next.topColor;
+    if (player) player = replaceCharacterAppearance(player, next);
+    indoor.setAppearance(next);
   }
   function restoreCity() {
     indoor.clear();
@@ -1400,7 +1429,12 @@ export function createCity(host, options) {
         const p = sampleLocalWalker(a);
         a.group.position.set(p.x, geoY(unprojectGeo(p.x, p.z)) + 0.2, p.z);
         a.group.rotation.y = p.angle;
-        animateCharacter(a.group, now / 1000, true);
+        animateCharacter(
+          a.group,
+          (now / 1000) * (a.pace || 1),
+          a.moving !== false,
+        );
+        poseLocalDemographic(a.group, a, now / 1000);
       }
       for (const v of vehicles) {
         v.d += dt * v.speed;
@@ -1523,6 +1557,7 @@ export function createCity(host, options) {
         skin: ["#a87955", "#76513b", "#d5af8b", "#5b3d30"][i],
         style: ["casual", "jacket", "dress", "tourist"][i],
         hairStyle: ["short", "curly", "bob", "bun"][i],
+        bodyType: i % 2 ? "female" : "male",
       });
       const offset = new THREE.Vector3((i - 1.5) * 1.25, 0, 0).applyAxisAngle(
         new THREE.Vector3(0, 1, 0),
@@ -1710,12 +1745,14 @@ export function createCity(host, options) {
     setTime,
     setMarkers,
     setPeers,
+    setAppearance,
     overview,
     characters,
     people,
     setInterior,
     selectInteriorZone: (id) => indoor.selectZone(id),
     performInteriorAction: (id, duration) => indoor.perform(id, duration),
+    playSocialEvent: (event) => indoor.social(event),
     setMode(next) {
       mode = next;
       controls.mouseButtons.LEFT =

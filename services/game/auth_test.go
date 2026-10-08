@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"math"
 	"net/http/httptest"
 	"strings"
@@ -35,9 +36,72 @@ func TestAppearanceDefaultsAndValidation(t *testing.T) {
 		t.Fatalf("expected invalid_appearance, got %v", err)
 	}
 	custom := defaultAppearance
+	custom.BodyType = "female"
 	custom.OutfitStyle, custom.HairStyle, custom.SkinTone = "dress", "bun", "#5b3d30"
 	if normalized, err := normalizeAppearance(custom); err != nil || normalized != custom {
 		t.Fatalf("unexpected custom appearance: %#v, %v", normalized, err)
+	}
+}
+
+func TestAppearanceBodyTypeLegacyAndExplicitValidation(t *testing.T) {
+	legacy := defaultAppearance
+	legacy.BodyType = ""
+	if got, err := normalizeAppearance(legacy); err != nil || got != defaultAppearance {
+		t.Fatalf("legacy appearance must default male without losing choices: %#v, %v", got, err)
+	}
+	for _, bodyType := range []string{"other", "Female", " female ", "null"} {
+		invalid := defaultAppearance
+		invalid.BodyType = bodyType
+		if _, err := normalizeAppearance(invalid); err != apiError("invalid_appearance") {
+			t.Fatalf("unsupported body type %q accepted: %v", bodyType, err)
+		}
+	}
+	encoded, err := json.Marshal(defaultAppearance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyJSON := strings.Replace(string(encoded), `"bodyType":"male",`, "", 1)
+	var old characterAppearance
+	if err := json.Unmarshal([]byte(legacyJSON), &old); err != nil || old != defaultAppearance {
+		t.Fatalf("missing legacy JSON body type did not default: %#v, %v", old, err)
+	}
+	for _, key := range []string{"bodyType", "BodyType", "BODYTYPE"} {
+		for _, raw := range []string{`""`, `null`, `1`, `"Female"`, `"invented"`} {
+			payload := strings.Replace(string(encoded), `"bodyType":"male"`, `"`+key+`":`+raw, 1)
+			if err := json.Unmarshal([]byte(payload), new(characterAppearance)); err == nil {
+				t.Fatalf("explicit invalid %s %s accepted", key, raw)
+			}
+		}
+	}
+	spoofed := strings.TrimSuffix(string(encoded), "}") + `,"userId":"another-account"}`
+	if err := json.Unmarshal([]byte(spoofed), new(characterAppearance)); err == nil {
+		t.Fatal("custom appearance JSON decoder accepted a nested unknown field")
+	}
+}
+
+func TestAppearanceBodyOutfitCompatibilityAndLegacyReads(t *testing.T) {
+	for _, bodyType := range []string{"male", "female"} {
+		for _, outfit := range []string{"casual", "jacket", "tourist", "dress"} {
+			appearance := defaultAppearance
+			appearance.BodyType, appearance.OutfitStyle = bodyType, outfit
+			got, err := normalizeAppearance(appearance)
+			if bodyType == "male" && outfit == "dress" {
+				if err != apiError("invalid_appearance") {
+					t.Fatalf("new male dress choice accepted: %v", err)
+				}
+				encoded, marshalErr := json.Marshal(appearance)
+				var saved characterAppearance
+				if marshalErr != nil || json.Unmarshal(encoded, &saved) != nil || saved != appearance {
+					t.Fatal("legacy saved male dress appearance must remain readable without changing identity")
+				}
+				_, registrationErr := normalizeRegistration(registerInput{Handle: "legacy_dress", Email: "legacy-dress@example.test", Password: "registration-password", UserType: "tourist", AdultConfirmed: true, Appearance: &appearance})
+				if registrationErr != apiError("invalid_appearance") {
+					t.Fatal("registration must reject incompatible model/outfit choices")
+				}
+			} else if err != nil || got != appearance {
+				t.Fatalf("supported %s/%s choice rejected or changed: %#v, %v", bodyType, outfit, got, err)
+			}
+		}
 	}
 }
 

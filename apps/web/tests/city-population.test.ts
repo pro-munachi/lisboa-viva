@@ -201,3 +201,140 @@ test("population is bounded, spaced across streets, and excludes motorways", () 
     [],
   );
 });
+
+test("eight CSV categories are deterministically represented on broad pedestrian streets", () => {
+  const plaza = { ...longStreet, kind: "pedestrian", width: 6 };
+  const options = { paths: [plaza], target, projectGeo: project, max: 28 };
+  const first = createLocalWalkerProfiles(options),
+    second = createLocalWalkerProfiles(options);
+  assert.deepEqual(first, second);
+  assert.equal(new Set(first.map((person) => person.categoryId)).size, 8);
+  assert.ok(first.length <= 28);
+  for (const person of first) {
+    assert.equal(person.simulated, true);
+    assert.match(person.label, /^Simulated/);
+    assert.ok(person.speed >= 0.6 && person.speed <= 1.4);
+    assert.equal(typeof person.character.bodyType, "string");
+    if (person.role === "solo-man")
+      assert.equal(person.character.bodyType, "male");
+    if (person.role === "solo-woman")
+      assert.equal(person.character.bodyType, "female");
+  }
+});
+
+test("family members reflect and pause together with safe shared formation margins", () => {
+  const plaza = { ...longStreet, kind: "pedestrian", width: 6 };
+  const people = createLocalWalkerProfiles({
+    paths: [plaza],
+    target,
+    projectGeo: project,
+  });
+  const family = people.filter((person) => person.groupId);
+  assert.equal(family.length, 3);
+  assert.equal(new Set(family.map((person) => person.groupId)).size, 1);
+  assert.deepEqual(
+    family.map((person) => person.groupRole),
+    ["stroller-caregiver", "caregiver", "child"],
+  );
+  assert.equal(family[2].ageBand, "child");
+  const offsets = family.map((person) => person.d - family[0].d);
+  for (const dt of [0.1, 3, 26, 4, 99, 1e6]) {
+    for (const person of family) advanceLocalWalker(person, dt);
+    assert.equal(new Set(family.map((person) => person.direction)).size, 1);
+    assert.equal(new Set(family.map((person) => person.moving)).size, 1);
+    for (let i = 0; i < family.length; i++) {
+      near(family[i].d - family[0].d, offsets[i]);
+      assert.ok(family[i].d >= family[i].minD && family[i].d <= family[i].maxD);
+      assert.ok(
+        sampleLocalWalker(family[i]).x > 438 &&
+          sampleLocalWalker(family[i]).x < 562,
+      );
+    }
+  }
+});
+
+test("children stay accompanied and strollers skip narrow, steep or stepped paths", () => {
+  for (const plaza of [
+    { ...longStreet, kind: "steps", width: 6 },
+    { ...longStreet, kind: "footway", width: 1.8 },
+    {
+      ...longStreet,
+      kind: "footway",
+      width: 5,
+      ps: [
+        { x: 0, y: 0, z: 0 },
+        { x: 1000, y: 250, z: 0 },
+      ],
+    },
+  ]) {
+    const people = createLocalWalkerProfiles({
+      paths: [plaza],
+      target,
+      projectGeo: project,
+    });
+    assert.ok(
+      people.every(
+        (person) => person.prop !== "stroller" && person.ageBand !== "child",
+      ),
+    );
+  }
+  const people = createLocalWalkerProfiles({
+    paths: [longStreet],
+    target,
+    projectGeo: project,
+  });
+  assert.ok(
+    people.every((person) => !["child", "teen"].includes(person.ageBand)),
+  );
+});
+
+test("park contexts use mapped polygons and café furniture reservations remain clear throughout walks", () => {
+  const plaza = { ...longStreet, kind: "pedestrian", width: 6 };
+  const park = {
+    kind: "park",
+    ring: [
+      [420, -15],
+      [580, -15],
+      [580, 15],
+      [420, 15],
+      [420, -15],
+    ],
+  };
+  const reservation = { x: 500, z: 0, radius: 6 };
+  const people = createLocalWalkerProfiles({
+    paths: [plaza],
+    target,
+    projectGeo: project,
+    surfaces: [park],
+    reservations: [reservation],
+  });
+  assert.ok(people.length > 0);
+  assert.ok(people.every((person) => person.context === "park"));
+  for (const person of people) {
+    for (let i = 0; i < 400; i++) {
+      advanceLocalWalker(person, 0.5);
+      const p = sampleLocalWalker(person);
+      const padding = person.groupId ? 1.3 : 0.42;
+      assert.ok(
+        Math.hypot(p.x - reservation.x, p.z - reservation.z) >
+          reservation.radius + padding,
+      );
+    }
+  }
+});
+
+test("authored pauses integrate elapsed time independently of animation frame size", () => {
+  const plaza = { ...longStreet, kind: "pedestrian", width: 6 };
+  const original = createLocalWalkerProfiles({
+    paths: [plaza],
+    target,
+    projectGeo: project,
+  })[0];
+  const coarse = { ...original },
+    fine = { ...original };
+  advanceLocalWalker(coarse, 120);
+  for (let i = 0; i < 1200; i++) advanceLocalWalker(fine, 0.1);
+  near(coarse.d, fine.d);
+  assert.equal(coarse.direction, fine.direction);
+  assert.equal(coarse.moving, fine.moving);
+});

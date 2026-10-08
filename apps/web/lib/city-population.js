@@ -1,5 +1,6 @@
 // Visible, deterministic simulated residents on actual mapped walking routes.
 // These are animation profiles, not real people or live location information.
+import { demographicProfile, npcSeed } from "./npc-demographics";
 /** @typedef {{ id: number|string, ring: ReadonlyArray<ReadonlyArray<number>> }} BuildingFootprint */
 /** @typedef {(point: any) => {x: number, z: number}} GeographicProjector */
 const WALK_KINDS = new Set([
@@ -15,60 +16,6 @@ const WALK_KINDS = new Set([
   "service",
 ]);
 const PEDESTRIAN_KINDS = new Set(["footway", "pedestrian", "path", "steps"]);
-const SHIRTS = [
-  "#c28559",
-  "#527b7c",
-  "#c55f50",
-  "#ece4c9",
-  "#827294",
-  "#608968",
-  "#d3b049",
-];
-const SKINS = [
-  "#c3926d",
-  "#77523b",
-  "#d9b596",
-  "#a67552",
-  "#573c2e",
-  "#ba8b67",
-];
-const STYLES = ["casual", "jacket", "dress", "tourist"];
-const HAIR = ["short", "curly", "bob", "bun"];
-// Original fictional first names for the explicitly simulated local characters.
-const NAMES = [
-  "Inês",
-  "Duarte",
-  "Marta",
-  "Tiago",
-  "Leonor",
-  "Rafael",
-  "Amélia",
-  "João",
-  "Clara",
-  "Tomás",
-  "Sara",
-  "André",
-  "Lúcia",
-  "Miguel",
-  "Ana",
-  "Bruno",
-  "Carolina",
-  "David",
-  "Beatriz",
-  "Nuno",
-  "Rita",
-  "Gonçalo",
-  "Helena",
-  "Luís",
-  "Mariana",
-  "Pedro",
-  "Sofia",
-  "Diogo",
-  "Teresa",
-  "Ricardo",
-  "Matilde",
-  "Vasco",
-];
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
@@ -79,14 +26,33 @@ function finitePoint(point) {
 function usableLine(line) {
   return (
     WALK_KINDS.has(line.kind) &&
+    !["no", "private"].includes(line.foot) &&
+    line.sidewalk !== "no" &&
     line.length > 8 &&
     Array.isArray(line.ps) &&
     line.ps.length >= 2 &&
     line.ps.every(finitePoint) &&
     Array.isArray(line.lengths) &&
     line.lengths.length === line.ps.length &&
-    line.lengths.every(Number.isFinite)
+    line.lengths.every(
+      (d, i) => Number.isFinite(d) && (i === 0 || d >= line.lengths[i - 1]),
+    )
   );
+}
+
+function gentleRoute(line) {
+  if (line.kind === "steps") return false;
+  for (let i = 1; i < line.ps.length; i++) {
+    const a = line.ps[i - 1],
+      b = line.ps[i];
+    const horizontal = Math.hypot(b.x - a.x, b.z - a.z);
+    if (
+      horizontal > 0.01 &&
+      Math.abs((b.y || 0) - (a.y || 0)) / horizontal > 0.12
+    )
+      return false;
+  }
+  return true;
 }
 
 function nearestSegment(line, target) {
@@ -168,7 +134,13 @@ function blockedByPolygon(point, polygon, padding = 0.42) {
   return inside;
 }
 
-function buildingAvoidance(buildings, target, projectGeo, radius) {
+function buildingAvoidance(
+  buildings,
+  target,
+  projectGeo,
+  radius,
+  padding = 0.42,
+) {
   if (!projectGeo || !buildings?.length) return () => false;
   const cell = 20,
     grid = new Map(),
@@ -196,10 +168,10 @@ function buildingAvoidance(buildings, target, projectGeo, radius) {
       continue;
     const polygon = { ring, minX, maxX, minZ, maxZ };
     // Clip grid coverage to the local camera region even for a huge mapped ring.
-    const x0 = Math.floor(Math.max(minX - 1, target.x - radius) / cell);
-    const x1 = Math.floor(Math.min(maxX + 1, target.x + radius) / cell);
-    const z0 = Math.floor(Math.max(minZ - 1, target.z - radius) / cell);
-    const z1 = Math.floor(Math.min(maxZ + 1, target.z + radius) / cell);
+    const x0 = Math.floor(Math.max(minX - padding, target.x - radius) / cell);
+    const x1 = Math.floor(Math.min(maxX + padding, target.x + radius) / cell);
+    const z0 = Math.floor(Math.max(minZ - padding, target.z - radius) / cell);
+    const z1 = Math.floor(Math.min(maxZ + padding, target.z + radius) / cell);
     for (let x = x0; x <= x1; x++)
       for (let z = z0; z <= z1; z++) {
         const key = `${x}:${z}`;
@@ -211,14 +183,14 @@ function buildingAvoidance(buildings, target, projectGeo, radius) {
     (
       grid.get(`${Math.floor(point.x / cell)}:${Math.floor(point.z / cell)}`) ||
       []
-    ).some((polygon) => blockedByPolygon(point, polygon));
+    ).some((polygon) => blockedByPolygon(point, polygon, padding));
 }
 
 function clearWalkingSection(line, nearestD, side, target, blocked, radius) {
   const min = Math.max(0.7, nearestD - 62),
     max = Math.min(line.length - 0.7, nearestD + 62);
   if (max - min < 8) return null;
-  const count = Math.max(2, Math.ceil((max - min) / 2.2)),
+  const count = Math.max(2, Math.ceil((max - min) / 0.75)),
     spans = [];
   let start = null,
     previous = min;
@@ -254,7 +226,7 @@ function clearWalkingSection(line, nearestD, side, target, blocked, radius) {
  * @param {any[]} paths
  * @param {{x: number, z: number}} target
  * @param {BuildingFootprint[]} [buildings]
- * @param {{projectGeo?: GeographicProjector, maxDistance?: number, maxRoutes?: number}} [options]
+ * @param {{projectGeo?: GeographicProjector, maxDistance?: number, maxRoutes?: number, reservations?: {x:number,z:number,radius:number}[]}} [options]
  */
 export function chooseWalkingRoutes(
   paths,
@@ -289,12 +261,31 @@ export function chooseWalkingRoutes(
       a.distance - b.distance ||
       Number(a.line.id || 0) - Number(b.line.id || 0),
   );
-  const blocked = buildingAvoidance(
+  const buildingBlocked = buildingAvoidance(
     buildings,
     target,
     options.projectGeo,
     radius + 12,
   );
+  const reservations = (options.reservations || [])
+    .filter(
+      (circle) =>
+        finitePoint(circle) &&
+        Number.isFinite(circle.radius) &&
+        circle.radius > 0 &&
+        circle.radius <= 30 &&
+        distance(circle, target) <= radius + circle.radius + 12,
+    )
+    .slice(0, 512);
+  const furnitureBlocked = (point, padding) =>
+    reservations.some(
+      (circle) => distance(point, circle) <= circle.radius + padding,
+    );
+  const blocked = (point) =>
+    buildingBlocked(point) || furnitureBlocked(point, 0.42);
+  // Strollers need space for their forward projection while turning; this is
+  // deliberately more conservative than a walking adult's shoulder clearance.
+  let strollerBlocked = null;
   const routes = [];
   for (const candidate of candidates.slice(0, 100)) {
     const { line } = candidate;
@@ -318,10 +309,40 @@ export function chooseWalkingRoutes(
       if (safe && (!section || safe.score < section.score)) section = safe;
     }
     if (!section) continue;
+    const familyCandidate =
+      pedestrian && line.kind !== "steps" && width >= 2.4 && gentleRoute(line);
+    if (familyCandidate && !strollerBlocked) {
+      const familyBuildingBlocked = buildingAvoidance(
+        buildings,
+        target,
+        options.projectGeo,
+        radius + 12,
+        1.3,
+      );
+      strollerBlocked = (point) =>
+        familyBuildingBlocked(point) || furnitureBlocked(point, 1.3);
+    }
+    const familySection = familyCandidate
+      ? clearWalkingSection(
+          line,
+          candidate.d,
+          section.side,
+          target,
+          strollerBlocked,
+          radius,
+        )
+      : null;
     routes.push({
       line,
       ...section,
       priority: section.distance + (pedestrian ? 0 : 7),
+      accessible: gentleRoute(line),
+      familyEligible:
+        !!familySection && familySection.maxD - familySection.minD >= 18,
+      familySection,
+      context:
+        line.context ||
+        (line.kind === "pedestrian" ? "pedestrian-street" : "street"),
     });
   }
   routes.sort(
@@ -334,7 +355,7 @@ export function chooseWalkingRoutes(
 
 /**
  * Character options and original-line distances; the renderer owns the meshes.
- * @param {{paths: any[], target: {x: number, z: number}, buildings?: BuildingFootprint[], projectGeo?: GeographicProjector, max?: number, maxDistance?: number}} options
+ * @param {{paths: any[], target: {x: number, z: number}, buildings?: BuildingFootprint[], projectGeo?: GeographicProjector, max?: number, maxDistance?: number, surfaces?: {kind:string, ring:ReadonlyArray<ReadonlyArray<number>>}[], reservations?: {x:number,z:number,radius:number}[]}} options
  */
 export function createLocalWalkerProfiles({
   paths,
@@ -343,17 +364,57 @@ export function createLocalWalkerProfiles({
   projectGeo,
   max = 28,
   maxDistance = 110,
+  surfaces = [],
+  reservations = [],
 }) {
   const routes = chooseWalkingRoutes(paths, target, buildings, {
     projectGeo,
     maxDistance,
+    reservations,
   });
+  const parks = projectGeo
+    ? surfaces
+        .filter(
+          (surface) =>
+            ["park", "wood"].includes(surface.kind) &&
+            Array.isArray(surface.ring),
+        )
+        .map((surface) => {
+          const ring = surface.ring.map(projectGeo);
+          return {
+            ring,
+            minX: Math.min(...ring.map((p) => p.x)),
+            maxX: Math.max(...ring.map((p) => p.x)),
+            minZ: Math.min(...ring.map((p) => p.z)),
+            maxZ: Math.max(...ring.map((p) => p.z)),
+          };
+        })
+        .filter(
+          (polygon) =>
+            polygon.ring.length >= 3 && polygon.ring.every(finitePoint),
+        )
+    : [];
+  for (const route of routes) {
+    const p = positionAt(route.line, route.nearestD, route.side);
+    if (parks.some((polygon) => blockedByPolygon(p, polygon, 0)))
+      route.context = "park";
+  }
   const profiles = [],
     occupied = [];
   const wanted = clamp(Math.floor(max), 0, 32);
   // A first pass spreads residents across different streets. Later passes add
   // neighbours to longer nearby sections, keeping at least 3.6 metres apart.
   const offsets = [0, 9, -11, 23, -27, 38, -43, 51, -56];
+  const categories = [
+    "DEMO_001",
+    "DEMO_002",
+    "DEMO_006",
+    "DEMO_007",
+    "DEMO_008",
+    "DEMO_005",
+    "DEMO_004",
+    "DEMO_003",
+  ];
   for (
     let pass = 0;
     pass < offsets.length && profiles.length < wanted;
@@ -364,36 +425,108 @@ export function createLocalWalkerProfiles({
       const d = clamp(route.nearestD + offsets[pass], route.minD, route.maxD);
       const p = positionAt(route.line, d, route.side);
       if (occupied.some((q) => distance(p, q) < 3.6)) continue;
-      const i = profiles.length;
-      const seed = Math.abs(Number(route.line.id) || r);
-      profiles.push({
+      const identity = `${route.line.id ?? `${route.line.ps[0].x}:${route.line.ps[0].z}`}:slot-${pass}`;
+      let categoryId =
+        categories[
+          (npcSeed(route.line.id ?? identity) + pass * 3) % categories.length
+        ];
+      if (
+        categoryId === "DEMO_003" &&
+        (!route.familyEligible || profiles.length + 3 > wanted)
+      )
+        categoryId = "DEMO_006";
+      if (categoryId === "DEMO_004" && !PEDESTRIAN_KINDS.has(route.line.kind))
+        categoryId = "DEMO_006";
+      if (categoryId === "DEMO_005" && !route.accessible)
+        categoryId = "DEMO_006";
+      const base = {
         line: route.line,
         d,
         side: route.side,
         minD: route.minD,
         maxD: route.maxD,
-        direction: (i + seed) % 2 ? -1 : 1,
-        speed: 0.92 + (i % 5) * 0.1,
-        phase: i * 0.73,
-        name: NAMES[i % NAMES.length],
-        label: [
-          "Neighbour · walking",
-          "Local · strolling",
-          "Commuter · walking",
-          "Visitor · exploring",
-        ][i % 4],
-        simulated: true,
-        character: {
-          shirt: SHIRTS[i % SHIRTS.length],
-          skin: SKINS[(i + seed) % SKINS.length],
-          style: STYLES[i % STYLES.length],
-          hairStyle: HAIR[(i + seed) % HAIR.length],
-          hair: ["#302823", "#513c2e", "#4b443d", "#8a8074"][i % 4],
-          trousers: ["#344750", "#574b43", "#465b4d", "#c8bea4"][i % 4],
-          phase: i * 0.73,
-        },
-      });
-      occupied.push(p);
+        direction: npcSeed(identity) % 2 ? -1 : 1,
+        context: route.context,
+        groupId: null,
+        groupRole: null,
+        groupSize: 1,
+      };
+      if (categoryId === "DEMO_003") {
+        const groupId = `scenic-family:${identity}`,
+          formation = [0, -1.9, -3.2];
+        const min = route.familySection.minD + 4,
+          max = route.familySection.maxD - 4;
+        if (max - min < 8) continue;
+        const anchor = clamp(d, min, max),
+          speed = 0.87 + (npcSeed(groupId) % 14) / 100;
+        const members = formation.map((along, member) => {
+          const identityProfile = demographicProfile(
+            categoryId,
+            `${groupId}:${member}`,
+            {
+              groupRole:
+                member === 0
+                  ? "stroller-caregiver"
+                  : member === 1
+                    ? "caregiver"
+                    : "child",
+              gender:
+                member === 2
+                  ? "unspecified"
+                  : ["woman", "man", "unspecified"][
+                      (npcSeed(groupId) + member) % 3
+                    ],
+              familySpeed: speed,
+            },
+          );
+          return {
+            ...base,
+            ...identityProfile,
+            id: `${groupId}:${member}`,
+            groupId,
+            groupRole: identityProfile.role,
+            groupSize: 3,
+            d: anchor + along,
+            minD: min + along,
+            maxD: max + along,
+            moving: true,
+            pause: { walk: 26, stop: 3, phase: (npcSeed(groupId) % 290) / 10 },
+            elapsed: 0,
+          };
+        });
+        const points = members.map(sampleLocalWalker);
+        if (
+          points.some((point) => occupied.some((q) => distance(point, q) < 3.6))
+        )
+          continue;
+        profiles.push(...members);
+        occupied.push(...points);
+      } else {
+        const identityProfile = demographicProfile(categoryId, identity, {
+          context: route.context,
+        });
+        const walk = identityProfile.ageBand === "elder" ? 18 : 23;
+        const stop =
+          identityProfile.role === "visitor"
+            ? 5
+            : identityProfile.ageBand === "elder"
+              ? 4
+              : 1.8;
+        const profile = {
+          ...base,
+          ...identityProfile,
+          id: `scenic:${identity}`,
+          moving: true,
+          pause: {
+            walk,
+            stop,
+            phase: ((npcSeed(identity) % 1000) / 1000) * (walk + stop),
+          },
+          elapsed: 0,
+        };
+        profiles.push(profile);
+        occupied.push(p);
+      }
     }
   }
   return profiles;
@@ -403,7 +536,19 @@ export function createLocalWalkerProfiles({
 export function advanceLocalWalker(profile, dt) {
   const span = profile.maxD - profile.minD;
   if (!(span > 0) || !Number.isFinite(dt) || dt <= 0) return profile;
-  const travelled = Math.max(0, dt) * profile.speed;
+  let walkingTime = dt;
+  if (profile.pause) {
+    const period = profile.pause.walk + profile.pause.stop;
+    const previous = (profile.elapsed || 0) + profile.pause.phase;
+    const next = previous + dt;
+    const walkingUntil = (t) =>
+      Math.floor(t / period) * profile.pause.walk +
+      Math.min(t % period, profile.pause.walk);
+    walkingTime = Math.max(0, walkingUntil(next) - walkingUntil(previous));
+    profile.elapsed = (profile.elapsed || 0) + dt;
+    profile.moving = next % period < profile.pause.walk;
+  }
+  const travelled = Math.max(0, walkingTime) * profile.speed;
   const initial =
     profile.direction < 0
       ? 2 * span - (profile.d - profile.minD)

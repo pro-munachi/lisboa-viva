@@ -323,6 +323,36 @@
   font-size: 10px;
   line-height: 1.5;
 }
+.activityLink {
+  display: flex;
+  width: 100%;
+  min-height: 62px;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #d9e7bd;
+  border-radius: 14px;
+  background: #edf5dc;
+  color: #304931;
+  text-align: left;
+  font: inherit;
+}
+.activityLink span {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+}
+.activityLink strong {
+  font-size: 13px;
+}
+.activityLink small {
+  font-size: 10px;
+  color: #657755;
+}
+.activityArrow {
+  transform: rotate(180deg);
+}
 .inboxSignIn {
   flex-shrink: 0;
   margin-left: 16px;
@@ -565,5 +595,170 @@
   }
   .panel button:active:not(:disabled) {
     transform: none;
+  }
+}
+
+.panel.embedded {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  flex: 1;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.embedded .header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.embedded .rooms {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 8px 8px 0;
+}
+.embedded .rooms button {
+  gap: 0;
+  padding: 8px 4px;
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: normal;
+}
+.embedded .rooms button > svg {
+  display: none;
+}
+.embedded .conversation,
+.embedded .inbox {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.embedded .directHeading {
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+.embedded .disclosure {
+  margin: 7px 10px 8px;
+}
+.embedded .messages {
+  padding: 10px;
+}
+.embedded .composer {
+  padding: 9px 10px 10px;
+  background: #fffefb;
+}
+.embedded .composer textarea {
+  min-height: 54px;
+}
+.embedded .prompts {
+  gap: 4px;
+  padding: 7px 8px 0;
+}
+.embedded .empty {
+  padding: 20px 10px;
+}
+.embedded .peerPicker {
+  margin-inline: 10px;
+}
+.embedded .inboxNote {
+  padding: 10px;
+}
+@media (max-height: 550px) {
+  .panel.embedded {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .embedded .conversation,
+  .embedded .inbox {
+    flex: 0 0 120px;
+    min-height: 120px;
+    max-height: 120px;
+  }
+  .embedded .composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 84px;
+    gap: 5px 8px;
+    padding: 7px 9px 8px;
+    border-top: 1px solid #dce3ef;
+    box-shadow: 0 -5px 15px #2130520d;
+  }
+  .embedded .composerHeading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .embedded .composer textarea {
+    grid-column: 1;
+    grid-row: 1;
+    height: 46px;
+    min-height: 46px;
+    max-height: 46px;
+    padding: 9px;
+    resize: none;
+  }
+  .embedded .sendRow {
+    display: contents;
+  }
+  .embedded .sendRow > button {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    gap: 4px;
+    padding-inline: 6px;
+  }
+  .embedded .sendRow > span {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .embedded .sendError,
+  .embedded .signIn {
+    grid-column: 1 / -1;
+  }
+  .embedded:has(.directHeading) .rooms {
+    display: none;
+  }
+  .embedded .disclosure {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .embedded .directHeading {
+    padding-block: 4px;
+  }
+  .embedded .directHeading span {
+    display: none;
+  }
+  .embedded .peerPicker {
+    gap: 5px;
+    margin-top: 7px;
+  }
+  .embedded .inboxNote {
+    display: none;
   }
 }

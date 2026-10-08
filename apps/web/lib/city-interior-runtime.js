@@ -1,13 +1,19 @@
 import * as THREE from "three";
-import { createCharacter, animateCharacter } from "./characters";
+import {
+  createCharacter,
+  animateCharacter,
+  replaceCharacterAppearance,
+} from "./characters";
 import { createInteriorScene } from "./city-interiors";
 import { findRoomRoute } from "./city-room-navigation";
 import { createHotspotBadgeLayer } from "./city-hotspot-badges";
+import { poseSocialGesture, resetSocialGesture } from "./city-social-gestures";
 import { chatPlaceFor } from "./chat-rooms";
 
 const peerUUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const peerAppearanceFields = [
+  "bodyType",
   "outfitStyle",
   "topColor",
   "bottomColor",
@@ -33,6 +39,8 @@ function publicInteriorPeers(peers) {
       !Number.isFinite(peer.longitude) ||
       !chatPlaceFor(peer.placeId) ||
       !appearance ||
+      (appearance.bodyType !== undefined &&
+        !["male", "female"].includes(appearance.bodyType)) ||
       !["casual", "jacket", "dress", "tourist"].includes(
         appearance.outfitStyle,
       ) ||
@@ -49,7 +57,13 @@ function publicInteriorPeers(peers) {
     const id = peer.id.toLowerCase();
     if (seen.has(id)) return [];
     seen.add(id);
-    return [{ ...peer, id, appearance: { ...appearance } }];
+    return [
+      {
+        ...peer,
+        id,
+        appearance: { ...appearance, bodyType: appearance.bodyType || "male" },
+      },
+    ];
   });
 }
 
@@ -122,6 +136,8 @@ export function createInteriorRuntime({
   let latestPeers = [],
     peerGroup = null;
   const peersById = new Map();
+  const socialGestures = new Map();
+  const socialEvents = new Set();
   const badges = badgeHost
     ? createHotspotBadgeLayer(badgeHost, { onSelect: selectZone })
     : null;
@@ -135,6 +151,8 @@ export function createInteriorRuntime({
   };
   function clear() {
     badges?.clear();
+    socialGestures.clear();
+    socialEvents.clear();
     clearPeers();
     if (room) {
       room.dispose?.();
@@ -151,6 +169,7 @@ export function createInteriorRuntime({
   }
 
   function removePeer(record) {
+    socialGestures.delete(record.actor);
     record.actor.removeFromParent();
     disposeGroup(record.actor);
     peersById.delete(record.peer.id);
@@ -264,6 +283,7 @@ export function createInteriorRuntime({
       }
       const a = peer.appearance;
       const character = createCharacter({
+        bodyType: a.bodyType,
         shirt: a.topColor,
         trousers: a.bottomColor,
         hair: a.hairColor,
@@ -296,6 +316,54 @@ export function createInteriorRuntime({
     if (disposed) return;
     latestPeers = publicInteriorPeers(peers);
     refreshPeers();
+  }
+  function setAppearance(next) {
+    if (disposed || !next) return;
+    appearance = { ...next };
+    shirt = next.topColor;
+    if (actor) {
+      socialGestures.delete(actor);
+      actor = replaceCharacterAppearance(actor, next);
+    }
+  }
+  function social(event) {
+    if (
+      !room ||
+      disposed ||
+      event?.venueId !== visit?.id ||
+      !event.id ||
+      socialEvents.has(event.id) ||
+      ![
+        "drink",
+        "dance",
+        "wave",
+        "compliment",
+        "flirt",
+        "accept-challenge",
+      ].includes(event.kind)
+    )
+      return false;
+    const people = [event.actorId];
+    if (event.kind === "accept-challenge" && visit.kind === "bar")
+      people.push(event.targetId);
+    if (event.kind === "accept-challenge" && visit.kind !== "bar") return false;
+    let applied = false;
+    for (const id of people) {
+      const person = id === event.viewerId ? actor : peersById.get(id)?.actor;
+      if (!person || !id) continue;
+      socialGestures.set(person, {
+        kind: event.kind,
+        startedAt: clock,
+        duration: reducedMotion ? 1.2 : 5,
+      });
+      applied = true;
+    }
+    if (applied) {
+      socialEvents.add(event.id);
+      if (socialEvents.size > 128)
+        socialEvents.delete(socialEvents.values().next().value);
+    }
+    return applied;
   }
   function updateBadges() {
     if (!badges || disposed) return;
@@ -342,6 +410,7 @@ export function createInteriorRuntime({
     room.setNight?.(lightingNight);
     room.group.position.copy(origin);
     actor = createCharacter({
+      bodyType: appearance?.bodyType,
       shirt: appearance?.topColor || shirt || "#c58e59",
       trousers: appearance?.bottomColor,
       hair: appearance?.hairColor,
@@ -541,6 +610,15 @@ export function createInteriorRuntime({
         onActivity?.({ state: "complete", zoneId });
       }
     }
+    for (const [person, gesture] of socialGestures) {
+      const elapsed = clock - gesture.startedAt;
+      if (elapsed >= gesture.duration) {
+        resetSocialGesture(person);
+        socialGestures.delete(person);
+      } else {
+        poseSocialGesture(person, gesture.kind, elapsed, reducedMotion);
+      }
+    }
   }
   function pick(ray, mode) {
     if (!room) return false;
@@ -566,7 +644,9 @@ export function createInteriorRuntime({
     selectZone,
     setLighting,
     setPeers,
+    setAppearance,
     perform,
+    social,
     pick,
     update,
     get active() {

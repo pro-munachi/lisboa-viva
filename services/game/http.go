@@ -54,6 +54,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
 	mux.Handle("GET /v1/admin/users", s.requireRole("admin", http.HandlerFunc(s.adminUsers)))
 	s.registerChatRoutes(mux)
+	s.registerActivityRoutes(mux)
 	return s.headers(mux)
 }
 
@@ -79,6 +80,10 @@ func decodeJSON(r *http.Request, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
+		var validation apiError
+		if errors.As(err, &validation) {
+			return validation
+		}
 		return apiError("invalid_json")
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
@@ -114,6 +119,9 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_peer":           http.StatusBadRequest,
 			"peer_unavailable":       http.StatusNotFound,
 		}[code]
+		if activityStatus, exists := activityErrorStatuses[code]; exists {
+			status = activityStatus
+		}
 	}
 	if status == 0 {
 		status = http.StatusBadRequest
@@ -202,9 +210,9 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		a := input.Appearance
 		_, err = tx.Exec(r.Context(), `INSERT INTO character_appearances
-			(user_id,outfit_style,top_color,bottom_color,hair_style,hair_color,skin_tone,shoe_color)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, id, a.OutfitStyle, a.TopColor, a.BottomColor,
-			a.HairStyle, a.HairColor, a.SkinTone, a.ShoeColor)
+			(user_id,outfit_style,top_color,bottom_color,hair_style,hair_color,skin_tone,shoe_color,body_type)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, a.OutfitStyle, a.TopColor, a.BottomColor,
+			a.HairStyle, a.HairColor, a.SkinTone, a.ShoeColor, a.BodyType)
 	}
 	if err == nil {
 		_, err = tx.Exec(r.Context(), `INSERT INTO sessions(user_id,token_hash,expires_at)
@@ -414,9 +422,9 @@ func (s *server) updateAppearance(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	_, err = s.db.Exec(r.Context(), `UPDATE character_appearances SET
 		outfit_style=$2,top_color=$3,bottom_color=$4,hair_style=$5,
-		hair_color=$6,skin_tone=$7,shoe_color=$8 WHERE user_id=$1`, user.ID,
+		hair_color=$6,skin_tone=$7,shoe_color=$8,body_type=$9 WHERE user_id=$1`, user.ID,
 		input.OutfitStyle, input.TopColor, input.BottomColor, input.HairStyle,
-		input.HairColor, input.SkinTone, input.ShoeColor)
+		input.HairColor, input.SkinTone, input.ShoeColor, input.BodyType)
 	if err != nil {
 		fail(w, err)
 		return

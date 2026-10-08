@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/mail"
 	"regexp"
@@ -21,6 +23,7 @@ const sessionCookie = "lv_session"
 var handlePattern = regexp.MustCompile(`^[a-z0-9_]{3,24}$`)
 
 type characterAppearance struct {
+	BodyType    string `json:"bodyType"`
 	OutfitStyle string `json:"outfitStyle"`
 	TopColor    string `json:"topColor"`
 	BottomColor string `json:"bottomColor"`
@@ -31,8 +34,36 @@ type characterAppearance struct {
 }
 
 var defaultAppearance = characterAppearance{
+	BodyType:    "male",
 	OutfitStyle: "casual", TopColor: "#b47459", BottomColor: "#34444f",
 	HairStyle: "short", HairColor: "#302823", SkinTone: "#a87955", ShoeColor: "#eee8df",
+}
+
+// Missing bodyType means the legacy male model. Explicit invalid JSON values
+// must not silently receive that default. Keep nested unknown-field rejection.
+func (a *characterAppearance) UnmarshalJSON(data []byte) error {
+	type wireAppearance characterAppearance
+	value := wireAppearance{BodyType: "male"}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for key, raw := range fields {
+		if !strings.EqualFold(key, "bodyType") {
+			continue
+		}
+		var bodyType string
+		if err := json.Unmarshal(raw, &bodyType); err != nil || (bodyType != "male" && bodyType != "female") {
+			return apiError("invalid_appearance")
+		}
+	}
+	*a = characterAppearance(value)
+	return nil
 }
 
 type authUser struct {
@@ -100,6 +131,9 @@ func normalizeRegistration(input registerInput) (registerInput, error) {
 }
 
 func normalizeAppearance(input characterAppearance) (characterAppearance, error) {
+	if input.BodyType == "" {
+		input.BodyType = defaultAppearance.BodyType
+	}
 	allowed := func(value string, values ...string) bool {
 		for _, candidate := range values {
 			if value == candidate {
@@ -115,7 +149,9 @@ func normalizeAppearance(input characterAppearance) (characterAppearance, error)
 	input.HairColor = strings.ToLower(strings.TrimSpace(input.HairColor))
 	input.SkinTone = strings.ToLower(strings.TrimSpace(input.SkinTone))
 	input.ShoeColor = strings.ToLower(strings.TrimSpace(input.ShoeColor))
-	if !allowed(input.OutfitStyle, "casual", "jacket", "dress", "tourist") ||
+	if !allowed(input.BodyType, "male", "female") ||
+		(input.BodyType == "male" && input.OutfitStyle == "dress") ||
+		!allowed(input.OutfitStyle, "casual", "jacket", "dress", "tourist") ||
 		!allowed(input.HairStyle, "short", "curly", "bob", "bun") ||
 		!allowed(input.TopColor, "#ece7df", "#687f73", "#b47459", "#777791", "#c19a4b") ||
 		!allowed(input.BottomColor, "#34444f", "#4e504b", "#6b5147", "#30324a") ||
@@ -160,7 +196,7 @@ func loadUser(ctx context.Context, q interface {
 	query := `SELECT u.id::text,u.handle,COALESCE(u.email,''),u.user_type::text,
 		u.account_status::text,u.preferred_locale,u.timezone,u.adult_confirmed_at,
 		u.email_verified_at,u.onboarding_completed_at,u.last_login_at,u.created_at,u.updated_at,
-		ca.outfit_style,ca.top_color,ca.bottom_color,ca.hair_style,ca.hair_color,ca.skin_tone,ca.shoe_color,
+		ca.body_type,ca.outfit_style,ca.top_color,ca.bottom_color,ca.hair_style,ca.hair_color,ca.skin_tone,ca.shoe_color,
 		COALESCE(array_agg(ur.role ORDER BY ur.role) FILTER (WHERE ur.role IS NOT NULL),'{}')
 		FROM users u JOIN character_appearances ca ON ca.user_id=u.id
 		LEFT JOIN user_roles ur ON ur.user_id=u.id WHERE ` + where + `
@@ -169,7 +205,7 @@ func loadUser(ctx context.Context, q interface {
 		&user.ID, &user.Handle, &user.Email, &user.UserType, &user.AccountStatus,
 		&user.PreferredLocale, &user.Timezone, &user.AdultConfirmedAt, &user.EmailVerifiedAt,
 		&user.OnboardingCompletedAt, &user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt,
-		&user.Appearance.OutfitStyle, &user.Appearance.TopColor, &user.Appearance.BottomColor,
+		&user.Appearance.BodyType, &user.Appearance.OutfitStyle, &user.Appearance.TopColor, &user.Appearance.BottomColor,
 		&user.Appearance.HairStyle, &user.Appearance.HairColor, &user.Appearance.SkinTone,
 		&user.Appearance.ShoeColor, &user.Roles,
 	)

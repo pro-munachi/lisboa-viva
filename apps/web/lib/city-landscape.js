@@ -221,8 +221,13 @@ function benchIron() {
 /** Bounded, terrain-grounded landscaping for one lazily loaded detail chunk.
  * Every mesh owns its geometry/material within the returned group, so normal
  * scene traversal disposal is sufficient when the chunk leaves the camera.
+ * @param {any} chunk
+ * @param {{projectGeo: (point: number[]) => {x: number, z: number}, geoY: (point: number[]) => number, focusPoint?: number[], venueReservations?: Array<{x: number, z: number, radius: number, type?: string}>}} options
  */
-export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
+export function createLandscape(
+  chunk,
+  { projectGeo, geoY, focusPoint, venueReservations = [] },
+) {
   const group = new THREE.Group();
   group.name = "Lisbon gardens and street life";
   const southWest = projectGeo([chunk.bounds[0], chunk.bounds[1]]);
@@ -318,11 +323,19 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
       );
   const reserve = (p, radius) =>
     reserved.add({ ...p, radius }, [p.x, p.z, p.x, p.z], radius + 3.3);
+  for (const point of venueReservations)
+    if (
+      [point.x, point.z, point.radius].every(Number.isFinite) &&
+      point.radius > 0
+    )
+      reserve(point, Math.min(4, point.radius));
   const trees = [],
     lamps = [],
     benches = [],
     umbrellas = [],
-    planters = [];
+    planters = [],
+    parkPaths = [],
+    flowerBeds = [];
   const addTree = (p, rand, woodland = false) => {
     if (blocked(p, 2.6, 0.45) || !spaceAvailable(p, 2.6)) return false;
     const pick = rand();
@@ -349,6 +362,140 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
   const parkSurfaces = (chunk.surfaces || [])
     .filter((s) => s.kind === "park" || s.kind === "wood")
     .map((s) => ({ ...s, ring: s.ring.map(projectGeo) }));
+  const parkIndex = spatialIndex();
+  for (const surface of parkSurfaces)
+    parkIndex.add(surface, boundsOf(surface.ring), 2);
+  const inPark = (p, radius = 0) =>
+    parkIndex
+      .at(p)
+      .find((surface) =>
+        [
+          p,
+          { x: p.x - radius, z: p.z },
+          { x: p.x + radius, z: p.z },
+          { x: p.x, z: p.z - radius },
+          { x: p.x, z: p.z + radius },
+        ].every((q) => owned(q) && inRing(q, surface.ring)),
+      );
+  const gardenCandidates = [];
+  for (const street of streets) {
+    if (!["footway", "pedestrian"].includes(street.kind)) continue;
+    for (let i = 1; i < street.points.length; i++) {
+      const a = street.points[i - 1],
+        b = street.points[i];
+      const dx = b.x - a.x,
+        dz = b.z - a.z,
+        length = Math.hypot(dx, dz);
+      if (length < 1) continue;
+      const nx = -dz / length,
+        nz = dx / length;
+      const halfWidth = Math.max(0.5, Math.min(1.2, street.width / 2));
+      for (let d = 0; d < length; d += 10) {
+        const end = Math.min(length, d + 10);
+        const p = {
+          x: a.x + (dx * ((d + end) / 2)) / length,
+          z: a.z + (dz * ((d + end) / 2)) / length,
+        };
+        const surface = inPark(p, halfWidth);
+        if (!surface) continue;
+        const corners = [
+          {
+            x: a.x + (dx * d) / length + nx * halfWidth,
+            z: a.z + (dz * d) / length + nz * halfWidth,
+          },
+          {
+            x: a.x + (dx * end) / length + nx * halfWidth,
+            z: a.z + (dz * end) / length + nz * halfWidth,
+          },
+          {
+            x: a.x + (dx * d) / length - nx * halfWidth,
+            z: a.z + (dz * d) / length - nz * halfWidth,
+          },
+          {
+            x: a.x + (dx * end) / length - nx * halfWidth,
+            z: a.z + (dz * end) / length - nz * halfWidth,
+          },
+        ];
+        if (
+          corners.some(
+            (q) =>
+              !owned(q) ||
+              !inRing(q, surface.ring) ||
+              waters.some(
+                (water) =>
+                  q.x >= water.bounds[0] &&
+                  q.x <= water.bounds[2] &&
+                  q.z >= water.bounds[1] &&
+                  q.z <= water.bounds[3] &&
+                  inRing(q, water.ring),
+              ) ||
+              buildings.at(q).some((building) => inRing(q, building.ring)),
+          )
+        )
+          continue;
+        gardenCandidates.push({
+          p,
+          corners,
+          nx,
+          nz,
+          angle: Math.atan2(dx, dz),
+          roadId: street.id,
+          surfaceId: surface.id,
+          width: street.width,
+          distance: focus ? (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 : 0,
+        });
+      }
+    }
+  }
+  gardenCandidates.sort(
+    (a, b) =>
+      a.distance - b.distance ||
+      a.roadId - b.roadId ||
+      a.p.x - b.p.x ||
+      a.p.z - b.p.z,
+  );
+  let parkBenches = 0;
+  for (const candidate of gardenCandidates) {
+    if (parkPaths.length < 180) parkPaths.push(candidate);
+    for (const sign of [-1, 1]) {
+      const p = {
+        x: candidate.p.x + candidate.nx * sign * (candidate.width / 2 + 1.65),
+        z: candidate.p.z + candidate.nz * sign * (candidate.width / 2 + 1.65),
+      };
+      if (
+        parkBenches < 18 &&
+        inPark(p, 1.15) &&
+        !blocked(p, 1.1, 0.75) &&
+        spaceAvailable(p, 1.15)
+      ) {
+        benches.push({
+          ...p,
+          turn: candidate.angle + (Math.PI / 2) * sign,
+          park: true,
+        });
+        reserve(p, 1.15);
+        parkBenches++;
+      }
+      const bed = {
+        x: p.x + Math.sin(candidate.angle) * 3,
+        z: p.z + Math.cos(candidate.angle) * 3,
+      };
+      if (
+        flowerBeds.length < 24 &&
+        inPark(bed, 1.15) &&
+        !blocked(bed, 0.8, 0.7) &&
+        spaceAvailable(bed, 1.15)
+      ) {
+        flowerBeds.push({
+          ...bed,
+          turn: candidate.angle,
+          tint: randomFor(`flowers-${candidate.roadId}-${bed.x}-${bed.z}`)(),
+          surfaceId: candidate.surfaceId,
+        });
+        reserve(bed, 1.15);
+      }
+    }
+  }
   const budgets = parkSurfaces
     .map((surface) => {
       const b = boundsOf(surface.ring);
@@ -562,6 +709,79 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
   }
   const material = (hex, extra = {}) =>
     new THREE.MeshStandardMaterial({ color: hex, roughness: 0.87, ...extra });
+  if (parkPaths.length) {
+    const positions = [];
+    for (const { corners } of parkPaths)
+      for (const i of [0, 1, 2, 2, 1, 3]) {
+        const point = corners[i];
+        positions.push(point.x, geoY(toGeo(point)) + 0.24, point.z);
+      }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    const paths = new THREE.Mesh(
+      geometry,
+      material("#d2c6a2", { side: THREE.DoubleSide, roughness: 1 }),
+    );
+    paths.name = "Paths following mapped garden footways";
+    paths.receiveShadow = true;
+    group.add(paths);
+  }
+  batch(
+    "Garden flowerbed borders",
+    flowerBeds,
+    combine([
+      box(1.85, 0.18, 0.09, 0, 0.09, -0.45),
+      box(1.85, 0.18, 0.09, 0, 0.09, 0.45),
+      box(0.09, 0.18, 0.81, -0.88, 0.09),
+      box(0.09, 0.18, 0.81, 0.88, 0.09),
+    ]),
+    material("#a68f70"),
+  );
+  batch(
+    "Garden flowerbed soil",
+    flowerBeds,
+    box(1.68, 0.05, 0.8, 0, 0.035),
+    material("#614a36"),
+  );
+  const flowers = [-0.6, -0.3, 0, 0.3, 0.6].flatMap((x) =>
+    [-0.22, 0.22].map((z) =>
+      new THREE.IcosahedronGeometry(0.11, 0)
+        .scale(1, 0.65, 1)
+        .translate(x, 0.28, z),
+    ),
+  );
+  batch(
+    "Garden flowers beside real paths",
+    flowerBeds,
+    combine(flowers),
+    material("#ffffff"),
+    undefined,
+    (entry, c) =>
+      c.set(
+        entry.tint < 0.34
+          ? "#ee8f86"
+          : entry.tint < 0.67
+            ? "#e9c855"
+            : "#a995d0",
+      ),
+  );
+  batch(
+    "Garden flowerbed foliage",
+    flowerBeds,
+    combine(
+      [-0.6, -0.3, 0, 0.3, 0.6].map((x) =>
+        new THREE.IcosahedronGeometry(0.2, 0)
+          .scale(1, 0.7, 1.5)
+          .translate(x, 0.13, 0),
+      ),
+    ),
+    material("#5e874f"),
+  );
   const treeHeight = (tree) =>
     (tree.type === "palm" ? 6.5 : tree.type === "cypress" ? 3.1 : 3.35) *
     tree.scale;
@@ -745,6 +965,24 @@ export function createLandscape(chunk, { projectGeo, geoY, focusPoint }) {
     benches: benches.length,
     umbrellas: umbrellas.length,
     planters: planters.length,
+    parkPaths: parkPaths.length,
+    parkBenches,
+    flowerBeds: flowerBeds.length,
+    parkDetails: {
+      paths: parkPaths.map(({ p, roadId, surfaceId }) => ({
+        ...p,
+        roadId,
+        surfaceId,
+      })),
+      benches: benches
+        .filter((bench) => bench.park)
+        .map(({ x, z }) => ({ x, z })),
+      flowerBeds: flowerBeds.map(({ x, z, surfaceId }) => ({
+        x,
+        z,
+        surfaceId,
+      })),
+    },
     drawCalls: group.children.length,
   };
   return group;

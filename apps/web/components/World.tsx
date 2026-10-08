@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Compass,
   Hand,
@@ -14,6 +14,7 @@ import {
   Users,
   X,
   Clock3,
+  SlidersHorizontal,
 } from "lucide-react";
 import GoogleWorld from "./GoogleWorld";
 import InteriorPanel from "./InteriorPanel";
@@ -26,14 +27,25 @@ import type { TravelPhase, TravelSequence } from "../lib/travel-sequence";
 import type { MultiplayerPeer } from "../lib/multiplayer";
 import type { CharacterAppearance } from "../lib/appearance";
 import { DEFAULT_APPEARANCE } from "../lib/appearance";
+import controlStyles from "./WorldControls.module.css";
+export type SocialSceneEvent = {
+  id: string;
+  venueId: string;
+  kind: string;
+  actorId: string;
+  targetId?: string;
+  viewerId: string;
+};
 type CityController = {
   ready: Promise<boolean>;
   setInterior: (visit: InteriorVisit | null) => void;
   selectInteriorZone: (id: string) => void;
   performInteriorAction: (id: string, duration?: number) => void;
+  playSocialEvent: (event: SocialSceneEvent) => boolean;
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
   setPeers: (peers: MultiplayerPeer[]) => void;
+  setAppearance: (appearance: CharacterAppearance) => void;
   overview: () => void;
   characters: () => void;
   people: () => void;
@@ -63,6 +75,8 @@ export default function World({
   onTravelComplete,
   peers = [],
   onPlayer,
+  socialEvent,
+  sharedOuting = false,
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -77,6 +91,8 @@ export default function World({
   onTravelComplete?: (id: string) => void;
   peers?: MultiplayerPeer[];
   onPlayer?: (player: MultiplayerPeer) => void;
+  socialEvent?: SocialSceneEvent | null;
+  sharedOuting?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
@@ -124,6 +140,12 @@ export default function World({
   const [status, setStatus] = useState("Loading Lisbon’s streets…");
   const [gesture, setGesture] = useState("orbit");
   const [motion, setMotion] = useState(true);
+  const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const optionsPanel = useRef<HTMLDivElement>(null);
+  const optionsTrigger = useRef<HTMLButtonElement>(null);
+  const focusOptionsOnOpen = useRef(false);
+  const optionsId = useId();
   const [google, setGoogle] = useState(false);
   const googleVisible = google && !travelSequence;
   const [gallery, setGallery] = useState(false);
@@ -135,6 +157,11 @@ export default function World({
   >("idle");
   const [completed, setCompleted] = useState<string[]>([]);
   const [roomError, setRoomError] = useState("");
+  useEffect(() => {
+    if (!socialEvent || travelSequence || socialEvent.venueId !== interior?.id)
+      return;
+    controller.current?.playSocialEvent(socialEvent);
+  }, [socialEvent?.id, interior?.id, travelSequence?.id, status]);
   const [stats, setStats] = useState<{
     buildings: number;
     roads: number;
@@ -283,7 +310,7 @@ export default function World({
       controller.current = null;
       startedTravel.current = null;
     };
-  }, [googleVisible, shirt, appearance]);
+  }, [googleVisible]);
   useEffect(() => {
     setTravelPhase(null);
     setTravelError("");
@@ -322,6 +349,9 @@ export default function World({
     controller.current?.setPeers(peers);
   }, [peers]);
   useEffect(() => {
+    controller.current?.setAppearance(appearance);
+  }, [appearance]);
+  useEffect(() => {
     setGallery(false);
     setPerson(null);
     setCompleted([]);
@@ -334,6 +364,42 @@ export default function World({
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) setMotion(false);
   }, []);
+  function closeViewOptions() {
+    setViewOptionsOpen(false);
+    optionsTrigger.current?.focus();
+  }
+  useEffect(() => {
+    if (!viewOptionsOpen) return;
+    if (focusOptionsOnOpen.current) {
+      focusOptionsOnOpen.current = false;
+      optionsPanel.current
+        ?.querySelector<HTMLButtonElement>("[data-view-action]:not([disabled])")
+        ?.focus();
+    }
+    const outside = (event: Event) => {
+      if (
+        event.target instanceof Node &&
+        !controlsRef.current?.contains(event.target)
+      )
+        setViewOptionsOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeViewOptions();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [viewOptionsOpen]);
+  useEffect(() => {
+    setViewOptionsOpen(false);
+  }, [googleVisible, travelSequence?.id, interior?.id]);
   return (
     <>
       <div
@@ -363,54 +429,42 @@ export default function World({
         )}
       </div>
       {!googleVisible && !travelSequence && (
-        <label className="world-time">
-          <Clock3 size={15} />
-          <select
-            aria-label="Scene time"
-            value={sceneTime}
-            onChange={(e) => setSceneTime(e.target.value)}
-          >
-            <option value="live">Live city time</option>
-            {minute !== undefined && <option value="trip">Trip time</option>}
-            <option value="day">Daylight preview</option>
-            <option value="golden">Golden hour preview</option>
-            <option value="night">Night preview</option>
-          </select>
-          <span>
-            {String(Math.floor(sceneMinute / 60)).padStart(2, "0")}:
-            {String(sceneMinute % 60).padStart(2, "0")}
-          </span>
-        </label>
-      )}
-      {!googleVisible && !travelSequence && (
         <div
-          className={
-            interior ? "world-controls interior-controls" : "world-controls"
-          }
+          ref={controlsRef}
+          className={`${interior ? "world-controls interior-controls" : "world-controls"} ${controlStyles.controls}`}
+          data-inside={Boolean(interior)}
+          data-expanded={viewOptionsOpen}
+          role="group"
           aria-label="3D camera controls"
         >
-          <div className="gesture-controls">
+          <div className={`gesture-controls ${controlStyles.gestures}`}>
             <button
+              type="button"
+              aria-label="Rotate"
               aria-pressed={gesture === "orbit"}
               onClick={() => {
                 setGesture("orbit");
                 controller.current?.setMode("orbit");
               }}
             >
-              <Compass size={17} />
+              <Compass size={17} aria-hidden="true" />
               <span>Rotate</span>
             </button>
             <button
+              type="button"
+              aria-label="Pan"
               aria-pressed={gesture === "pan"}
               onClick={() => {
                 setGesture("pan");
                 controller.current?.setMode("pan");
               }}
             >
-              <Hand size={17} />
+              <Hand size={17} aria-hidden="true" />
               <span>Pan</span>
             </button>
             <button
+              type="button"
+              aria-label="Walk"
               disabled={!!gallery}
               aria-pressed={gesture === "walk"}
               onClick={() => {
@@ -418,98 +472,193 @@ export default function World({
                 controller.current?.setMode("walk");
               }}
             >
-              <PersonStanding size={17} />
+              <PersonStanding size={17} aria-hidden="true" />
               <span>Walk</span>
             </button>
           </div>
-          <div className="camera-buttons">
+          <div className={`camera-buttons ${controlStyles.zoom}`}>
             <button
+              type="button"
               aria-label="Zoom in"
               onClick={() => controller.current?.zoom(0.75)}
             >
-              <Plus size={17} />
+              <Plus size={17} aria-hidden="true" />
             </button>
             <button
+              type="button"
               aria-label="Zoom out"
               onClick={() => controller.current?.zoom(1.3)}
             >
-              <Minus size={17} />
-            </button>
-            <button
-              aria-label="Rotate camera left"
-              onClick={() => controller.current?.rotate(-Math.PI / 8)}
-            >
-              <RotateCcw size={17} />
-            </button>
-            <button
-              aria-label="Rotate camera right"
-              onClick={() => controller.current?.rotate(Math.PI / 8)}
-            >
-              <RotateCw size={17} />
+              <Minus size={17} aria-hidden="true" />
             </button>
           </div>
-          {!interior && (
-            <>
-              <button
-                aria-label="Street level"
-                onClick={() => {
-                  setGallery(false);
-                  setPerson(null);
-                  controller.current?.setFocus(focus, true);
-                }}
-              >
-                <PersonStanding size={17} />
-                <span>Street level</span>
-              </button>
-              <button
-                aria-label="Characters"
-                onClick={() => {
-                  setGallery(true);
-                  setPerson(null);
-                  controller.current?.characters();
-                }}
-              >
-                <PersonStanding size={17} />
-                <span>Characters</span>
-              </button>
-              <button
-                aria-label="Show nearby NPCs"
-                onClick={() => {
-                  setGallery(false);
-                  setPerson(null);
-                  controller.current?.people();
-                }}
-              >
-                <Users size={17} />
-                <span>Locals</span>
-              </button>
-              <button
-                aria-label="Whole region"
-                onClick={() => {
-                  setGallery(false);
-                  setPerson(null);
-                  controller.current?.overview();
-                }}
-              >
-                <Globe2 size={17} />
-                <span>Whole region</span>
-              </button>
-            </>
-          )}
           <button
-            aria-label={
-              motion ? "Pause ambient movement" : "Resume ambient movement"
-            }
-            onClick={() => {
-              setMotion((v) => !v);
-              controller.current?.setMotion(!motion);
+            ref={optionsTrigger}
+            type="button"
+            className={controlStyles.optionsTrigger}
+            aria-label="View options"
+            title="View options"
+            aria-expanded={viewOptionsOpen}
+            aria-controls={optionsId}
+            onClick={() => setViewOptionsOpen((open) => !open)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowDown") return;
+              event.preventDefault();
+              if (viewOptionsOpen)
+                optionsPanel.current
+                  ?.querySelector<HTMLButtonElement>(
+                    "[data-view-action]:not([disabled])",
+                  )
+                  ?.focus();
+              else {
+                focusOptionsOnOpen.current = true;
+                setViewOptionsOpen(true);
+              }
             }}
           >
-            {motion ? <Pause size={17} /> : <Play size={17} />}
+            <SlidersHorizontal size={18} aria-hidden="true" />
+            <span>View options</span>
           </button>
+          <div
+            ref={optionsPanel}
+            id={optionsId}
+            className={controlStyles.options}
+            hidden={!viewOptionsOpen}
+            role="region"
+            aria-labelledby={`${optionsId}-heading`}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeViewOptions();
+              }
+            }}
+          >
+            <header className={controlStyles.heading}>
+              <strong id={`${optionsId}-heading`}>View options</strong>
+              <button
+                type="button"
+                aria-label="Close view options"
+                onClick={closeViewOptions}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+            <div className={controlStyles.actions}>
+              <button
+                type="button"
+                data-view-action
+                aria-label="Rotate camera left"
+                onClick={() => controller.current?.rotate(-Math.PI / 8)}
+              >
+                <RotateCcw size={18} aria-hidden="true" /> Rotate left
+              </button>
+              <button
+                type="button"
+                data-view-action
+                aria-label="Rotate camera right"
+                onClick={() => controller.current?.rotate(Math.PI / 8)}
+              >
+                <RotateCw size={18} aria-hidden="true" /> Rotate right
+              </button>
+              {!interior && (
+                <>
+                  <button
+                    type="button"
+                    data-view-action
+                    onClick={() => {
+                      setGallery(false);
+                      setPerson(null);
+                      controller.current?.setFocus(focus, true);
+                      closeViewOptions();
+                    }}
+                  >
+                    <PersonStanding size={18} aria-hidden="true" /> Street level
+                  </button>
+                  <button
+                    type="button"
+                    data-view-action
+                    onClick={() => {
+                      setGallery(true);
+                      setPerson(null);
+                      controller.current?.characters();
+                      closeViewOptions();
+                    }}
+                  >
+                    <PersonStanding size={18} aria-hidden="true" /> Characters
+                  </button>
+                  <button
+                    type="button"
+                    data-view-action
+                    aria-label="Show nearby NPCs"
+                    onClick={() => {
+                      setGallery(false);
+                      setPerson(null);
+                      controller.current?.people();
+                      closeViewOptions();
+                    }}
+                  >
+                    <Users size={18} aria-hidden="true" /> Locals
+                  </button>
+                  <button
+                    type="button"
+                    data-view-action
+                    onClick={() => {
+                      setGallery(false);
+                      setPerson(null);
+                      controller.current?.overview();
+                      closeViewOptions();
+                    }}
+                  >
+                    <Globe2 size={18} aria-hidden="true" /> Whole region
+                  </button>
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              className={controlStyles.motion}
+              aria-label={
+                motion ? "Pause ambient movement" : "Resume ambient movement"
+              }
+              onClick={() => {
+                setMotion((value) => !value);
+                controller.current?.setMotion(!motion);
+              }}
+            >
+              {motion ? (
+                <Pause size={18} aria-hidden="true" />
+              ) : (
+                <Play size={18} aria-hidden="true" />
+              )}
+              <span>{motion ? "Pause movement" : "Resume movement"}</span>
+            </button>
+            <label className={controlStyles.time}>
+              <span className={controlStyles.timeHeading}>
+                <Clock3 size={16} aria-hidden="true" /> Scene time
+                <span>
+                  {String(Math.floor(sceneMinute / 60)).padStart(2, "0")}:
+                  {String(sceneMinute % 60).padStart(2, "0")}
+                </span>
+              </span>
+              <select
+                aria-label="Scene time"
+                value={sceneTime}
+                onChange={(event) => setSceneTime(event.target.value)}
+              >
+                <option value="live">Live city time</option>
+                {minute !== undefined && (
+                  <option value="trip">Trip time</option>
+                )}
+                <option value="day">Daylight preview</option>
+                <option value="golden">Golden hour preview</option>
+                <option value="night">Night preview</option>
+              </select>
+            </label>
+          </div>
         </div>
       )}
-      {interior && !travelSequence && (
+      {interior && !travelSequence && !sharedOuting && (
         <InteriorPanel
           visit={interior}
           selectedZone={selectedZone}

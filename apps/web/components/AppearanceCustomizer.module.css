@@ -1,0 +1,682 @@
+.customizer {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #c9d6ef;
+  border-radius: 22px;
+  background: #fffefb;
+  color: #23314d;
+}
+.legend {
+  padding: 0 7px;
+  font-family: var(--font-display, inherit);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.55px;
+}
+.intro {
+  margin: 0 0 14px;
+  color: #66718a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.editor {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.editorControls {
+  min-width: 0;
+}
+.bodySelector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 16px;
+}
+.bodySelector button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  min-width: 0;
+  padding: 10px 13px;
+  border: 1px solid #ccd8ef;
+  border-radius: 13px;
+  background: #f0f4fd;
+  color: #4d6190;
+}
+.bodySelector button[aria-pressed="true"] {
+  border-color: #3156df;
+  background: #eaf0ff;
+  box-shadow: inset 0 0 0 1px #3156df;
+  color: #2649bd;
+}
+.bodySelector strong {
+  flex: 1;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 700;
+}
+.bodySelector button[aria-pressed="true"] .choiceCheck {
+  border-color: #3156df;
+  background: #3156df;
+}
+.bodyIcon {
+  width: 24px;
+  height: 34px;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+.previewFrame {
+  min-height: 260px;
+  overflow: hidden;
+  border: 1px solid #c9e4db;
+  border-radius: 17px;
+  background: #e7f5ee;
+}
+.chosenLook {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px;
+  border-top: 1px solid #cddced;
+  background: #eef3ff;
+}
+.lookMark {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: #ffceb7;
+  color: #68402f;
+}
+.chosenLook > div {
+  flex: 1;
+  min-width: 0;
+}
+.eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: #4564b1;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.chosenLook strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.chosenLook p {
+  margin: 3px 0 0;
+  color: #5d6c88;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.lookColour {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #cdd6e7;
+}
+.sections {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 14px;
+  padding: 4px;
+  border: 1px solid #dce3f2;
+  border-radius: 14px;
+  background: #edf1f8;
+}
+.sections button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 5px;
+  border-radius: 10px;
+  background: transparent;
+  color: #52617c;
+  font-size: 12px;
+  font-weight: 700;
+}
+.sections button[aria-pressed="true"] {
+  background: #3156df;
+  color: #fff;
+  box-shadow: 0 2px 4px #2540ae24;
+}
+.choices {
+  min-width: 0;
+}
+.choices h3 {
+  margin: 0 0 12px;
+  font-family: var(--font-display, inherit);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.styleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.styleChoice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 72px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 13px;
+  background: #fff;
+  color: #23314d;
+  text-align: left;
+}
+.styleChoice[aria-pressed="true"] {
+  border-color: #3156df;
+  background: #eaf0ff;
+  box-shadow: inset 0 0 0 1px #3156df;
+}
+.choiceText {
+  min-width: 0;
+}
+.choiceText strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.choiceText > span {
+  display: block;
+  margin-top: 3px;
+  color: #64738e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.choiceCheck {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #d3dced;
+  border-radius: 50%;
+  background: #f4f6fa;
+  color: #fff;
+}
+.styleChoice[aria-pressed="true"] .choiceCheck {
+  border-color: #3156df;
+  background: #3156df;
+}
+.shortcutLabel {
+  margin: 16px 0 8px;
+  color: #64738e;
+  font-size: 11px;
+  font-weight: 600;
+}
+.colourShortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.colourShortcuts button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid #d5e6de;
+  border-radius: 11px;
+  background: #edf8f2;
+  color: #284743;
+  text-align: left;
+}
+.shortcutDisc {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #ccdcd4;
+}
+.colourShortcuts button > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.colourShortcuts strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+}
+.colourShortcuts button > span > span {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: #54716a;
+  font-size: 9px;
+}
+.colourShortcuts svg {
+  flex-shrink: 0;
+}
+.palette {
+  margin-top: 16px;
+}
+.paletteHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.paletteHeading strong {
+  font-weight: 700;
+}
+.paletteHeading > span {
+  color: #5f6d88;
+}
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 8px;
+}
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 44px;
+  min-height: 76px;
+  padding: 7px 3px;
+  border: 1px solid #dce3ee;
+  border-radius: 11px;
+  background: #fff;
+  color: #51617d;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+}
+.swatch[aria-pressed="true"] {
+  border-color: #3156df;
+  background: #eaf0ff;
+  box-shadow: inset 0 0 0 1px #3156df;
+  color: #203fab;
+}
+.colourDisc {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #24335a24;
+  border-radius: 50%;
+  background: var(--swatch-color);
+}
+.swatchCheck {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #3156df;
+  color: #fff;
+}
+.partPicker {
+  display: grid;
+  gap: 8px;
+  color: #52617c;
+  font-size: 11px;
+  font-weight: 700;
+}
+.partPicker select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cdd7ec;
+  border-radius: 11px;
+  background: #fff;
+  color: #23314d;
+  font: inherit;
+  font-size: 13px;
+}
+.paletteHint {
+  margin: 14px 0 0;
+  color: #64738e;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.customizer button {
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+.customizer button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.customizer button:focus-visible,
+.customizer select:focus-visible {
+  outline: 3px solid #3156df;
+  outline-offset: 3px;
+  transition: none;
+}
+.customizer button:active:focus-visible {
+  transform: none;
+}
+
+.customizer[data-variant="wardrobe"] {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.customizer[data-variant="wardrobe"] .legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.customizer[data-variant="wardrobe"] .editor {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "body" "preview" "sections" "choices";
+  gap: 24px;
+}
+.customizer[data-variant="wardrobe"] .editorControls {
+  display: contents;
+}
+.customizer[data-variant="wardrobe"] .previewFrame {
+  grid-area: preview;
+  border: 0;
+  border-radius: 22px;
+  background: #e7eafa;
+}
+.customizer[data-variant="wardrobe"] .chosenLook {
+  gap: 12px;
+  padding: 18px;
+  border-top: 0;
+  background: #e2e7f6;
+}
+.customizer[data-variant="wardrobe"] .lookMark,
+.customizer[data-variant="wardrobe"] .lookColour {
+  display: none;
+}
+.customizer[data-variant="wardrobe"] .eyebrow {
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.customizer[data-variant="wardrobe"] .chosenLook strong {
+  font-size: 17px;
+  letter-spacing: -0.3px;
+}
+.customizer[data-variant="wardrobe"] .chosenLook p {
+  font-size: 12px;
+}
+.customizer[data-variant="wardrobe"] .bodySelector {
+  grid-area: body;
+  gap: 8px;
+  margin-bottom: 0;
+}
+.customizer[data-variant="wardrobe"] .bodySelector button {
+  min-height: 48px;
+  gap: 10px;
+  padding: 7px 13px;
+  border-color: transparent;
+  background: #e9edf6;
+}
+.customizer[data-variant="wardrobe"] .bodySelector button[aria-pressed="true"] {
+  border-color: #3156df;
+  background: #eaf0ff;
+  box-shadow: inset 0 0 0 1px #3156df;
+}
+.customizer[data-variant="wardrobe"] .bodyIcon {
+  width: 21px;
+  height: 29px;
+}
+.customizer[data-variant="wardrobe"] .sections {
+  grid-area: sections;
+  gap: 5px;
+  margin-bottom: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.customizer[data-variant="wardrobe"] .sections button {
+  min-height: 48px;
+  gap: 8px;
+  border-radius: 12px;
+  background: #edf1f8;
+  font-size: 14px;
+}
+.customizer[data-variant="wardrobe"] .sections button[aria-pressed="true"] {
+  background: #3156df;
+}
+.customizer[data-variant="wardrobe"] .choices h3 {
+  margin-bottom: 14px;
+  font-size: 21px;
+  letter-spacing: -0.5px;
+}
+.customizer[data-variant="wardrobe"] .choices {
+  grid-area: choices;
+}
+.customizer[data-variant="wardrobe"] .styleGrid {
+  gap: 10px;
+}
+.customizer[data-variant="wardrobe"][data-body="male"]
+  .styleGrid[data-choice="outfit"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.customizer[data-variant="wardrobe"] .styleChoice {
+  min-height: 72px;
+  gap: 12px;
+  padding: 12px;
+  border-color: #d6ddeb;
+  border-radius: 14px;
+  background: #fafbfe;
+}
+.customizer[data-variant="wardrobe"] .styleChoice[aria-pressed="true"] {
+  border-color: #3156df;
+  background: #eaf0ff;
+}
+.customizer[data-variant="wardrobe"] .choiceText {
+  flex: 1;
+}
+.customizer[data-variant="wardrobe"] .choiceText strong {
+  font-size: 15px;
+}
+.customizer[data-variant="wardrobe"] .choiceText > span {
+  color: #576780;
+  font-size: 12px;
+}
+.choiceGlyph {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border-radius: 11px;
+  background: #e3eee8;
+  color: #3c7264;
+}
+.styleChoice[aria-pressed="true"] .choiceGlyph {
+  background: #d4dfff;
+  color: #3156df;
+}
+.customizer[data-variant="wardrobe"] .shortcutLabel {
+  margin-top: 20px;
+  font-size: 12px;
+}
+.customizer[data-variant="wardrobe"] .colourShortcuts button {
+  min-height: 65px;
+  border: 0;
+  border-radius: 12px;
+}
+.customizer[data-variant="wardrobe"] .colourShortcuts strong {
+  font-size: 13px;
+}
+.customizer[data-variant="wardrobe"] .colourShortcuts button > span > span {
+  font-size: 11px;
+}
+.customizer[data-variant="wardrobe"] .paletteHeading {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.customizer[data-variant="wardrobe"] .swatch {
+  min-height: 90px;
+  padding: 10px 4px;
+  font-size: 11px;
+}
+.customizer[data-variant="wardrobe"] .colourDisc {
+  width: 35px;
+  height: 35px;
+}
+.customizer[data-variant="wardrobe"] .partPicker {
+  gap: 10px;
+  font-size: 13px;
+}
+.customizer[data-variant="wardrobe"] .partPicker select {
+  min-height: 48px;
+  font-size: 16px;
+}
+.customizer[data-variant="wardrobe"] .paletteHint {
+  font-size: 12px;
+}
+@container (min-width: 520px) {
+  .editor {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+  .chosenLook {
+    padding: 10px;
+  }
+  .lookMark,
+  .lookColour {
+    display: none;
+  }
+  .chosenLook strong {
+    font-size: 13px;
+  }
+  .styleChoice {
+    padding: 10px;
+  }
+  .sections button {
+    gap: 5px;
+    font-size: 11px;
+  }
+}
+@container (min-width: 620px) {
+  .customizer[data-variant="wardrobe"] .editor {
+    grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "preview body" "preview controls";
+    row-gap: 16px;
+  }
+  .customizer[data-variant="wardrobe"] .editorControls {
+    display: block;
+    grid-area: controls;
+  }
+  .customizer[data-variant="wardrobe"] .bodySelector {
+    margin-bottom: 0;
+  }
+  .customizer[data-variant="wardrobe"] .sections {
+    margin-bottom: 22px;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .sections button:not([aria-pressed="true"]):hover {
+    background: #e0e8f6;
+  }
+  .styleChoice:hover,
+  .swatch:hover {
+    border-color: #3156df;
+  }
+  .colourShortcuts button:hover {
+    border-color: #87b6a7;
+    background: #e2f3eb;
+  }
+}
+@media (max-width: 600px) {
+  .customizer[data-variant="wardrobe"] .editor {
+    gap: 16px;
+  }
+  .customizer[data-variant="wardrobe"] .chosenLook {
+    padding: 12px;
+  }
+  .customizer[data-variant="wardrobe"] .chosenLook strong {
+    font-size: 16px;
+  }
+  .customizer[data-variant="wardrobe"] .chosenLook p {
+    font-size: 11px;
+  }
+  .customizer[data-variant="wardrobe"] .eyebrow {
+    font-size: 9px;
+  }
+}
+@media (max-width: 440px) {
+  .customizer {
+    padding: 12px;
+    border-radius: 18px;
+  }
+  .legend {
+    font-size: 19px;
+  }
+  .sections button {
+    gap: 5px;
+    font-size: 11px;
+  }
+  .styleChoice {
+    padding: 10px;
+  }
+  .colourShortcuts {
+    gap: 6px;
+  }
+  .colourShortcuts button {
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 7px;
+  }
+  .colourShortcuts button > span:nth-child(2) {
+    flex-basis: calc(100% - 26px);
+  }
+  .colourShortcuts svg {
+    display: none;
+  }
+  .partPicker select {
+    font-size: 16px;
+  }
+  .customizer[data-variant="wardrobe"] .styleGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .customizer button {
+    transition: none;
+  }
+  .customizer button:active:not(:disabled) {
+    transform: none;
+  }
+}

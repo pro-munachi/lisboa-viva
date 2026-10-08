@@ -2,9 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { LogOut, UserRound } from "lucide-react";
-import type { AuthUser } from "../lib/auth";
+import { normalizeAuthUser, type AuthUser } from "../lib/auth";
 import { MultiplayerProvider } from "../lib/multiplayer";
+import Wardrobe from "./Wardrobe";
+import ProfileProvider from "./ProfileActions";
+import styles from "./Wardrobe.module.css";
 
 export default function AuthBoundary({
   children,
@@ -16,14 +18,26 @@ export default function AuthBoundary({
   const [unavailable, setUnavailable] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const [wardrobeOpen, setWardrobeOpen] = useState(false);
+  const [appearanceNotice, setAppearanceNotice] = useState("");
 
   useEffect(() => {
     let active = true;
-    fetch("/api/auth/me", { cache: "no-store" })
+    const controller = new AbortController();
+    fetch("/api/auth/me", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
-        if (response.ok) return (await response.json()) as AuthUser;
+        if (!active || controller.signal.aborted) return null;
+        if (response.ok) {
+          const account = normalizeAuthUser(await response.json());
+          if (!account) throw new Error("unavailable");
+          return account;
+        }
         if (response.status === 401) {
-          await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+          await fetch("/api/auth/logout", {
+            method: "POST",
+            signal: controller.signal,
+          }).catch(() => null);
+          if (!active || controller.signal.aborted) return null;
           router.replace("/login");
           return null;
         }
@@ -33,6 +47,7 @@ export default function AuthBoundary({
       .catch(() => active && setUnavailable(true));
     return () => {
       active = false;
+      controller.abort();
     };
   }, [router]);
 
@@ -72,26 +87,35 @@ export default function AuthBoundary({
     );
   }
   return (
-    <>
+    <ProfileProvider
+      user={user}
+      signingOut={signingOut}
+      logoutError={logoutError}
+      editCharacter={() => {
+        setAppearanceNotice("");
+        setWardrobeOpen(true);
+      }}
+      signOut={logout}
+    >
       <MultiplayerProvider user={user}>
         {typeof children === "function" ? children(user) : children}
       </MultiplayerProvider>
-      <aside className="auth-account" aria-label="Active account">
-        <UserRound size={16} />
-        <span>
-          <strong>@{user.handle}</strong>
-          <small>{user.userType === "local" ? "Local" : "Tourist"}</small>
-        </span>
-        {logoutError && <span role="alert">{logoutError}</span>}
-        <button
-          onClick={logout}
-          aria-label="Sign out"
-          title="Sign out"
-          disabled={signingOut}
-        >
-          <LogOut size={16} />
-        </button>
-      </aside>
-    </>
+      <span className={styles.notice} role="status">
+        {appearanceNotice}
+      </span>
+      {wardrobeOpen && (
+        <Wardrobe
+          key={user.id}
+          user={user}
+          onSaved={(updated) => {
+            if (updated.id !== user.id) return;
+            setUser(updated);
+            setWardrobeOpen(false);
+            setAppearanceNotice("Your look has been saved.");
+          }}
+          onClose={() => setWardrobeOpen(false)}
+        />
+      )}
+    </ProfileProvider>
   );
 }

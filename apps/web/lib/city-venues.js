@@ -753,7 +753,19 @@ export function createVenueDecorations(
     };
     sign.userData.venueView = venueView;
     decoration.userData.venueView = venueView;
+    // Street dressing can reuse this mapped facade without turning fallback
+    // freestanding map signs into invented storefronts.
+    decoration.userData.mappedFacade = face
+      ? {
+          width,
+          height: maxTop,
+          normal,
+          groundY: ground,
+          buildingId: face.b.building.id,
+        }
+      : null;
     sign.userData.terraceTables = [];
+    decoration.userData.terraceTables = sign.userData.terraceTables;
     decoration.add(sign);
     group.add(decoration);
     rendered++;

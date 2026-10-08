@@ -396,8 +396,8 @@ function traveller(kit, shirt = "#ff876e", appearance = null, shared = false) {
       ? value
       : fallback;
   const group = createCharacter({
-    // The caller's merged appearance carries the selected per-trip top colour;
-    // the remaining saved identity stays the same when boarding a vehicle.
+    // Keep the account's saved look when boarding a vehicle.
+    bodyType: appearance?.bodyType === "female" ? "female" : "male",
     shirt: color(appearance?.topColor, color(shirt, "#ff876e")),
     trousers: color(appearance?.bottomColor, "#34444f"),
     hair: color(appearance?.hairColor, "#302823"),
@@ -891,6 +891,7 @@ function flightCabin(kit, shirt, appearance, night) {
     {
       x: -3.4,
       z: 0.54,
+      bodyType: "female",
       topColor: "#d89270",
       hairStyle: "bob",
       skinTone: "#c88d69",
@@ -898,6 +899,7 @@ function flightCabin(kit, shirt, appearance, night) {
     {
       x: -2.1,
       z: -0.54,
+      bodyType: "male",
       topColor: "#d4ad4d",
       hairStyle: "curly",
       skinTone: "#704933",
@@ -905,6 +907,7 @@ function flightCabin(kit, shirt, appearance, night) {
     {
       x: -2.1,
       z: 1.5,
+      bodyType: "male",
       topColor: "#589b85",
       hairStyle: "short",
       skinTone: "#e0b28c",
@@ -912,6 +915,7 @@ function flightCabin(kit, shirt, appearance, night) {
     {
       x: -0.8,
       z: 1.02,
+      bodyType: "female",
       topColor: "#9e829b",
       hairStyle: "bun",
       skinTone: "#925f43",
@@ -919,6 +923,7 @@ function flightCabin(kit, shirt, appearance, night) {
     {
       x: 0.5,
       z: -1.02,
+      bodyType: "female",
       topColor: "#589b85",
       hairStyle: "bob",
       skinTone: "#c88d69",
@@ -926,6 +931,7 @@ function flightCabin(kit, shirt, appearance, night) {
     {
       x: 0.5,
       z: 0.54,
+      bodyType: "male",
       topColor: "#d89270",
       hairStyle: "short",
       skinTone: "#e0b28c",
@@ -933,6 +939,7 @@ function flightCabin(kit, shirt, appearance, night) {
     {
       x: 1.8,
       z: 1.5,
+      bodyType: "female",
       topColor: "#d4ad4d",
       hairStyle: "curly",
       skinTone: "#704933",
@@ -950,6 +957,7 @@ function flightCabin(kit, shirt, appearance, night) {
     kit,
     "#344d68",
     {
+      bodyType: "female",
       outfitStyle: "jacket",
       hairStyle: "bun",
       skinTone: "#ab7858",

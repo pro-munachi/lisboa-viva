@@ -55,8 +55,13 @@ export type ChatPanelProps = {
   peers?: MultiplayerPeer[];
   nearbyArea?: string;
   initialPeer?: ChatPeer | null;
+  initialTab?: "messages";
+  embedded?: boolean;
   openPeerRequest?: number;
   onSelectPlayer?: (peer: ChatPeer) => void;
+  onOpenActivities?: () => void;
+  draftStore?: Record<string, ChatDraft>;
+  onDraftChange?: (key: string, draft: ChatDraft) => void;
   onClose: () => void;
 };
 
@@ -75,12 +80,17 @@ export default function ChatPanel({
   peers = [],
   nearbyArea,
   initialPeer,
+  initialTab,
+  embedded = false,
   openPeerRequest,
   onSelectPlayer,
+  onOpenActivities,
+  draftStore,
+  onDraftChange,
   onClose,
 }: ChatPanelProps) {
   const [tab, setTab] = useState<"nearby" | "city" | "here" | "messages">(
-    initialPeer && initialPeer.id !== user.id
+    initialTab === "messages" || (initialPeer && initialPeer.id !== user.id)
       ? "messages"
       : nearbyArea
         ? "nearby"
@@ -89,7 +99,12 @@ export default function ChatPanel({
   const [peer, setPeer] = useState<ChatPeer | null>(
     initialPeer?.id !== user.id ? (initialPeer ?? null) : null,
   );
-  const [drafts, setDrafts] = useState<Record<string, ChatDraft>>({});
+  const [internalDrafts, setInternalDrafts] = useState<
+    Record<string, ChatDraft>
+  >({});
+  const controlledDrafts =
+    draftStore !== undefined && onDraftChange !== undefined;
+  const drafts = controlledDrafts ? draftStore : internalDrafts;
   const closeButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const cityName = getCity(cityId).name;
@@ -115,15 +130,22 @@ export default function ChatPanel({
         : cityName;
   const draftKey = `${user.id}/${room}`;
   const setDraft = useCallback(
-    (next: ChatDraft) => setDrafts((all) => ({ ...all, [draftKey]: next })),
-    [draftKey],
+    (next: ChatDraft) => {
+      if (controlledDrafts) onDraftChange(draftKey, next);
+      else setInternalDrafts((all) => ({ ...all, [draftKey]: next }));
+    },
+    [controlledDrafts, draftKey, onDraftChange],
   );
 
   useEffect(() => {
-    if (!initialPeer || initialPeer.id === user.id) return;
-    setPeer(initialPeer);
-    setTab("messages");
-  }, [initialPeer, openPeerRequest, user.id]);
+    if (initialPeer && initialPeer.id !== user.id) {
+      setPeer(initialPeer);
+      setTab("messages");
+    } else if (initialTab === "messages") {
+      setPeer(null);
+      setTab("messages");
+    }
+  }, [initialPeer, openPeerRequest, initialTab, user.id]);
 
   function openThread(person: ChatPeer) {
     if (person.id === user.id) return;
@@ -136,37 +158,43 @@ export default function ChatPanel({
   }
 
   useEffect(() => {
+    if (embedded) return;
     const previous = document.activeElement;
     closeButton.current?.focus();
     return () => {
       if (previous instanceof HTMLElement && previous.isConnected)
         previous.focus();
     };
-  }, []);
+  }, [embedded]);
 
   return (
     <section
       id="roam-chat"
-      className={styles.panel}
-      role="dialog"
+      className={`${styles.panel}${embedded ? ` ${styles.embedded}` : ""}`}
+      data-embedded={embedded}
+      role={embedded ? undefined : "dialog"}
       aria-labelledby={titleId}
       onKeyDown={(event) => {
-        if (event.key === "Escape") {
+        if (!embedded && event.key === "Escape") {
           event.stopPropagation();
           onClose();
         }
       }}
     >
       <header className={styles.header}>
-        <div className={styles.symbol} aria-hidden="true">
-          <MessageCircle size={21} />
-        </div>
+        {!embedded && (
+          <div className={styles.symbol} aria-hidden="true">
+            <MessageCircle size={21} />
+          </div>
+        )}
         <div className={styles.heading}>
-          <span>
-            {effectiveTab === "messages"
-              ? "PEOPLE BECOME PLANS"
-              : "MAPS BECOME PLANS"}
-          </span>
+          {!embedded && (
+            <span>
+              {effectiveTab === "messages"
+                ? "PEOPLE BECOME PLANS"
+                : "MAPS BECOME PLANS"}
+            </span>
+          )}
           <h2 id={titleId}>
             {effectiveTab === "messages"
               ? "Your messages"
@@ -177,15 +205,17 @@ export default function ChatPanel({
                   : `${cityName} city chat`}
           </h2>
         </div>
-        <button
-          ref={closeButton}
-          type="button"
-          className={styles.close}
-          aria-label="Close chat"
-          onClick={onClose}
-        >
-          <X size={19} />
-        </button>
+        {!embedded && (
+          <button
+            ref={closeButton}
+            type="button"
+            className={styles.close}
+            aria-label="Close chat"
+            onClick={onClose}
+          >
+            <X size={19} />
+          </button>
+        )}
       </header>
       <div className={styles.rooms} role="group" aria-label="Chat room">
         <button
@@ -270,6 +300,7 @@ export default function ChatPanel({
             user={user}
             peers={nearbyArea ? peers : []}
             onOpen={openThread}
+            onOpenActivities={onOpenActivities}
           />
         )
       ) : (
@@ -337,6 +368,8 @@ function RoomConversation({
     (status) => status === 403 || status === 404,
   );
   const retrying = Boolean(draft.attempt?.body === normalizedBody);
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
 
   function publish({
     messages,
@@ -440,11 +473,13 @@ function RoomConversation({
   }, [messages]);
 
   function updateDraft(body: string) {
-    setDraft({
+    const next = {
       body,
       attempt:
         draft.attempt?.body === normalizeChatBody(body) ? draft.attempt : null,
-    });
+    };
+    latestDraft.current = next;
+    setDraft(next);
     setSendError(null);
     setNotice("");
   }
@@ -474,7 +509,9 @@ function RoomConversation({
     setSending(true);
     setSendError(null);
     setNotice("");
-    setDraft({ body: attempt.body, attempt });
+    const pendingDraft = { body: attempt.body, attempt };
+    latestDraft.current = pendingDraft;
+    setDraft(pendingDraft);
     const controller = new AbortController();
     sendController.current = controller;
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -482,10 +519,20 @@ function RoomConversation({
       const message = peerId
         ? await sendDirectMessage(peerId, user.id, attempt, controller.signal)
         : await sendChatMessage(room, attempt, controller.signal);
-      if (!alive.current) return;
+      if (!alive.current || sendController.current !== controller) return;
       publish(timeline.current.acceptSent(message));
-      setDraft(emptyDraft);
-      setNotice("Message sent.");
+      const unchanged =
+        latestDraft.current.body === attempt.body &&
+        latestDraft.current.attempt?.clientId === attempt.clientId;
+      if (unchanged) {
+        latestDraft.current = emptyDraft;
+        setDraft(emptyDraft);
+      }
+      setNotice(
+        unchanged
+          ? "Message sent."
+          : "Your previous message was sent. Your new draft is still here.",
+      );
       refresh.current();
     } catch (error) {
       if (!alive.current) return;
@@ -698,10 +745,12 @@ function DirectInbox({
   user,
   peers,
   onOpen,
+  onOpenActivities,
 }: {
   user: AuthUser;
   peers: MultiplayerPeer[];
   onOpen: (peer: ChatPeer) => void;
+  onOpenActivities?: () => void;
 }) {
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -798,6 +847,24 @@ function DirectInbox({
         aria-label="Message inbox"
         aria-busy={loading}
       >
+        {onOpenActivities && (
+          <button
+            type="button"
+            className={styles.activityLink}
+            onClick={onOpenActivities}
+          >
+            <Sparkles size={20} aria-hidden="true" />
+            <span>
+              <strong>Activity rooms</strong>
+              <small>Make a plan, chat and go together</small>
+            </span>
+            <ArrowLeft
+              size={16}
+              className={styles.activityArrow}
+              aria-hidden="true"
+            />
+          </button>
+        )}
         {loading ? (
           <p className={styles.loading}>Loading your messages…</p>
         ) : conversations.length ? (

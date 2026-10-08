@@ -1,0 +1,320 @@
+.dialog {
+  width: min(960px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100svh - 32px);
+  padding: 0;
+  border: 1px solid #ffffffb3;
+  border-radius: 28px;
+  color: var(--roam-ink, #213052);
+  background: #fffefa;
+  box-shadow: 0 28px 90px #10244545;
+  overflow: hidden;
+}
+
+.dialog::backdrop {
+  background: #17223994;
+  backdrop-filter: blur(5px);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100svh - 34px);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 20px 24px 18px;
+  border-bottom: 1px solid #e8ebe4;
+  flex-shrink: 0;
+}
+
+.header > div:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.symbol {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  color: var(--roam-cobalt, #2456d8);
+  background: var(--roam-lime, #d7ee83);
+  flex-shrink: 0;
+}
+
+.eyebrow {
+  color: var(--roam-cobalt, #2456d8);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 1.25px;
+}
+
+.header h2 {
+  margin: 4px 0 4px;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.8px;
+}
+
+.header p {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--roam-muted, #5f6a80);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--roam-ink, #213052);
+  background: #f0f2ee;
+  flex-shrink: 0;
+}
+
+.body {
+  padding: 22px 24px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.editor {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-top: 1px solid #e8ebe4;
+  background: #fafbf6;
+  flex-shrink: 0;
+}
+
+.feedback {
+  min-width: 0;
+  flex: 1;
+  color: var(--roam-muted, #5f6a80);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.feedback p {
+  margin: 0;
+}
+
+.statusDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #658573;
+  vertical-align: middle;
+}
+
+.statusDot.unsaved {
+  background: #ca8d30;
+}
+
+.feedback .error {
+  color: #9d3041;
+}
+
+.error a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 48px;
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 14px;
+  transition: background-color 120ms ease, transform 130ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cancel {
+  color: var(--roam-ink, #213052);
+  border: 1px solid #dce3d8;
+  background: #fffefa;
+}
+
+.save {
+  min-width: 142px;
+  color: white;
+  background: var(--roam-cobalt, #2456d8);
+}
+
+.dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.form[aria-busy="true"] button:disabled {
+  cursor: wait;
+}
+
+.dialog button:focus-visible,
+.dialog a:focus-visible,
+.accountButton.accountButton:focus-visible,
+.accountIcon.accountIcon:focus-visible {
+  outline: 3px solid var(--roam-coral, #f47f6d);
+  outline-offset: 3px;
+}
+
+.dialog button:active:not(:disabled),
+.accountButton.accountButton:active:not(:disabled),
+.accountIcon.accountIcon:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.dialog button:active:focus-visible {
+  transform: none;
+}
+
+.account.account {
+  max-width: calc(100% - 24px);
+  gap: 8px;
+}
+
+.accountIdentity.accountIdentity {
+  min-width: 0;
+  max-width: 130px;
+}
+
+.accountIdentity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountButton.accountButton {
+  display: inline-flex;
+  gap: 7px;
+  width: auto;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.accountIcon.accountIcon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+}
+
+.notice {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 600px) {
+  .dialog {
+    width: calc(100% - 16px);
+    max-height: calc(100svh - 16px);
+    border-radius: 22px;
+  }
+
+  .form {
+    max-height: calc(100svh - 18px);
+  }
+
+  .header {
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .symbol {
+    display: none;
+  }
+
+  .eyebrow {
+    font-size: 9px;
+    letter-spacing: 0.9px;
+  }
+
+  .header h2 {
+    font-size: 25px;
+  }
+
+  .body {
+    padding: 16px;
+  }
+
+  .footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions button {
+    flex: 1;
+  }
+
+  .accountIdentity.accountIdentity {
+    max-width: 94px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .close:hover,
+  .cancel:hover {
+    background: #e9eee4;
+  }
+  .save:hover:not(:disabled) {
+    background: #1d43bc;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actions button {
+    transition: none;
+  }
+  .dialog button:active:not(:disabled) {
+    transform: none;
+  }
+}

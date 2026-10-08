@@ -7,6 +7,7 @@ import type { InteriorKind } from "../lib/interiors";
 const THREE = require("three");
 const venueId = "node:11341409242";
 const appearance = {
+  bodyType: "male",
   outfitStyle: "jacket",
   topColor: "#b47459",
   bottomColor: "#34444f",
@@ -338,6 +339,52 @@ test("passive roster updates preserve actor resources, room camera and an active
   }
 });
 
+test("saving the local wardrobe keeps the room, camera, active workout and other players in place", () => {
+  const h = harness();
+  try {
+    h.enter("gym");
+    h.runtime.setPeers([peer(1)]);
+    h.runtime.perform("weights", 2000);
+    for (let i = 0; i < 1200 && h.events.at(-1)?.state !== "active"; i++)
+      h.runtime.update(1 / 60, true);
+    assert.equal(h.events.at(-1)?.state, "active");
+    const old = h.localActor(),
+      room = h.room(),
+      others = [...h.actors()];
+    const location = old.position.toArray(),
+      camera = h.camera.position.toArray(),
+      target = h.controls.target.toArray();
+    const events = h.events.length,
+      controls = h.controls.updates;
+    const counts = watchResources(old);
+    h.runtime.setAppearance({
+      ...appearance,
+      bodyType: "female",
+      outfitStyle: "dress",
+      hairStyle: "bob",
+      topColor: "#687f73",
+    });
+    assert.equal(h.room(), room);
+    assert.notEqual(h.localActor(), old);
+    assert.equal(h.localActor().userData.bodyType, "female");
+    assert.equal(h.localActor().userData.style, "dress");
+    assert.equal(h.localActor().userData.hairStyle, "bob");
+    assert.deepEqual(h.localActor().position.toArray(), location);
+    assert.deepEqual(h.actors(), others);
+    assert.deepEqual(h.camera.position.toArray(), camera);
+    assert.deepEqual(h.controls.target.toArray(), target);
+    assert.equal(h.controls.updates, controls);
+    assert.equal(h.events.length, events);
+    assert.ok([...counts.values()].every((count) => count === 1));
+    for (let i = 0; i < 600 && h.events.at(-1)?.state !== "complete"; i++)
+      h.runtime.update(1 / 60, true);
+    assert.equal(h.events.at(-1)?.zoneId, "weights");
+    assert.equal(h.events.at(-1)?.state, "complete");
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
 test("appearance and identity changes rebuild only the changed peer while leaving its floor placement and other peers stable", () => {
   const h = harness();
   try {
@@ -493,4 +540,79 @@ test("browser-only peer labels are owned canvas textures and dispose once; headl
     if (original) Object.defineProperty(globalThis, "document", original);
     else delete (globalThis as any).document;
   }
+});
+
+test("shared gestures affect only present real players, deduplicate and reset after a bounded animation", () => {
+  const h = harness();
+  h.enter("bar");
+  const person = peer(1);
+  h.runtime.setPeers([person]);
+  const local = h.localActor();
+  const present = h.actors()[0];
+  const position = present.position.clone();
+  const event = {
+    id: "confirmed-wave",
+    venueId,
+    kind: "wave",
+    actorId: person.id,
+    viewerId: peer(99).id,
+  };
+  assert.equal(h.runtime.social({ ...event, venueId: "other-room" }), false);
+  assert.equal(h.runtime.social({ ...event, actorId: peer(2).id }), false);
+  assert.equal(
+    h.actors().length,
+    1,
+    "a room member without presence is never fabricated",
+  );
+  assert.equal(h.runtime.social(event), true);
+  assert.equal(
+    h.runtime.social(event),
+    false,
+    "poll retries do not repeat the same confirmed action",
+  );
+  h.runtime.update(0.1, true);
+  assert.equal(present.userData.rig.rightArm.rotation.z, 1.7);
+  assert.notEqual(local.userData.rig.rightArm.rotation.z, 1.7);
+  assert.ok(
+    present.position.equals(position),
+    "gesture never moves a real player's location",
+  );
+  for (let i = 0; i < 55; i++) h.runtime.update(0.1, true);
+  assert.ok(Math.abs(present.userData.rig.rightArm.rotation.z) < 0.1);
+  h.runtime.dispose();
+});
+
+test("accepted bar showdown poses both participants without contact and clears on exit", () => {
+  const h = harness();
+  h.enter("bar");
+  const person = peer(1),
+    viewer = peer(99);
+  h.runtime.setPeers([person]);
+  const local = h.localActor(),
+    present = h.actors()[0];
+  const beforeLocal = local.position.clone(),
+    beforePeer = present.position.clone();
+  const event = {
+    id: "confirmed-accepted-showdown",
+    venueId,
+    kind: "accept-challenge",
+    actorId: person.id,
+    targetId: viewer.id,
+    viewerId: viewer.id,
+  };
+  assert.equal(h.runtime.social(event), true);
+  h.runtime.update(0.1, true);
+  assert.ok(local.userData.rig.leftArm.rotation.x < -0.8);
+  assert.ok(present.userData.rig.leftArm.rotation.x < -0.8);
+  assert.ok(local.position.equals(beforeLocal));
+  assert.ok(present.position.equals(beforePeer));
+  h.runtime.clear();
+  assert.equal(h.runtime.social(event), false);
+  h.enter("cafe");
+  assert.equal(
+    h.runtime.social(event),
+    false,
+    "showdowns belong to bar scenes",
+  );
+  h.runtime.dispose();
 });

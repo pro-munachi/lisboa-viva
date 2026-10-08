@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -28,12 +28,28 @@ import {
   Settings,
   Sparkles,
   Sun,
+  Smartphone,
+  UserRound,
+  Users,
   Wallet,
   Waves,
   Zap,
 } from "lucide-react";
 import World from "../../components/World";
 import AuthBoundary from "../../components/AuthBoundary";
+import Phone, { type PhoneApp } from "../../components/Phone";
+import ProfileMenu from "../../components/ProfileMenu";
+import ActivitiesPanel from "../../components/ActivitiesPanel";
+import ActivityOuting from "../../components/ActivityOuting";
+import SimulationWallet from "../../components/SimulationWallet";
+import {
+  getActivity,
+  type ActivityRoom,
+  type ActivityEvent,
+  type ActivityWallet,
+} from "../../lib/activities";
+import type { SocialSceneEvent } from "../../components/World";
+import { useProfileActions } from "../../components/ProfileActions";
 import type { AuthUser } from "../../lib/auth";
 import { accountStorageKeys } from "../../lib/account-storage";
 import { TRAVELLER_COLOURS } from "../../lib/traveller-colours";
@@ -52,6 +68,7 @@ import type {
   MultiplayerPeer,
 } from "../../lib/presence-client";
 import type { ChatPeer } from "../../lib/direct-client";
+import { ChatRequestError, type ChatDraft } from "../../lib/chat-client";
 import { chatPlaceFor } from "../../lib/chat-rooms";
 import {
   TravelCompletionGate,
@@ -202,6 +219,15 @@ function RoamExperience({ user }: { user: AuthUser }) {
     status: presenceStatus,
   } = useMultiplayer();
   const [nearbyOpen, setNearbyOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [activitiesOpen, setActivitiesOpen] = useState(false);
+  const [cityNow, setCityNow] = useState<Date | null>(null);
+  const phoneTrigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    setCityNow(new Date());
+    const timer = setInterval(() => setCityNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const [visitedLocation, setVisitedLocation] = useState<PresenceLocation>({
     latitude: placeFocus.cais.lat,
     longitude: placeFocus.cais.lng,
@@ -223,12 +249,108 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [pinError, setPinError] = useState("");
   const [pinName, setPinName] = useState("");
   const [clean, setClean] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [phoneStart, setPhoneStart] = useState<
+    "messages" | "activities" | undefined
+  >();
+  const [chatDrafts, setChatDrafts] = useState<Record<string, ChatDraft>>({});
+  const rememberChatDraft = useCallback((key: string, draft: ChatDraft) => {
+    setChatDrafts((all) => ({ ...all, [key]: draft }));
+  }, []);
   const [selectedPlayer, setSelectedPlayer] = useState<ChatPeer | null>(null);
   const [chatPeer, setChatPeer] = useState<ChatPeer | null>(null);
   const [openPeerRequest, setOpenPeerRequest] = useState(0);
   const chatTrigger = useRef<HTMLButtonElement>(null);
   const [interior, setInterior] = useState<InteriorVisit | null>(null);
+  const [activityId, setActivityId] = useState<string | null>(null);
+  const [activityRoom, setActivityRoom] = useState<ActivityRoom | null>(null);
+  const [activityWallet, setActivityWallet] = useState<ActivityWallet | null>(
+    null,
+  );
+  const [socialEvent, setSocialEvent] = useState<SocialSceneEvent | null>(null);
+  const activityEventsSeen = useRef<{
+    roomId: string;
+    ids: Set<string>;
+  } | null>(null);
+  const selectActivity = useCallback((id: string | null) => {
+    setActivityId(id);
+    setActivityRoom((current) => (current?.id === id ? current : null));
+    setSocialEvent(null);
+    if (!id || activityEventsSeen.current?.roomId !== id)
+      activityEventsSeen.current = null;
+  }, []);
+  const receiveActivityAction = useCallback(
+    (event: ActivityEvent, venueId?: string) => {
+      const room = activityEventsSeen.current;
+      if (room) room.ids.add(event.id);
+      if (!venueId) return;
+      setSocialEvent({
+        id: event.id,
+        venueId,
+        kind: event.kind,
+        actorId: event.actor.id,
+        targetId: event.target?.id,
+        viewerId: user.id,
+      });
+    },
+    [user.id],
+  );
+  const receiveActivityRoom = useCallback(
+    (room: ActivityRoom | null) => {
+      setActivityRoom(room);
+      if (!room) return;
+      const previous = activityEventsSeen.current;
+      if (previous?.roomId === room.id) {
+        for (const event of room.events) {
+          if (
+            !previous.ids.has(event.id) &&
+            Date.now() - Date.parse(event.createdAt) < 15_000
+          )
+            receiveActivityAction(event, room.venueId);
+          previous.ids.add(event.id);
+        }
+        // The server retains thirty recent events. Keep the deduplication set bounded too.
+        if (previous.ids.size > 150)
+          previous.ids = new Set(room.events.map((event) => event.id));
+      } else
+        activityEventsSeen.current = {
+          roomId: room.id,
+          ids: new Set(room.events.map((event) => event.id)),
+        };
+    },
+    [receiveActivityAction],
+  );
+  useEffect(() => {
+    if (!activityId || phoneOpen) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    async function updateRoom() {
+      try {
+        const result = await getActivity(
+          activityId!,
+          controller.signal,
+          user.id,
+        );
+        if (controller.signal.aborted) return;
+        receiveActivityRoom(result.activity);
+        setActivityWallet(result.wallet);
+      } catch (reason) {
+        if (controller.signal.aborted) return;
+        if (
+          reason instanceof ChatRequestError &&
+          [403, 404, 410].includes(reason.status)
+        ) {
+          selectActivity(null);
+          return;
+        }
+      }
+      if (!controller.signal.aborted) timer = setTimeout(updateRoom, 3_000);
+    }
+    void updateRoom();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [activityId, phoneOpen, user.id, receiveActivityRoom, selectActivity]);
   const beforeInterior = useRef(false);
   const worldHotspots = useMemo<WorldHotspot[]>(
     () => [
@@ -294,10 +416,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [loaded, setLoaded] = useState(false);
   const [archive, setArchive] = useState<Trip[]>([]);
   const [setup, setSetup] = useState<Setup>(initial);
-  const travellerAppearance = useMemo(
-    () => ({ ...appearance, topColor: trip?.setup.shirt || setup.shirt }),
-    [appearance, trip?.setup.shirt, setup.shirt],
-  );
+  const travellerAppearance = appearance;
   const [calendarValid, setCalendarValid] = useState(true);
   const [panel, setPanel] = useState<Panel>(null);
   const [destination, setDestination] = useState<PlaceId | null>(null);
@@ -347,8 +466,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
       outcome,
     });
     setTravelSequence(sequence);
+    setPhoneOpen(false);
+    setActivitiesOpen(false);
     setPanel(null);
-    setChatOpen(false);
     setNearbyOpen(false);
     setSelectedPlayer(null);
     setMapHotspot(null);
@@ -391,6 +511,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setPanel(null);
   }
   function leaveRoom() {
+    setSocialEvent(null);
     setInterior(null);
     setVisitedLocation(({ placeId: _placeId, ...location }) => location);
     setClean(beforeInterior.current);
@@ -674,6 +795,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     : undefined;
   function selectPlayer(player: ChatPeer) {
     if (player.id === user.id || travelSequence) return;
+    setPhoneOpen(false);
     setPanel(null);
     setNearbyOpen(false);
     setSelectedPlayer({
@@ -689,13 +811,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setSelectedPlayer(null);
     setNearbyOpen(false);
     setPanel(null);
-    setChatOpen(true);
+    setPhoneStart("messages");
+    setPhoneOpen(true);
   }
   function findPlayer() {
     if (!selectedPresence) return;
     const place = playerPlace(selectedPresence.placeId);
     setSelectedPlayer(null);
-    setChatOpen(false);
     leaveRoom();
     setMapHotspot(place?.hotspot || null);
     setPanel(place ? "hotspot" : null);
@@ -721,7 +843,6 @@ function RoamExperience({ user }: { user: AuthUser }) {
     }
     setNearbyOpen(false);
     setSelectedPlayer(null);
-    setChatOpen(false);
     if (interior?.id === place.id) {
       notify(`You’re already together at ${place.name}.`);
       return;
@@ -741,12 +862,388 @@ function RoamExperience({ user }: { user: AuthUser }) {
     });
     notify(`You joined @${live.handle} at ${place.name}.`);
   }
+  function closePhone() {
+    setPhoneOpen(false);
+  }
+  function closeOverlays() {
+    setPhoneOpen(false);
+    setPanel(null);
+    setNearbyOpen(false);
+    setSelectedPlayer(null);
+    setActivitiesOpen(false);
+  }
+  function openFeature(next: Panel) {
+    closeOverlays();
+    setPanel(next);
+  }
+  function openMessages() {
+    closeOverlays();
+    setChatPeer(null);
+    setPhoneStart("messages");
+    setPhoneOpen(true);
+  }
+  function openNearby() {
+    closeOverlays();
+    setNearbyOpen(true);
+  }
+  function openSharedActivities() {
+    closeOverlays();
+    setPhoneStart("activities");
+    setPhoneOpen(true);
+  }
+  function visitActivityVenue(venueId: string, id: string) {
+    if (travelGate.current.pending) {
+      notify("Finish your journey before joining this outing.");
+      return;
+    }
+    const place = playerPlace(venueId);
+    if (!place) {
+      notify(
+        "This activity's mapped venue is unavailable. Open the room and choose another outing.",
+      );
+      return;
+    }
+    selectActivity(id);
+    closeOverlays();
+    setMapHotspot(place.hotspot);
+    setMapFocus({
+      lat: place.lat,
+      lng: place.lng,
+      name: place.name,
+      range: 100,
+    });
+    // Visiting is a personal choice; joining the chat never moves another player.
+    if (place.kind)
+      enterRoom({
+        id: place.id,
+        name: place.name,
+        kind: place.kind,
+        sourceUrl: place.hotspot.sourceUrl,
+      });
+    else {
+      if (interior) leaveRoom();
+      setVisitedLocation({
+        latitude: place.lat,
+        longitude: place.lng,
+        area: place.area,
+        placeId: place.id,
+      });
+      setClean(true);
+    }
+    notify(
+      `You arrived at ${place.name}. Open your activity room to chat and take part.`,
+    );
+  }
+
+  useProfileActions([
+    {
+      id: "trip-settings",
+      label: "Trip settings & saved chapters",
+      detail: "Your budget, recaps and saved trips",
+      icon: "settings",
+      onSelect: () => openFeature("pocket"),
+    },
+    {
+      id: "passport",
+      label: "District passport",
+      detail: trip
+        ? `${visited.size} places discovered`
+        : "Start a trip to collect memories",
+      icon: "passport",
+      disabled: !trip,
+      onSelect: () => openFeature("journal"),
+    },
+    {
+      id: "home",
+      label: "Your home",
+      detail: trip?.setup.base || setup.base,
+      icon: "home",
+      onSelect: () => {
+        closeOverlays();
+        enterHome();
+      },
+    },
+    {
+      id: "new-chapter",
+      label: trip ? "Start a new chapter" : "Plan your arrival",
+      detail: "Your dates, interests and travel style",
+      icon: "trip",
+      disabled: !loaded,
+      onSelect: () => openFeature(trip ? "new" : "setup"),
+    },
+  ]);
+  const phoneTime = trip
+    ? `${String(Math.floor(trip.minute / 60)).padStart(2, "0")}:${String(trip.minute % 60).padStart(2, "0")}`
+    : cityNow?.toLocaleTimeString("en-GB", {
+        timeZone: "Europe/Lisbon",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) || "—:—";
+  const phoneDate = trip
+    ? `Day ${trip.day} · ${trip.setup.days}-day chapter`
+    : cityNow?.toLocaleDateString("en-GB", {
+        timeZone: "Europe/Lisbon",
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      }) || "Your Lisbon chapter";
+  const phoneApps: PhoneApp[] = [
+    {
+      id: "profile",
+      label: "Profile",
+      detail: "Your character, trip & account",
+      icon: UserRound,
+      content: <ProfileMenu onAction={closePhone} />,
+    },
+    {
+      id: "messages",
+      label: "Messages",
+      detail: "City chats & private messages",
+      icon: MessageCircle,
+      layout: "fill",
+      content: (
+        <ChatPanel
+          embedded
+          key={user.id}
+          user={user}
+          cityId="lisbon"
+          place={chatPlace}
+          initialPeer={chatPeer}
+          initialTab="messages"
+          draftStore={chatDrafts}
+          onDraftChange={rememberChatDraft}
+          openPeerRequest={openPeerRequest}
+          onSelectPlayer={selectPlayer}
+          onOpenActivities={openSharedActivities}
+          peers={peers}
+          nearbyArea={enabled ? location.area : undefined}
+          onClose={closePhone}
+        />
+      ),
+    },
+    {
+      id: "activities",
+      label: "Activities",
+      detail: "Create a plan. Meet in the city.",
+      icon: Sparkles,
+      layout: "fill",
+      content: (
+        <ActivitiesPanel
+          user={user}
+          presenceEnabled={enabled}
+          selectedActivityId={activityId}
+          onActivityChange={selectActivity}
+          onRoomChange={receiveActivityRoom}
+          onAction={(event) =>
+            receiveActivityAction(event, activityRoom?.venueId)
+          }
+          currentVenueId={
+            enabled && presenceStatus === "online"
+              ? visitedLocation.placeId
+              : undefined
+          }
+          onVisitVenue={visitActivityVenue}
+          onWalletChange={setActivityWallet}
+          draftStore={chatDrafts}
+          onDraftChange={rememberChatDraft}
+        />
+      ),
+    },
+    {
+      id: "nearby",
+      label: "Nearby",
+      detail: "Find players & join their venue",
+      icon: Users,
+      onOpen: openNearby,
+    },
+    {
+      id: "journey",
+      label: "Journey",
+      detail: "Transport card, tickets & arrival",
+      icon: Ticket,
+      onOpen: () => openFeature(trip ? "journey" : "setup"),
+    },
+    {
+      id: "journal",
+      label: "Journal",
+      detail: "Your passport & collected memories",
+      icon: BookOpen,
+      content: trip ? (
+        <section className="phone-page">
+          <span className="phone-stamp">
+            <BookOpen size={28} />
+          </span>
+          <h3>Your Lisbon story</h3>
+          <p>
+            {memories(trip).length} memories · {visited.size} places discovered
+          </p>
+          <div className="phone-memory-list">
+            {memories(trip)
+              .slice(-3)
+              .reverse()
+              .map((memory) => (
+                <div key={memory.command.key}>
+                  <strong>{memory.title}</strong>
+                  <small>
+                    Day {memory.day} · {places[memory.place].district}
+                  </small>
+                </div>
+              ))}
+            {!memories(trip).length && (
+              <p>
+                Your first memory is waiting. Pick a place and try something
+                new.
+              </p>
+            )}
+          </div>
+          <button onClick={() => openFeature("journal")}>
+            <Compass size={18} /> Open district passport{" "}
+            <ChevronRight size={17} />
+          </button>
+          <button onClick={download}>
+            <Download size={18} /> Download itinerary
+          </button>
+        </section>
+      ) : (
+        <section className="phone-page">
+          <span className="phone-stamp">
+            <BookOpen size={28} />
+          </span>
+          <h3>A story waiting to happen</h3>
+          <p>
+            Plan your arrival, then collect places and small discoveries as you
+            explore.
+          </p>
+          <button onClick={() => openFeature("setup")}>
+            <Plane size={18} /> Plan your arrival
+          </button>
+        </section>
+      ),
+    },
+    {
+      id: "wallet",
+      label: "Wallet",
+      detail: "Your activity budget & wellbeing",
+      icon: Wallet,
+      content: (
+        <section className="phone-page">
+          <span className="phone-stamp">
+            <Wallet size={28} />
+          </span>
+          <SimulationWallet
+            wallet={activityWallet}
+            onChange={setActivityWallet}
+          />
+          <h3>
+            {trip ? euro(trip.setup.budget - trip.spent) : "Your city budget"}
+          </h3>
+          <p>
+            {trip
+              ? `${euro(trip.spent)} spent of ${euro(trip.setup.budget)} · Day ${trip.day} of ${trip.setup.days}`
+              : "Choose an activity budget when you plan your trip."}
+          </p>
+          {trip && (
+            <div className="meters phone-meters">
+              {(
+                [
+                  ["Energy", trip.energy, Zap],
+                  ["Inspiration", trip.inspiration, Sparkles],
+                  ["Connection", trip.connection, Heart],
+                ] as const
+              ).map(([label, value, Icon]) => (
+                <div key={label} className="meter">
+                  <div>
+                    <span>
+                      <Icon size={14} />
+                      {label}
+                    </span>
+                    <span>{value}%</span>
+                  </div>
+                  <meter min={0} max={100} value={value} aria-label={label} />
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="phone-note">
+            A simulated activity budget. Transport and experiences use
+            illustrative costs.
+          </p>
+          <button onClick={() => openFeature(trip ? "pocket" : "setup")}>
+            <Settings size={18} />{" "}
+            {trip ? "Trip settings & recaps" : "Plan your trip"}
+            <ChevronRight size={17} />
+          </button>
+        </section>
+      ),
+    },
+    {
+      id: "home",
+      label: "Home",
+      detail: `Your base in ${trip?.setup.base || setup.base}`,
+      icon: Home,
+      onOpen: () => {
+        closeOverlays();
+        enterHome();
+      },
+    },
+    {
+      id: "guide",
+      label: "City guide",
+      detail: "Explore Lisbon at your pace",
+      icon: Compass,
+      content: (
+        <section className="phone-page">
+          <span className="phone-stamp">
+            <Compass size={28} />
+          </span>
+          <h3>Make the city yours</h3>
+          <p>
+            Tap a floating place icon to visit. Drag to rotate, use Pan to move
+            and scroll to zoom. View options holds the camera and scene
+            controls.
+          </p>
+          <button onClick={() => openFeature("map-search")}>
+            <Search size={18} /> Find cafés, beaches & more{" "}
+            <ChevronRight size={17} />
+          </button>
+          {!interior && (
+            <button
+              aria-pressed={clean}
+              onClick={() => {
+                setClean((value) => !value);
+                closePhone();
+              }}
+            >
+              {clean ? <Eye size={18} /> : <EyeOff size={18} />}
+              {clean ? "Show city prompts" : "Focus on the scenery"}
+            </button>
+          )}
+          <div className="phone-guide-note">
+            <strong>Try the city before you go.</strong>
+            <p>
+              ROAM is a city simulation. Places use real positions; characters,
+              activities, costs and journeys are illustrative.
+            </p>
+            <a
+              href="https://www.visitlisboa.com/en"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Explore Visit Lisboa <ArrowUpRight size={15} />
+            </a>
+          </div>
+        </section>
+      ),
+    },
+  ];
   return (
     <main className="app-shell">
-      <div className={clean || travelSequence ? "game clean-world" : "game"}>
+      <div
+        className={`game roam-play${clean || travelSequence ? " clean-world" : ""}`}
+      >
         <World
           focus={mapFocus}
-          shirt={trip?.setup.shirt || setup.shirt}
+          shirt={appearance.topColor}
           appearance={travellerAppearance}
           hotspots={worldHotspots}
           onHotspot={pickHotspot}
@@ -761,54 +1258,46 @@ function RoamExperience({ user }: { user: AuthUser }) {
           }}
           peers={peers}
           onPlayer={selectPlayer}
+          socialEvent={socialEvent}
+          sharedOuting={Boolean(
+            activityRoom && interior?.id === activityRoom.venueId,
+          )}
         />
+        {activityRoom && !phoneOpen && !travelSequence && (
+          <ActivityOuting
+            activity={activityRoom}
+            venueName={
+              playerPlace(activityRoom.venueId)?.name || "Your meeting place"
+            }
+            atVenue={visitedLocation.placeId === activityRoom.venueId}
+            presentCount={
+              peers.filter(
+                (peer) =>
+                  peer.placeId === activityRoom.venueId &&
+                  activityRoom.members.some((member) => member.id === peer.id),
+              ).length
+            }
+            onOpen={openSharedActivities}
+            onVisit={() =>
+              visitActivityVenue(activityRoom.venueId, activityRoom.id)
+            }
+            onExit={() => {
+              leaveRoom();
+              setClean(false);
+            }}
+          />
+        )}
         {!travelSequence && (
           <MultiplayerDock
             onSelect={selectPlayer}
             onFind={() => {
               setPanel(null);
-              setChatOpen(false);
               setSelectedPlayer(null);
               setNearbyOpen(true);
             }}
             currentPlaceId={visitedLocation.placeId}
             inside={Boolean(interior)}
           />
-        )}
-        {!travelSequence && (
-          <div className="map-tools">
-            <button onClick={() => setPanel(trip ? "journey" : "setup")}>
-              <Ticket size={16} /> {trip ? "Your journey" : "Arrive in Lisbon"}
-            </button>
-            <button onClick={() => setPanel("map-search")}>
-              <Search size={16} /> Find a hotspot
-            </button>
-            <button onClick={enterHome}>
-              <Home size={16} /> Your home
-            </button>
-            <button
-              ref={chatTrigger}
-              aria-expanded={chatOpen}
-              aria-controls={chatOpen ? "roam-chat" : undefined}
-              onClick={() => {
-                setPanel(null);
-                setChatOpen((open) => !open);
-              }}
-            >
-              <MessageCircle size={16} /> Chats
-            </button>
-            {!interior && (
-              <button onClick={() => setClean((v) => !v)}>
-                {clean ? <Eye size={16} /> : <EyeOff size={16} />}{" "}
-                {clean ? "Show trip" : "Clean screen"}
-              </button>
-            )}
-            <span>
-              {interior
-                ? `INSIDE ${interior.name.toUpperCase()}`
-                : `VIEWING ${mapFocus.name.toUpperCase()}`}
-            </span>
-          </div>
         )}
         {!travelSequence && (
           <header className="topbar">
@@ -836,16 +1325,6 @@ function RoamExperience({ user }: { user: AuthUser }) {
                 <span>A CITY TO TRY BEFORE YOU GO</span>
               </div>
             )}
-            <button
-              className="wallet"
-              disabled={Boolean(travelSequence)}
-              onClick={() => setPanel("pocket")}
-            >
-              <Wallet size={18} />
-              <span>
-                {trip ? euro(trip.setup.budget - trip.spent) : "Meet ROAM"}
-              </span>
-            </button>
           </header>
         )}
         {!travelSequence &&
@@ -893,32 +1372,6 @@ function RoamExperience({ user }: { user: AuthUser }) {
             </>
           ) : (
             <>
-              <aside className="missions card">
-                <div className="mission-symbol">
-                  <Compass size={20} />
-                </div>
-                <div>
-                  <strong>
-                    {trip.complete
-                      ? "A chapter worth keeping"
-                      : "Find your own Lisbon"}
-                  </strong>
-                  <p>
-                    {trip.complete
-                      ? `${memories(trip).length} memories in your journal`
-                      : trip.journey.phase === "arriving"
-                        ? "You have landed. Your first city journey starts here."
-                        : JOURNEY_PERSONAS[trip.setup.persona || "tourist"]
-                            .missions[0].detail}
-                  </p>
-                  <button
-                    className="text-button"
-                    onClick={() => setPanel("journal")}
-                  >
-                    Your district passport <ChevronRight size={13} />
-                  </button>
-                </div>
-              </aside>
               <div className="place-pill">
                 <span className="live-dot" />
                 <PlaceIcon size={14} />
@@ -929,41 +1382,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
                   <b>·</b> {trip.journey.hub ? "Transport hub" : placeDistrict}
                 </span>
               </div>
-              <nav className="nav card" aria-label="Game navigation">
-                <button
-                  onClick={() => {
-                    if (place === "home") setPanel(null);
-                    else {
-                      setDestination("home");
-                      setPanel("travel");
-                    }
-                  }}
-                  aria-pressed={place === "home" && !panel}
-                >
-                  <Home />
-                  <span>Home</span>
-                </button>
-                <button onClick={openTravel} aria-pressed={panel === "travel"}>
-                  <Map />
-                  <span>Travel</span>
-                </button>
-                <button
-                  onClick={() => setPanel("journal")}
-                  aria-pressed={panel === "journal"}
-                >
-                  <BookOpen />
-                  <span>Journal</span>
-                </button>
-                <button
-                  onClick={() => setPanel("pocket")}
-                  aria-pressed={panel === "pocket"}
-                >
-                  <Settings />
-                  <span>Pocket</span>
-                </button>
-              </nav>
               <section
                 className="interaction card"
+                id="city-experiences"
+                hidden={!activitiesOpen}
                 aria-label="Available experiences"
               >
                 {(trip.journey.phase === "arriving" || trip.journey.ticket) &&
@@ -1086,65 +1508,73 @@ function RoamExperience({ user }: { user: AuthUser }) {
                   </>
                 )}
               </section>
-              <section className="needs card" aria-label="Your traveller">
-                <div className="traveller">
-                  <span
-                    className="face"
-                    style={{ background: trip.setup.shirt }}
-                  >
-                    ✦
-                  </span>
-                  <div>
-                    <strong>
-                      {JOURNEY_PERSONAS[trip.setup.persona || "tourist"].name},
-                      in Lisbon
-                    </strong>
-                    <small>
-                      {trip.setup.style} · {trip.setup.days} days
-                    </small>
-                  </div>
-                  <button
-                    className="icon-button"
-                    onClick={() => setPanel("pocket")}
-                    aria-label="Trip settings"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-                <div className="meters">
-                  {[
-                    ["Energy", trip.energy, Zap],
-                    ["Inspiration", trip.inspiration, Sparkles],
-                    ["Connection", trip.connection, Heart],
-                  ].map(([label, value, Icon]) => {
-                    const MeterIcon = Icon as typeof Zap;
-                    return (
-                      <div key={label as string} className="meter">
-                        <div>
-                          <span>
-                            <MeterIcon size={12} />
-                            {label as string}
-                          </span>
-                          <span>{value as number}%</span>
-                        </div>
-                        <meter
-                          min={0}
-                          max={100}
-                          value={value as number}
-                          aria-label={label as string}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-              <div className="world-tip">
-                Drag to rotate · Scroll to zoom.
-                <br />
-                Tap an icon to explore a place.
-              </div>
             </>
           ))}
+        {!travelSequence && (
+          <>
+            {trip && !interior && !clean && (
+              <button
+                className="experience-toggle"
+                aria-label={
+                  activitiesOpen ? "Close experiences" : "Things to do"
+                }
+                aria-expanded={activitiesOpen}
+                aria-controls="city-experiences"
+                onClick={() => setActivitiesOpen((open) => !open)}
+              >
+                <Sparkles size={18} />
+                <span>
+                  {activitiesOpen ? "Close experiences" : "Things to do"}
+                </span>
+                <ChevronRight size={17} />
+              </button>
+            )}
+            <nav className="nav card city-nav" aria-label="City navigation">
+              <button
+                onClick={() => openFeature("map-search")}
+                aria-pressed={panel === "map-search"}
+              >
+                <Search />
+                <span>Explore</span>
+              </button>
+              <button
+                onClick={() => {
+                  closeOverlays();
+                  trip ? openTravel() : setPanel("setup");
+                }}
+                aria-pressed={
+                  panel === "travel" || panel === "journey" || panel === "setup"
+                }
+              >
+                <Map />
+                <span>Travel</span>
+              </button>
+              <button
+                ref={chatTrigger}
+                onClick={openMessages}
+                aria-haspopup="dialog"
+              >
+                <MessageCircle />
+                <span>Chat</span>
+              </button>
+              <button
+                ref={phoneTrigger}
+                className="phone-trigger"
+                onClick={() => {
+                  closeOverlays();
+                  setPhoneStart(undefined);
+                  setChatPeer(null);
+                  setPhoneOpen(true);
+                }}
+                aria-haspopup="dialog"
+                aria-expanded={phoneOpen}
+              >
+                <Smartphone />
+                <span>Phone</span>
+              </button>
+            </nav>
+          </>
+        )}
         <footer className="game-footnote">
           ROAM · SIMULATED TRIPS & CITY ENCOUNTERS
         </footer>
@@ -1166,23 +1596,15 @@ function RoamExperience({ user }: { user: AuthUser }) {
           </div>
         )}
       </div>
-      {chatOpen && (
-        <ChatPanel
-          key={user.id}
-          user={user}
-          cityId="lisbon"
-          place={chatPlace}
-          initialPeer={chatPeer}
-          openPeerRequest={openPeerRequest}
-          onSelectPlayer={selectPlayer}
-          peers={peers}
-          nearbyArea={enabled ? location.area : undefined}
-          onClose={() => {
-            setChatOpen(false);
-            chatTrigger.current?.focus();
-          }}
-        />
-      )}
+      <Phone
+        open={phoneOpen && !travelSequence}
+        onClose={closePhone}
+        apps={phoneApps}
+        initialApp={phoneStart}
+        city="Lisbon"
+        time={phoneTime}
+        date={phoneDate}
+      />
       {selectedPlayer && !travelSequence && (
         <PlayerMenu
           key={selectedPlayer.id}
@@ -1687,7 +2109,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
               </div>
             </fieldset>
             <fieldset className="avatar-field">
-              <legend>Your traveller’s colour</legend>
+              <legend>Your trip colour</legend>
               <div className="swatches">
                 {colors.map((shirt, i) => (
                   <button
@@ -2011,7 +2433,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
         </Dialog>
       )}
       {panel === "pocket" && (
-        <Dialog title="In your pocket." onClose={() => setPanel(null)}>
+        <Dialog
+          title="Trip settings & saved chapters."
+          onClose={() => setPanel(null)}
+        >
           <p className="lede">A little more about your world.</p>
           {trip && (
             <>
@@ -2139,7 +2564,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
               ? "This removes your current and earlier trips from this browser. You can download an itinerary first."
               : panel === "finish"
                 ? "Your choices stay in the journal. Finish now and see your recap."
-                : "Your current trip stays in Earlier chapters. You can return to it from Pocket."}
+                : "Your current trip stays in Earlier chapters. You can return to it from Profile → Trip settings."}
           </p>
           <button
             className="primary full"
