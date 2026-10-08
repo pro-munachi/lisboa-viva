@@ -783,6 +783,28 @@ test("the current adult avatar visibly boards the rail doorway before the carria
   env.runtime.dispose();
 });
 
+test("the avatar faces its direction of travel while boarding each vehicle", () => {
+  for (const mode of ["metro", "train", "bus", "tram", "taxi", "cycle"]) {
+    const env = setup();
+    try {
+      assert.equal(env.runtime.start(sequence(mode)), true);
+      const avatar = stage(env).getObjectByName("traveller");
+      assert.ok(avatar, `${mode} has a boarding avatar`);
+      const before = avatar.position.clone();
+      env.runtime.update(1);
+      const movement = avatar.position.clone().sub(before).setY(0).normalize();
+      const facing = new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(avatar.quaternion)
+        .setY(0)
+        .normalize();
+      assert.ok(movement.z > 0, `${mode} approaches the vehicle`);
+      assert.ok(facing.dot(movement) > 0.99, `${mode} faces its boarding path`);
+    } finally {
+      env.runtime.dispose();
+    }
+  }
+});
+
 test("arrival publishes the real destination target before revealing the mapped city", () => {
   let env: ReturnType<typeof setup>;
   env = setup(false, {

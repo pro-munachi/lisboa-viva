@@ -1438,7 +1438,7 @@ function makeTableau(mode, shirt, appearance, night = 0) {
   const avatar = mode === "flight" ? null : traveller(kit, shirt, appearance);
   if (avatar) {
     avatar.group.position.set(vehicle?.doorX || 0, 0.7, -7);
-    avatar.group.rotation.y = Math.PI;
+    avatar.group.rotation.y = 0;
     stage.add(avatar.group);
   }
   const fill = new THREE.HemisphereLight(
@@ -1816,9 +1816,7 @@ export function createTravelRuntime({
               : mix(-7, 0, board),
         );
         tableau.avatar.group.rotation.y =
-          pedestrian || (cyclist && elapsed >= boardingEnd)
-            ? Math.PI / 2
-            : Math.PI;
+          pedestrian || (cyclist && elapsed >= boardingEnd) ? Math.PI / 2 : 0;
         if (cyclist && elapsed >= boardingEnd)
           tableau.avatar.group.rotation.z = -0.12;
         tableau.avatar.animate(
