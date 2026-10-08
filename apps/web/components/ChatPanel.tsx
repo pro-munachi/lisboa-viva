@@ -59,6 +59,7 @@ export type ChatPanelProps = {
   embedded?: boolean;
   openPeerRequest?: number;
   onSelectPlayer?: (peer: ChatPeer) => void;
+  onOpenActivities?: () => void;
   draftStore?: Record<string, ChatDraft>;
   onDraftChange?: (key: string, draft: ChatDraft) => void;
   onClose: () => void;
@@ -83,6 +84,7 @@ export default function ChatPanel({
   embedded = false,
   openPeerRequest,
   onSelectPlayer,
+  onOpenActivities,
   draftStore,
   onDraftChange,
   onClose,
@@ -298,6 +300,7 @@ export default function ChatPanel({
             user={user}
             peers={nearbyArea ? peers : []}
             onOpen={openThread}
+            onOpenActivities={onOpenActivities}
           />
         )
       ) : (
@@ -742,10 +745,12 @@ function DirectInbox({
   user,
   peers,
   onOpen,
+  onOpenActivities,
 }: {
   user: AuthUser;
   peers: MultiplayerPeer[];
   onOpen: (peer: ChatPeer) => void;
+  onOpenActivities?: () => void;
 }) {
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -842,6 +847,24 @@ function DirectInbox({
         aria-label="Message inbox"
         aria-busy={loading}
       >
+        {onOpenActivities && (
+          <button
+            type="button"
+            className={styles.activityLink}
+            onClick={onOpenActivities}
+          >
+            <Sparkles size={20} aria-hidden="true" />
+            <span>
+              <strong>Activity rooms</strong>
+              <small>Make a plan, chat and go together</small>
+            </span>
+            <ArrowLeft
+              size={16}
+              className={styles.activityArrow}
+              aria-hidden="true"
+            />
+          </button>
+        )}
         {loading ? (
           <p className={styles.loading}>Loading your messages…</p>
         ) : conversations.length ? (

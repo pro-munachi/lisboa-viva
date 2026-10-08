@@ -54,6 +54,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
 	mux.Handle("GET /v1/admin/users", s.requireRole("admin", http.HandlerFunc(s.adminUsers)))
 	s.registerChatRoutes(mux)
+	s.registerActivityRoutes(mux)
 	return s.headers(mux)
 }
 
@@ -118,6 +119,9 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_peer":           http.StatusBadRequest,
 			"peer_unavailable":       http.StatusNotFound,
 		}[code]
+		if activityStatus, exists := activityErrorStatuses[code]; exists {
+			status = activityStatus
+		}
 	}
 	if status == 0 {
 		status = http.StatusBadRequest

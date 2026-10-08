@@ -323,6 +323,36 @@
   font-size: 10px;
   line-height: 1.5;
 }
+.activityLink {
+  display: flex;
+  width: 100%;
+  min-height: 62px;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #d9e7bd;
+  border-radius: 14px;
+  background: #edf5dc;
+  color: #304931;
+  text-align: left;
+  font: inherit;
+}
+.activityLink span {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+}
+.activityLink strong {
+  font-size: 13px;
+}
+.activityLink small {
+  font-size: 10px;
+  color: #657755;
+}
+.activityArrow {
+  transform: rotate(180deg);
+}
 .inboxSignIn {
   flex-shrink: 0;
   margin-left: 16px;

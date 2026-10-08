@@ -1752,6 +1752,7 @@ export function createCity(host, options) {
     setInterior,
     selectInteriorZone: (id) => indoor.selectZone(id),
     performInteriorAction: (id, duration) => indoor.perform(id, duration),
+    playSocialEvent: (event) => indoor.social(event),
     setMode(next) {
       mode = next;
       controls.mouseButtons.LEFT =

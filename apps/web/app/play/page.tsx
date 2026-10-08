@@ -39,6 +39,16 @@ import World from "../../components/World";
 import AuthBoundary from "../../components/AuthBoundary";
 import Phone, { type PhoneApp } from "../../components/Phone";
 import ProfileMenu from "../../components/ProfileMenu";
+import ActivitiesPanel from "../../components/ActivitiesPanel";
+import ActivityOuting from "../../components/ActivityOuting";
+import SimulationWallet from "../../components/SimulationWallet";
+import {
+  getActivity,
+  type ActivityRoom,
+  type ActivityEvent,
+  type ActivityWallet,
+} from "../../lib/activities";
+import type { SocialSceneEvent } from "../../components/World";
 import { useProfileActions } from "../../components/ProfileActions";
 import type { AuthUser } from "../../lib/auth";
 import { accountStorageKeys } from "../../lib/account-storage";
@@ -58,7 +68,7 @@ import type {
   MultiplayerPeer,
 } from "../../lib/presence-client";
 import type { ChatPeer } from "../../lib/direct-client";
-import type { ChatDraft } from "../../lib/chat-client";
+import { ChatRequestError, type ChatDraft } from "../../lib/chat-client";
 import { chatPlaceFor } from "../../lib/chat-rooms";
 import {
   TravelCompletionGate,
@@ -239,7 +249,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [pinError, setPinError] = useState("");
   const [pinName, setPinName] = useState("");
   const [clean, setClean] = useState(false);
-  const [phoneStart, setPhoneStart] = useState<"messages" | undefined>();
+  const [phoneStart, setPhoneStart] = useState<
+    "messages" | "activities" | undefined
+  >();
   const [chatDrafts, setChatDrafts] = useState<Record<string, ChatDraft>>({});
   const rememberChatDraft = useCallback((key: string, draft: ChatDraft) => {
     setChatDrafts((all) => ({ ...all, [key]: draft }));
@@ -249,6 +261,96 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [openPeerRequest, setOpenPeerRequest] = useState(0);
   const chatTrigger = useRef<HTMLButtonElement>(null);
   const [interior, setInterior] = useState<InteriorVisit | null>(null);
+  const [activityId, setActivityId] = useState<string | null>(null);
+  const [activityRoom, setActivityRoom] = useState<ActivityRoom | null>(null);
+  const [activityWallet, setActivityWallet] = useState<ActivityWallet | null>(
+    null,
+  );
+  const [socialEvent, setSocialEvent] = useState<SocialSceneEvent | null>(null);
+  const activityEventsSeen = useRef<{
+    roomId: string;
+    ids: Set<string>;
+  } | null>(null);
+  const selectActivity = useCallback((id: string | null) => {
+    setActivityId(id);
+    setActivityRoom((current) => (current?.id === id ? current : null));
+    setSocialEvent(null);
+    if (!id || activityEventsSeen.current?.roomId !== id)
+      activityEventsSeen.current = null;
+  }, []);
+  const receiveActivityAction = useCallback(
+    (event: ActivityEvent, venueId?: string) => {
+      const room = activityEventsSeen.current;
+      if (room) room.ids.add(event.id);
+      if (!venueId) return;
+      setSocialEvent({
+        id: event.id,
+        venueId,
+        kind: event.kind,
+        actorId: event.actor.id,
+        targetId: event.target?.id,
+        viewerId: user.id,
+      });
+    },
+    [user.id],
+  );
+  const receiveActivityRoom = useCallback(
+    (room: ActivityRoom | null) => {
+      setActivityRoom(room);
+      if (!room) return;
+      const previous = activityEventsSeen.current;
+      if (previous?.roomId === room.id) {
+        for (const event of room.events) {
+          if (
+            !previous.ids.has(event.id) &&
+            Date.now() - Date.parse(event.createdAt) < 15_000
+          )
+            receiveActivityAction(event, room.venueId);
+          previous.ids.add(event.id);
+        }
+        // The server retains thirty recent events. Keep the deduplication set bounded too.
+        if (previous.ids.size > 150)
+          previous.ids = new Set(room.events.map((event) => event.id));
+      } else
+        activityEventsSeen.current = {
+          roomId: room.id,
+          ids: new Set(room.events.map((event) => event.id)),
+        };
+    },
+    [receiveActivityAction],
+  );
+  useEffect(() => {
+    if (!activityId || phoneOpen) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    async function updateRoom() {
+      try {
+        const result = await getActivity(
+          activityId!,
+          controller.signal,
+          user.id,
+        );
+        if (controller.signal.aborted) return;
+        receiveActivityRoom(result.activity);
+        setActivityWallet(result.wallet);
+      } catch (reason) {
+        if (controller.signal.aborted) return;
+        if (
+          reason instanceof ChatRequestError &&
+          [403, 404, 410].includes(reason.status)
+        ) {
+          selectActivity(null);
+          return;
+        }
+      }
+      if (!controller.signal.aborted) timer = setTimeout(updateRoom, 3_000);
+    }
+    void updateRoom();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [activityId, phoneOpen, user.id, receiveActivityRoom, selectActivity]);
   const beforeInterior = useRef(false);
   const worldHotspots = useMemo<WorldHotspot[]>(
     () => [
@@ -409,6 +511,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setPanel(null);
   }
   function leaveRoom() {
+    setSocialEvent(null);
     setInterior(null);
     setVisitedLocation(({ placeId: _placeId, ...location }) => location);
     setClean(beforeInterior.current);
@@ -783,6 +886,55 @@ function RoamExperience({ user }: { user: AuthUser }) {
     closeOverlays();
     setNearbyOpen(true);
   }
+  function openSharedActivities() {
+    closeOverlays();
+    setPhoneStart("activities");
+    setPhoneOpen(true);
+  }
+  function visitActivityVenue(venueId: string, id: string) {
+    if (travelGate.current.pending) {
+      notify("Finish your journey before joining this outing.");
+      return;
+    }
+    const place = playerPlace(venueId);
+    if (!place) {
+      notify(
+        "This activity's mapped venue is unavailable. Open the room and choose another outing.",
+      );
+      return;
+    }
+    selectActivity(id);
+    closeOverlays();
+    setMapHotspot(place.hotspot);
+    setMapFocus({
+      lat: place.lat,
+      lng: place.lng,
+      name: place.name,
+      range: 100,
+    });
+    // Visiting is a personal choice; joining the chat never moves another player.
+    if (place.kind)
+      enterRoom({
+        id: place.id,
+        name: place.name,
+        kind: place.kind,
+        sourceUrl: place.hotspot.sourceUrl,
+      });
+    else {
+      if (interior) leaveRoom();
+      setVisitedLocation({
+        latitude: place.lat,
+        longitude: place.lng,
+        area: place.area,
+        placeId: place.id,
+      });
+      setClean(true);
+    }
+    notify(
+      `You arrived at ${place.name}. Open your activity room to chat and take part.`,
+    );
+  }
+
   useProfileActions([
     {
       id: "trip-settings",
@@ -862,9 +1014,38 @@ function RoamExperience({ user }: { user: AuthUser }) {
           onDraftChange={rememberChatDraft}
           openPeerRequest={openPeerRequest}
           onSelectPlayer={selectPlayer}
+          onOpenActivities={openSharedActivities}
           peers={peers}
           nearbyArea={enabled ? location.area : undefined}
           onClose={closePhone}
+        />
+      ),
+    },
+    {
+      id: "activities",
+      label: "Activities",
+      detail: "Create a plan. Meet in the city.",
+      icon: Sparkles,
+      layout: "fill",
+      content: (
+        <ActivitiesPanel
+          user={user}
+          presenceEnabled={enabled}
+          selectedActivityId={activityId}
+          onActivityChange={selectActivity}
+          onRoomChange={receiveActivityRoom}
+          onAction={(event) =>
+            receiveActivityAction(event, activityRoom?.venueId)
+          }
+          currentVenueId={
+            enabled && presenceStatus === "online"
+              ? visitedLocation.placeId
+              : undefined
+          }
+          onVisitVenue={visitActivityVenue}
+          onWalletChange={setActivityWallet}
+          draftStore={chatDrafts}
+          onDraftChange={rememberChatDraft}
         />
       ),
     },
@@ -949,6 +1130,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
           <span className="phone-stamp">
             <Wallet size={28} />
           </span>
+          <SimulationWallet
+            wallet={activityWallet}
+            onChange={setActivityWallet}
+          />
           <h3>
             {trip ? euro(trip.setup.budget - trip.spent) : "Your city budget"}
           </h3>
@@ -1073,7 +1258,35 @@ function RoamExperience({ user }: { user: AuthUser }) {
           }}
           peers={peers}
           onPlayer={selectPlayer}
+          socialEvent={socialEvent}
+          sharedOuting={Boolean(
+            activityRoom && interior?.id === activityRoom.venueId,
+          )}
         />
+        {activityRoom && !phoneOpen && !travelSequence && (
+          <ActivityOuting
+            activity={activityRoom}
+            venueName={
+              playerPlace(activityRoom.venueId)?.name || "Your meeting place"
+            }
+            atVenue={visitedLocation.placeId === activityRoom.venueId}
+            presentCount={
+              peers.filter(
+                (peer) =>
+                  peer.placeId === activityRoom.venueId &&
+                  activityRoom.members.some((member) => member.id === peer.id),
+              ).length
+            }
+            onOpen={openSharedActivities}
+            onVisit={() =>
+              visitActivityVenue(activityRoom.venueId, activityRoom.id)
+            }
+            onExit={() => {
+              leaveRoom();
+              setClean(false);
+            }}
+          />
+        )}
         {!travelSequence && (
           <MultiplayerDock
             onSelect={selectPlayer}

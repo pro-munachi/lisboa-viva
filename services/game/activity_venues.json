@@ -1,0 +1,82 @@
+[
+  {
+    "id": "node:1802158801",
+    "name": "A Tasca do Chico",
+    "category": "bar",
+    "area": "Lisboa",
+    "latitude": 38.711631,
+    "longitude": -9.144132
+  },
+  {
+    "id": "node:2607963678",
+    "name": "Musicbox",
+    "category": "bar",
+    "area": "Lisboa",
+    "latitude": 38.707167,
+    "longitude": -9.143434
+  },
+  {
+    "id": "node:4160807389",
+    "name": "A Paródia",
+    "category": "bar",
+    "area": "Lisboa",
+    "latitude": 38.713481,
+    "longitude": -9.164699
+  },
+  {
+    "id": "node:6016016285",
+    "name": "Café Janis",
+    "category": "cafe",
+    "area": "Lisboa",
+    "latitude": 38.707628,
+    "longitude": -9.147243
+  },
+  {
+    "id": "node:10293661913",
+    "name": "A Flor da Selva",
+    "category": "cafe",
+    "area": "Lisboa",
+    "latitude": 38.709089,
+    "longitude": -9.154145
+  },
+  {
+    "id": "way:556180535",
+    "name": "Casa das Histórias - Paula Rego",
+    "category": "culture",
+    "area": "Cascais",
+    "latitude": 38.69522,
+    "longitude": -9.424113
+  },
+  {
+    "id": "way:179834294",
+    "name": "Auditório Eunice Muñoz",
+    "category": "culture",
+    "area": "Oeiras",
+    "latitude": 38.691994,
+    "longitude": -9.312594
+  },
+  {
+    "id": "node:11866440786",
+    "name": "ABHYASA YOGA LISBON",
+    "category": "gym",
+    "area": "Lisboa",
+    "latitude": 38.709847,
+    "longitude": -9.141059
+  },
+  {
+    "id": "way:544205149",
+    "name": "Praia da Conceição",
+    "category": "beach",
+    "area": "Cascais",
+    "latitude": 38.700162,
+    "longitude": -9.416484
+  },
+  {
+    "id": "way:180126358",
+    "name": "Praia de Santo Amaro",
+    "category": "beach",
+    "area": "Oeiras",
+    "latitude": 38.684793,
+    "longitude": -9.310453
+  }
+]

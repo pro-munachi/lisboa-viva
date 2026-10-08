@@ -1,0 +1,110 @@
+.panel {
+  position: absolute;
+  z-index: 10;
+  right: 22px;
+  bottom: 112px;
+  width: min(340px, calc(100% - 28px));
+  max-height: calc(100% - 215px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+  border: 1px solid #fff;
+  border-radius: 22px;
+  color: #1d2b50;
+  background: #fffdf7f5;
+  box-shadow: 0 12px 40px #19305b29;
+  font-family: var(--font-roam-app), sans-serif;
+}
+.topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: #476351;
+}
+.topline span:first-child {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.panel h2 {
+  margin: 12px 0 7px;
+  font-family: var(--font-roam-game), sans-serif;
+  font-size: 22px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.venue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+.presence {
+  margin: 9px 0;
+  color: #65728c;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.event {
+  padding: 10px;
+  border-radius: 12px;
+  background: #eaf2d8;
+  margin: 12px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 6px;
+  min-height: 44px;
+  padding: 9px;
+  border: 1px solid #dce4f4;
+  border-radius: 12px;
+  background: #edf1ff;
+  color: #274ccc;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.actions .primary {
+  background: #2853e3;
+  color: #fff;
+  border-color: #2853e3;
+}
+.actions button:focus-visible {
+  outline: 3px solid #244be5;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .panel {
+    right: 14px;
+    bottom: 104px;
+    padding: 14px;
+    max-height: calc(100% - 250px);
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .panel {
+    width: 290px;
+    bottom: 100px;
+    max-height: calc(100% - 130px);
+  }
+  .panel h2 {
+    font-size: 18px;
+  }
+}

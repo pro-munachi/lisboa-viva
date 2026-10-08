@@ -28,11 +28,20 @@ import type { MultiplayerPeer } from "../lib/multiplayer";
 import type { CharacterAppearance } from "../lib/appearance";
 import { DEFAULT_APPEARANCE } from "../lib/appearance";
 import controlStyles from "./WorldControls.module.css";
+export type SocialSceneEvent = {
+  id: string;
+  venueId: string;
+  kind: string;
+  actorId: string;
+  targetId?: string;
+  viewerId: string;
+};
 type CityController = {
   ready: Promise<boolean>;
   setInterior: (visit: InteriorVisit | null) => void;
   selectInteriorZone: (id: string) => void;
   performInteriorAction: (id: string, duration?: number) => void;
+  playSocialEvent: (event: SocialSceneEvent) => boolean;
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
   setPeers: (peers: MultiplayerPeer[]) => void;
@@ -66,6 +75,8 @@ export default function World({
   onTravelComplete,
   peers = [],
   onPlayer,
+  socialEvent,
+  sharedOuting = false,
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -80,6 +91,8 @@ export default function World({
   onTravelComplete?: (id: string) => void;
   peers?: MultiplayerPeer[];
   onPlayer?: (player: MultiplayerPeer) => void;
+  socialEvent?: SocialSceneEvent | null;
+  sharedOuting?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
@@ -144,6 +157,11 @@ export default function World({
   >("idle");
   const [completed, setCompleted] = useState<string[]>([]);
   const [roomError, setRoomError] = useState("");
+  useEffect(() => {
+    if (!socialEvent || travelSequence || socialEvent.venueId !== interior?.id)
+      return;
+    controller.current?.playSocialEvent(socialEvent);
+  }, [socialEvent?.id, interior?.id, travelSequence?.id, status]);
   const [stats, setStats] = useState<{
     buildings: number;
     roads: number;
@@ -640,7 +658,7 @@ export default function World({
           </div>
         </div>
       )}
-      {interior && !travelSequence && (
+      {interior && !travelSequence && !sharedOuting && (
         <InteriorPanel
           visit={interior}
           selectedZone={selectedZone}

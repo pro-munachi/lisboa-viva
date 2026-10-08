@@ -541,3 +541,78 @@ test("browser-only peer labels are owned canvas textures and dispose once; headl
     else delete (globalThis as any).document;
   }
 });
+
+test("shared gestures affect only present real players, deduplicate and reset after a bounded animation", () => {
+  const h = harness();
+  h.enter("bar");
+  const person = peer(1);
+  h.runtime.setPeers([person]);
+  const local = h.localActor();
+  const present = h.actors()[0];
+  const position = present.position.clone();
+  const event = {
+    id: "confirmed-wave",
+    venueId,
+    kind: "wave",
+    actorId: person.id,
+    viewerId: peer(99).id,
+  };
+  assert.equal(h.runtime.social({ ...event, venueId: "other-room" }), false);
+  assert.equal(h.runtime.social({ ...event, actorId: peer(2).id }), false);
+  assert.equal(
+    h.actors().length,
+    1,
+    "a room member without presence is never fabricated",
+  );
+  assert.equal(h.runtime.social(event), true);
+  assert.equal(
+    h.runtime.social(event),
+    false,
+    "poll retries do not repeat the same confirmed action",
+  );
+  h.runtime.update(0.1, true);
+  assert.equal(present.userData.rig.rightArm.rotation.z, 1.7);
+  assert.notEqual(local.userData.rig.rightArm.rotation.z, 1.7);
+  assert.ok(
+    present.position.equals(position),
+    "gesture never moves a real player's location",
+  );
+  for (let i = 0; i < 55; i++) h.runtime.update(0.1, true);
+  assert.ok(Math.abs(present.userData.rig.rightArm.rotation.z) < 0.1);
+  h.runtime.dispose();
+});
+
+test("accepted bar showdown poses both participants without contact and clears on exit", () => {
+  const h = harness();
+  h.enter("bar");
+  const person = peer(1),
+    viewer = peer(99);
+  h.runtime.setPeers([person]);
+  const local = h.localActor(),
+    present = h.actors()[0];
+  const beforeLocal = local.position.clone(),
+    beforePeer = present.position.clone();
+  const event = {
+    id: "confirmed-accepted-showdown",
+    venueId,
+    kind: "accept-challenge",
+    actorId: person.id,
+    targetId: viewer.id,
+    viewerId: viewer.id,
+  };
+  assert.equal(h.runtime.social(event), true);
+  h.runtime.update(0.1, true);
+  assert.ok(local.userData.rig.leftArm.rotation.x < -0.8);
+  assert.ok(present.userData.rig.leftArm.rotation.x < -0.8);
+  assert.ok(local.position.equals(beforeLocal));
+  assert.ok(present.position.equals(beforePeer));
+  h.runtime.clear();
+  assert.equal(h.runtime.social(event), false);
+  h.enter("cafe");
+  assert.equal(
+    h.runtime.social(event),
+    false,
+    "showdowns belong to bar scenes",
+  );
+  h.runtime.dispose();
+});

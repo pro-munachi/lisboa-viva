@@ -3106,6 +3106,33 @@ small {
   gap: 15px;
   color: #25385b;
 }
+.phone-credit-wallet {
+  display: grid;
+  gap: 10px;
+  padding: 17px;
+  border: 1px solid #d9e7bd;
+  border-radius: 19px;
+  background: #ecf4d9;
+}
+.phone-credit-wallet .phone-credit-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #42613f;
+  font-size: 10px;
+  letter-spacing: 1px;
+  font-weight: 800;
+}
+.phone-credit-wallet > strong {
+  color: #293c29;
+  font-family: var(--font-roam-game), sans-serif;
+  font-size: 30px;
+}
+.phone-credit-wallet > small {
+  color: #536c4b;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .phone-page h3 {
   margin: 0;
   font-size: 26px;
