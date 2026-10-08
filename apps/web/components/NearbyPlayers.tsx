@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   Coffee,
@@ -14,6 +14,7 @@ import {
 import type { AuthUser } from "../lib/auth";
 import type { MultiplayerPeer } from "../lib/multiplayer";
 import type { PresenceStatus } from "../lib/presence-client";
+import { venuePresencePage } from "../lib/presence-client";
 import { nearbyDistance, nearbyPlayers } from "../lib/nearby-players";
 import { playerPlace } from "../lib/player-places";
 import styles from "./NearbyPlayers.module.css";
@@ -43,6 +44,15 @@ export default function NearbyPlayers({
   const title = useId();
   const description = useId();
   const close = useRef(onClose);
+  const [venue, setVenue] = useState<{
+    players: MultiplayerPeer[];
+    total: number;
+    nextCursor: string | null;
+  } | null>(null);
+  const [venueBusy, setVenueBusy] = useState(false);
+  const [venueError, setVenueError] = useState(false);
+  const [venueRetry, setVenueRetry] = useState(0);
+  const venueController = useRef<AbortController | null>(null);
   const connection = status ?? (enabled ? "online" : "hidden");
   close.current = onClose;
   const nearby = useMemo(
@@ -53,6 +63,90 @@ export default function NearbyPlayers({
       ),
     [peers, user?.id, currentPlaceId],
   );
+  const displayed = useMemo(() => {
+    if (!venue || !currentPlaceId) return nearby;
+    const ids = new Set(venue.players.map((peer) => peer.id));
+    return [
+      ...venue.players,
+      ...nearby.filter(
+        (peer) => peer.placeId !== currentPlaceId && !ids.has(peer.id),
+      ),
+    ];
+  }, [venue, nearby, currentPlaceId]);
+
+  useEffect(() => {
+    setVenue(null);
+    setVenueError(false);
+    setVenueBusy(false);
+    if (!enabled || !currentPlaceId) return;
+    const controller = new AbortController();
+    venueController.current = controller;
+    setVenueBusy(true);
+    const query = new URLSearchParams({ placeId: currentPlaceId });
+    void fetch(`/api/multiplayer/venue?${query}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("venue_roster");
+        const page = venuePresencePage(await response.json(), currentPlaceId);
+        if (!page || page.total === null) throw new Error("venue_payload");
+        if (!controller.signal.aborted)
+          setVenue({ ...page, total: page.total });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setVenueError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setVenueBusy(false);
+      });
+    return () => {
+      venueController.current?.abort();
+      venueController.current = null;
+    };
+  }, [currentPlaceId, enabled, venueRetry]);
+
+  async function loadMore() {
+    if (!venue?.nextCursor || !currentPlaceId || venueBusy) return;
+    const controller = new AbortController();
+    venueController.current = controller;
+    setVenueBusy(true);
+    setVenueError(false);
+    const query = new URLSearchParams({
+      placeId: currentPlaceId,
+      cursor: venue.nextCursor,
+    });
+    try {
+      const response = await fetch(`/api/multiplayer/venue?${query}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("venue_roster");
+      const page = venuePresencePage(await response.json(), currentPlaceId);
+      if (!page) throw new Error("venue_payload");
+      if (!controller.signal.aborted)
+        setVenue(
+          (current) =>
+            current && {
+              players: [
+                ...current.players,
+                ...page.players.filter(
+                  (peer) =>
+                    !current.players.some(
+                      (existing) => existing.id === peer.id,
+                    ),
+                ),
+              ],
+              total: page.total ?? current.total,
+              nextCursor: page.nextCursor,
+            },
+        );
+    } catch {
+      if (!controller.signal.aborted) setVenueError(true);
+    } finally {
+      if (!controller.signal.aborted) setVenueBusy(false);
+    }
+  }
 
   useEffect(() => {
     const element = dialog.current;
@@ -97,12 +191,15 @@ export default function NearbyPlayers({
         </header>
         <div className={styles.directoryIntro}>
           <strong>
-            {enabled && connection !== "online" && !nearby.length ? (
+            {enabled && connection !== "online" && !displayed.length ? (
               "Finding nearby players…"
             ) : (
               <>
-                {enabled ? nearby.length : 0}{" "}
-                {enabled && nearby.length === 1 ? "player" : "players"} nearby
+                {enabled ? (venue ? venue.total : displayed.length) : 0}{" "}
+                {enabled && (venue ? venue.total : displayed.length) === 1
+                  ? "player"
+                  : "players"}{" "}
+                {venue ? "in this venue" : "nearby"}
               </>
             )}
           </strong>
@@ -118,8 +215,8 @@ export default function NearbyPlayers({
           </p>
         )}
         <div className={styles.playerList}>
-          {nearby.length && enabled ? (
-            nearby.map((peer) => {
+          {displayed.length && enabled ? (
+            displayed.map((peer) => {
               const place = peer.placeId ? playerPlace(peer.placeId) : null;
               const samePlace = Boolean(
                 currentPlaceId && peer.placeId === currentPlaceId,
@@ -221,6 +318,32 @@ export default function NearbyPlayers({
                     : "Your request to hide from the map has not yet been confirmed. We’re retrying the connection."}
               </p>
             </div>
+          )}
+          {enabled && currentPlaceId && venue?.nextCursor && (
+            <button
+              type="button"
+              className={styles.loadMore}
+              disabled={venueBusy}
+              onClick={() => void loadMore()}
+            >
+              {venueBusy
+                ? "Loading…"
+                : `Show more people (${venue.players.length} of ${venue.total})`}
+            </button>
+          )}
+          {venueBusy && !venue && (
+            <p role="status">Loading everyone in this venue…</p>
+          )}
+          {venueError && (
+            <p role="status">
+              The full venue list is temporarily unavailable.{" "}
+              <button
+                type="button"
+                onClick={() => setVenueRetry((value) => value + 1)}
+              >
+                Retry
+              </button>
+            </p>
           )}
         </div>
         <p className={styles.directoryNote}>

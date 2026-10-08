@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createPresenceClient,
   nearbyPresencePeers,
+  venuePresencePage,
   validPresenceLocation,
   PRESENCE_TTL_MS,
 } from "../lib/presence-client";
@@ -55,6 +56,51 @@ test("venue presence copies only canonical public place IDs and rejects private 
   assert.equal(result.length, 1);
   assert.equal(result[0].placeId, gym.id);
   assert.equal("placeName" in result[0], false);
+});
+
+test("venue pages accept a bounded public roster and reject another venue", () => {
+  const placeId = VENUES[0].id;
+  const page = venuePresencePage(
+    {
+      players: [peer({ placeId, distanceMetres: 0 })],
+      total: 100,
+      nextCursor: "22345678-1234-4123-8123-123456789012",
+      expiresInSeconds: 45,
+    },
+    placeId,
+    time,
+  );
+  assert.equal(page?.total, 100);
+  assert.equal(page?.players.length, 1);
+  assert.equal(
+    venuePresencePage(
+      { players: [], total: null, nextCursor: null, expiresInSeconds: 45 },
+      placeId,
+      time,
+    )?.total,
+    null,
+  );
+  assert.equal(
+    venuePresencePage(
+      { players: [], total: 250_000, nextCursor: null, expiresInSeconds: 45 },
+      placeId,
+      time,
+    )?.total,
+    250_000,
+  );
+  assert.equal(
+    venuePresencePage(
+      {
+        players: [peer({ placeId })],
+        total: 100,
+        nextCursor: null,
+        expiresInSeconds: 45,
+      },
+      "maat",
+      time,
+    ),
+    null,
+  );
 });
 
 test("entering and leaving at unchanged coordinates immediately updates the shared venue", async () => {

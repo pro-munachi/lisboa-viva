@@ -236,6 +236,17 @@
   overscroll-behavior: contain;
   background: #f6f8fc;
 }
+.loadMore {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  border-radius: 12px;
+  background: #eaf0ff;
+  color: #2456d8;
+  font-weight: 600;
+}
+.loadMore:disabled {
+  opacity: 0.6;
+}
 .playerCard {
   min-width: 0;
   padding: 14px;

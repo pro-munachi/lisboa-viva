@@ -120,6 +120,43 @@ export function nearbyPresencePeers(
   });
 }
 
+export function venuePresencePage(
+  value: unknown,
+  placeId: string,
+  now = Date.now(),
+) {
+  if (!value || typeof value !== "object") return null;
+  const payload = value as {
+    players?: unknown;
+    total?: unknown;
+    nextCursor?: unknown;
+    expiresInSeconds?: unknown;
+  };
+  if (
+    (payload.total !== null &&
+      (!Number.isSafeInteger(payload.total) ||
+        (payload.total as number) < 0)) ||
+    !Array.isArray(payload.players) ||
+    payload.players.length > 25 ||
+    (payload.nextCursor !== null &&
+      (typeof payload.nextCursor !== "string" ||
+        !uuid.test(payload.nextCursor)))
+  )
+    return null;
+  const players = nearbyPresencePeers(payload, now);
+  if (
+    !players ||
+    players.length !== payload.players.length ||
+    players.some((peer) => peer.placeId !== placeId)
+  )
+    return null;
+  return {
+    players,
+    total: payload.total as number | null,
+    nextCursor: payload.nextCursor as string | null,
+  };
+}
+
 /** One request chain per account. Explicit hide waits for its outstanding PUT. */
 export function createPresenceClient({
   location,

@@ -45,6 +45,7 @@ function harness() {
     peerPopulation,
     peerMeshes: [],
     peerActors: [],
+    peerRecords: new Map(),
     scene,
     city: new THREE.Group(),
     population: new THREE.Group(),
@@ -138,8 +139,8 @@ test("presence polling preserves the selected camera and defers roster resources
   api.cancelTravel();
   assert.equal(env.travel.active, false);
   assert.equal(env.travelPhase, null);
-  assert.notEqual(env.peerPopulation, population);
-  assert.equal(population.parent, null);
+  assert.equal(env.peerPopulation, population);
+  assert.equal(population.parent, env.scene);
   assert.equal(env.peerActors.length, 1);
   assert.equal(env.peerActors[0].children[0].userData.peer.id, "latest");
   assert.equal(env.appearances.at(-1).shirt, "#e5a742");
@@ -198,7 +199,7 @@ test("public-room players never create duplicate outdoor avatars, but still reac
   assert.equal(env.indoor.roster, roster);
   assert.deepEqual(
     env.peerActors.map((actor: any) => actor.children[0].userData.peer.id),
-    ["walking", "outside"],
+    ["outside", "walking"],
   );
   assert.ok(env.peerMeshes.every((mesh: any) => !mesh.userData.peer.placeId));
   assert.equal(env.appearances.length, 2);
@@ -229,7 +230,7 @@ test("only explicit peer framing changes the camera, and invalid positions canno
   ]);
   assert.equal(env.peerActors.length, 1);
   api.setPeers(Array.from({ length: 100 }, (_, i) => peer(`peer-${i}`)));
-  assert.equal(env.peerActors.length, 40);
+  assert.equal(env.peerActors.length, 24);
   api.setPeers([]);
   assert.equal(env.peerActors.length, 0);
   assert.equal(env.peerMeshes.length, 0);
@@ -238,4 +239,21 @@ test("only explicit peer framing changes the camera, and invalid positions canno
       .length,
     1,
   );
+});
+
+test("unchanged presence reuses avatars and refreshes their public details", () => {
+  const { env, api } = harness();
+  api.setPeers([peer("walker")]);
+  const actor = env.peerActors[0];
+  const created = env.appearances.length;
+  const disposed = env.disposed;
+  api.setPeers([{ ...peer("walker"), handle: "walker", area: "Alfama" }]);
+  assert.equal(env.peerActors[0], actor);
+  assert.equal(env.appearances.length, created);
+  assert.equal(env.disposed, disposed);
+  assert.equal(env.peerMeshes[0].userData.peer.area, "Alfama");
+  api.setPeers([peer("walker", "#11aa55")]);
+  assert.notEqual(env.peerActors[0], actor);
+  assert.equal(env.appearances.length, created + 1);
+  assert.equal(env.disposed, disposed + 1);
 });

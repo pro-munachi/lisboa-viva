@@ -279,6 +279,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setChatDrafts((all) => ({ ...all, [key]: draft }));
   }, []);
   const [selectedPlayer, setSelectedPlayer] = useState<ChatPeer | null>(null);
+  const [selectedDirectoryPeer, setSelectedDirectoryPeer] =
+    useState<MultiplayerPeer | null>(null);
   const [chatPeer, setChatPeer] = useState<ChatPeer | null>(null);
   const [openPeerRequest, setOpenPeerRequest] = useState(0);
   const chatTrigger = useRef<HTMLButtonElement>(null);
@@ -1159,13 +1161,20 @@ function RoamExperience({ user }: { user: AuthUser }) {
           (trip?.journey.hub ? `transit-${trip.journey.hub}` : undefined),
   );
   const selectedPresence = selectedPlayer
-    ? peers.find((peer) => peer.id === selectedPlayer.id)
+    ? peers.find((peer) => peer.id === selectedPlayer.id) ||
+      (selectedDirectoryPeer?.id === selectedPlayer.id &&
+      Date.parse(selectedDirectoryPeer.lastSeenAt) > Date.now() - 45_000
+        ? selectedDirectoryPeer
+        : undefined)
     : undefined;
   function selectPlayer(player: ChatPeer) {
     if (player.id === user.id || travelSequence) return;
     setPhoneOpen(false);
     setPanel(null);
     setNearbyOpen(false);
+    setSelectedDirectoryPeer(
+      "lastSeenAt" in player ? (player as MultiplayerPeer) : null,
+    );
     setSelectedPlayer({
       id: player.id,
       handle: player.handle,
@@ -1200,8 +1209,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
     });
   }
   function joinPlayer(peer: MultiplayerPeer) {
-    // Resolve again from the current live roster; a player may have left since opening the directory.
-    const live = peers.find((candidate) => candidate.id === peer.id);
+    // The paged venue directory can contain people beyond the short heartbeat roster.
+    const live =
+      peers.find((candidate) => candidate.id === peer.id) ||
+      (peer.placeId === visitedLocation.placeId &&
+      Date.parse(peer.lastSeenAt) > Date.now() - 45_000
+        ? peer
+        : undefined);
     const place = playerPlace(live?.placeId);
     if (!live || !place?.kind) {
       notify(
@@ -1231,28 +1245,6 @@ function RoamExperience({ user }: { user: AuthUser }) {
       },
       message: `You joined ${live.handle} at ${place.name}.`,
     });
-  }
-  if (!loaded) {
-    return (
-      <main className="auth-status" role="status">
-        <p>
-          {user.userType === "tourist"
-            ? "Preparing your Lisbon arrival…"
-            : "Opening your Lisbon home…"}
-        </p>
-      </main>
-    );
-  }
-  if (homeError && !trip) {
-    return (
-      <main className="auth-status">
-        <h1>Your saved home could not be loaded.</h1>
-        <p>Try again when the account service is available.</p>
-        <button className="primary" onClick={() => window.location.reload()}>
-          Try again
-        </button>
-      </main>
-    );
   }
   function closePhone() {
     setPhoneOpen(false);
@@ -1364,6 +1356,28 @@ function RoamExperience({ user }: { user: AuthUser }) {
       onSelect: () => openFeature(trip ? "new" : "setup"),
     },
   ]);
+  if (!loaded) {
+    return (
+      <main className="auth-status" role="status">
+        <p>
+          {user.userType === "tourist"
+            ? "Preparing your Lisbon arrival…"
+            : "Opening your Lisbon home…"}
+        </p>
+      </main>
+    );
+  }
+  if (homeError && !trip) {
+    return (
+      <main className="auth-status">
+        <h1>Your saved home could not be loaded.</h1>
+        <p>Try again when the account service is available.</p>
+        <button className="primary" onClick={() => window.location.reload()}>
+          Try again
+        </button>
+      </main>
+    );
+  }
   const phoneTime = trip
     ? `${String(Math.floor(trip.minute / 60)).padStart(2, "0")}:${String(trip.minute % 60).padStart(2, "0")}`
     : cityNow?.toLocaleTimeString("en-GB", {

@@ -142,3 +142,85 @@ func (s *server) nearbyPlayers(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, http.StatusOK, map[string]any{"players": players, "expiresInSeconds": int(presenceTTL.Seconds())})
 }
+
+// Venue rosters are requested only while the directory is open. Keeping them
+// separate from the heartbeat prevents a crowded room from sending every
+// player's appearance to every other player every ten seconds.
+func (s *server) venuePlayers(w http.ResponseWriter, r *http.Request) {
+	placeID := r.URL.Query().Get("placeId")
+	cursor := r.URL.Query().Get("cursor")
+	if placeID == "" || len(placeID) > 145 || !validChatRoom("lisbon:hotspot:"+placeID) ||
+		(cursor != "" && !chatUUID.MatchString(cursor)) {
+		fail(w, apiError("invalid_presence"))
+		return
+	}
+	user := currentUser(r)
+	cutoff := s.now().Add(-presenceTTL)
+	var present bool
+	if err := s.db.QueryRow(r.Context(), `SELECT EXISTS(
+		SELECT 1 FROM player_presence WHERE user_id=$1 AND place_id=$2 AND last_seen_at>$3
+	)`, user.ID, placeID, cutoff).Scan(&present); err != nil {
+		fail(w, err)
+		return
+	}
+	if !present {
+		fail(w, apiError("chat_presence_required"))
+		return
+	}
+	var total any
+	if cursor == "" {
+		var count int64
+		if err := s.db.QueryRow(r.Context(), `SELECT count(*) FROM player_presence p
+		JOIN users u ON u.id=p.user_id
+		WHERE p.place_id=$1 AND p.user_id<>$2 AND p.last_seen_at>$3 AND u.account_status='active'`,
+			placeID, user.ID, cutoff).Scan(&count); err != nil {
+			fail(w, err)
+			return
+		}
+		total = count
+	}
+	query := `SELECT u.id::text,u.handle,u.user_type::text,
+		p.latitude,p.longitude,p.area,COALESCE(p.place_id,''),0,p.last_seen_at,
+		ca.body_type,ca.outfit_style,ca.top_color,ca.bottom_color,ca.hair_style,ca.hair_color,ca.skin_tone,ca.shoe_color
+		FROM player_presence p JOIN users u ON u.id=p.user_id
+		JOIN character_appearances ca ON ca.user_id=u.id
+		WHERE p.place_id=$1 AND p.user_id<>$2 AND p.last_seen_at>$3 AND u.account_status='active'`
+	args := []any{placeID, user.ID, cutoff}
+	if cursor != "" {
+		query += ` AND p.user_id>$4::uuid`
+		args = append(args, cursor)
+	}
+	query += ` ORDER BY p.user_id LIMIT 26`
+	rows, err := s.db.Query(r.Context(), query, args...)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	defer rows.Close()
+	players := []nearbyPlayer{}
+	for rows.Next() {
+		var player nearbyPlayer
+		if err = rows.Scan(&player.ID, &player.Handle, &player.UserType, &player.Latitude, &player.Longitude,
+			&player.Area, &player.PlaceID, &player.DistanceMetres, &player.LastSeenAt,
+			&player.Appearance.BodyType, &player.Appearance.OutfitStyle, &player.Appearance.TopColor,
+			&player.Appearance.BottomColor, &player.Appearance.HairStyle, &player.Appearance.HairColor,
+			&player.Appearance.SkinTone, &player.Appearance.ShoeColor); err != nil {
+			fail(w, err)
+			return
+		}
+		players = append(players, player)
+	}
+	if err = rows.Err(); err != nil {
+		fail(w, err)
+		return
+	}
+	var nextCursor any
+	if len(players) > 25 {
+		players = players[:25]
+		nextCursor = players[len(players)-1].ID
+	}
+	respond(w, http.StatusOK, map[string]any{
+		"players": players, "total": total, "nextCursor": nextCursor,
+		"expiresInSeconds": int(presenceTTL.Seconds()),
+	})
+}

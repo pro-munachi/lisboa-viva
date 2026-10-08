@@ -56,6 +56,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("PUT /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.updatePresence)))
 	mux.Handle("DELETE /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.clearPresence)))
 	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
+	mux.Handle("GET /v1/multiplayer/venue", s.requireSession(http.HandlerFunc(s.venuePlayers)))
 	mux.Handle("GET /v1/admin/users", s.requireRole("admin", http.HandlerFunc(s.adminUsers)))
 	s.registerChatRoutes(mux)
 	s.registerActivityRoutes(mux)

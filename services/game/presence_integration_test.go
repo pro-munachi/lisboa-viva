@@ -200,6 +200,87 @@ func TestPresenceAppearancePostgresLoopbackIntegration(t *testing.T) {
 	if players := nearby(cookieA); len(players) != 1 || players[0].PlaceID != "comercio" {
 		t.Fatal("same public venue peer was missing from nearby presence")
 	}
+	venuePath := "/v1/multiplayer/venue?placeId=comercio"
+	status(request(http.MethodGet, venuePath, nil, nil), http.StatusUnauthorized)
+	status(request(http.MethodGet, "/v1/multiplayer/venue?placeId=maat", nil, cookieA), http.StatusForbidden)
+	status(request(http.MethodGet, "/v1/multiplayer/venue?placeId=home", nil, cookieA), http.StatusBadRequest)
+	venueResponse := request(http.MethodGet, venuePath, nil, cookieA)
+	status(venueResponse, http.StatusOK)
+	var venue struct {
+		Players    []nearbyPlayer `json:"players"`
+		Total      int            `json:"total"`
+		NextCursor *string        `json:"nextCursor"`
+	}
+	if json.Unmarshal(venueResponse.Body.Bytes(), &venue) != nil || venue.Total != 1 ||
+		len(venue.Players) != 1 || venue.Players[0].ID != userB.ID || venue.NextCursor != nil {
+		t.Fatal("venue roster did not return the live member and exact count")
+	}
+	for _, private := range []string{`"email"`, `"roles"`, `"token"`, `"accountStatus"`} {
+		if strings.Contains(venueResponse.Body.String(), private) {
+			t.Fatal("venue roster exposed private account fields")
+		}
+	}
+	status(request(http.MethodGet, venuePath+"&cursor=not-a-uuid", nil, cookieA), http.StatusBadRequest)
+	continued := request(http.MethodGet, venuePath+"&cursor="+userB.ID, nil, cookieA)
+	status(continued, http.StatusOK)
+	var continuedPage struct {
+		Players []nearbyPlayer `json:"players"`
+		Total   *int64         `json:"total"`
+	}
+	if json.Unmarshal(continued.Body.Bytes(), &continuedPage) != nil || len(continuedPage.Players) != 0 || continuedPage.Total != nil {
+		t.Fatal("venue cursor did not advance without repeating the full count")
+	}
+	// A crowded venue remains discoverable beyond the 40-player heartbeat cap.
+	const crowdSize = 250
+	if _, err := pool.Exec(ctx, `INSERT INTO users(handle,user_type)
+		SELECT 'crowd_' || lpad(n::text,3,'0'),'local'::user_type FROM generate_series(1,$1::int) n`, crowdSize); err != nil {
+		t.Fatal("could not seed isolated crowded venue accounts")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO character_appearances(user_id)
+		SELECT id FROM users WHERE handle LIKE 'crowd_%'`); err != nil {
+		t.Fatal("could not seed isolated crowded venue appearances")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO player_presence(user_id,latitude,longitude,area,place_id,last_seen_at,updated_at)
+		SELECT id,38.7061,-9.1459,'Cais do Sodré','comercio',$1,$1
+		FROM users WHERE handle LIKE 'crowd_%'`, now); err != nil {
+		t.Fatal("could not seed isolated crowded venue presence")
+	}
+	seen := map[string]bool{}
+	cursor := ""
+	for pageNumber := 0; pageNumber < (crowdSize+25)/25; pageNumber++ {
+		path := venuePath
+		if cursor != "" {
+			path += "&cursor=" + cursor
+		}
+		response := request(http.MethodGet, path, nil, cookieA)
+		status(response, http.StatusOK)
+		var page struct {
+			Players    []nearbyPlayer `json:"players"`
+			Total      *int64         `json:"total"`
+			NextCursor *string        `json:"nextCursor"`
+		}
+		if json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Players) > 25 ||
+			(pageNumber == 0 && (page.Total == nil || *page.Total != crowdSize+1)) ||
+			(pageNumber > 0 && page.Total != nil) {
+			t.Fatal("crowded venue page returned an incorrect count or oversized roster")
+		}
+		for _, player := range page.Players {
+			if seen[player.ID] || player.ID == userA.ID || player.PlaceID != "comercio" {
+				t.Fatal("crowded venue page duplicated or exposed a wrong player")
+			}
+			seen[player.ID] = true
+		}
+		if page.NextCursor == nil {
+			if len(seen) != crowdSize+1 {
+				t.Fatal("crowded venue ended before every player was discoverable")
+			}
+			break
+		}
+		cursor = *page.NextCursor
+	}
+	if len(seen) != crowdSize+1 {
+		t.Fatal("crowded venue did not page through all players")
+	}
 	// The account loader now joins appearances; chat must still resolve identities.
 	status(request(http.MethodPost, "/v1/chat/messages", chatInput{Room: "lisbon:city", Body: "Olá from the merged city", ClientID: testChatNonce}, cookieA), http.StatusCreated)
 	status(request(http.MethodGet, "/v1/chat/messages?room=lisbon:city", nil, cookieB), http.StatusOK)

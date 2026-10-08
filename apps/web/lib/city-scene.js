@@ -145,6 +145,7 @@ export function createCity(host, options) {
   scene.add(population);
   let peerPopulation = new THREE.Group();
   scene.add(peerPopulation);
+  const peerRecords = new Map();
   const materials = new Map();
   const sharedMaterials = new Set([
     ...architecture.wallMaterials,
@@ -870,83 +871,128 @@ export function createCity(host, options) {
     // camera and existing peer resources untouched until the city is restored.
     if (destroyed || travel.active) return;
     indoor.setPeers(options.peers);
-    disposeGroup(peerPopulation);
-    peerPopulation = new THREE.Group();
-    scene.add(peerPopulation);
-    peerMeshes.length = 0;
-    peerActors = [];
     peerPopulation.visible =
       !characterGallery &&
       !indoor.active &&
       camera.position.distanceTo(controls.target) < 900;
-    if (!manifest || indoor.active || characterGallery) return;
+    if (!manifest || indoor.active || characterGallery) {
+      if (peerRecords.size) {
+        disposeGroup(peerPopulation);
+        peerPopulation = new THREE.Group();
+        scene.add(peerPopulation);
+        peerRecords.clear();
+        peerMeshes.length = 0;
+        peerActors = [];
+      }
+      peerPopulation.visible = false;
+      return;
+    }
     const shirts = ["#bd7557", "#4f7370", "#77748c", "#c19a4b", "#52735b"];
     const skins = ["#a87955", "#76513b", "#d5af8b", "#5b3d30"];
-    options.peers
-      .filter((peer) => !peer?.placeId)
-      .slice(0, 40)
-      .forEach((peer, index) => {
-        if (
-          !peer ||
-          !Number.isFinite(peer.longitude) ||
-          !Number.isFinite(peer.latitude) ||
-          !containsGeo(manifest.bounds, [peer.longitude, peer.latitude]) ||
-          typeof peer.handle !== "string" ||
-          !peer.handle
-        )
-          return;
-        const seed = [...peer.handle].reduce(
-          (total, character) => total + character.charCodeAt(0),
-          0,
+    // Bound draw calls on small devices. Select nearby people, keeping the
+    // focused player visible even in a crowded neighbourhood.
+    const budget = Number.isInteger(options.peerDetailLimit)
+      ? Math.max(1, Math.min(40, options.peerDetailLimit))
+      : typeof matchMedia === "function" &&
+          matchMedia("(max-width: 720px)").matches
+        ? 12
+        : 24;
+    const visiblePeers = options.peers
+      .filter(
+        (peer) =>
+          peer &&
+          !peer.placeId &&
+          typeof peer.id === "string" &&
+          Number.isFinite(peer.longitude) &&
+          Number.isFinite(peer.latitude) &&
+          containsGeo(manifest.bounds, [peer.longitude, peer.latitude]) &&
+          typeof peer.handle === "string" &&
+          peer.handle,
+      )
+      .sort((a, b) => {
+        if (a.id === focus?.peerId) return -1;
+        if (b.id === focus?.peerId) return 1;
+        const da = point3([a.longitude, a.latitude]).distanceToSquared(
+          controls.target,
         );
-        const character = createCharacter({
-          bodyType: peer.appearance?.bodyType,
-          shirt: peer.appearance?.topColor || shirts[seed % shirts.length],
-          trousers: peer.appearance?.bottomColor,
-          hair: peer.appearance?.hairColor,
-          skin: peer.appearance?.skinTone || skins[seed % skins.length],
-          shoes: peer.appearance?.shoeColor,
-          style:
-            peer.appearance?.outfitStyle ||
-            (peer.userType === "local" ? "casual" : "tourist"),
-          hairStyle:
-            peer.appearance?.hairStyle ||
-            ["short", "curly", "bob", "bun"][seed % 4],
-        });
-        const target = point3([peer.longitude, peer.latitude]);
-        const nearest = nearestPath(target, true);
-        character.position.copy(
-          nearest
-            ? sample(nearest.line, nearest.d + 2.5 + index * 1.7, 1.2).v
-            : target,
+        const db = point3([b.longitude, b.latitude]).distanceToSquared(
+          controls.target,
         );
-        character.position.y =
-          geoY(unprojectGeo(character.position.x, character.position.z)) + 0.2;
-        character.rotation.y = ((seed % 8) * Math.PI) / 4;
-        character.traverse((mesh) => {
-          if (!mesh.isMesh) return;
-          mesh.userData.peer = peer;
-          peerMeshes.push(mesh);
-        });
+        return da - db || a.id.localeCompare(b.id);
+      })
+      .slice(0, budget);
+    const keep = new Set(visiblePeers.map((peer) => peer.id));
+    for (const [id, record] of peerRecords) {
+      if (keep.has(id)) continue;
+      disposeGroup(record.character);
+      peerRecords.delete(id);
+    }
+    peerMeshes.length = 0;
+    peerActors = [];
+    visiblePeers.forEach((peer, index) => {
+      const seed = [...peer.handle].reduce(
+        (total, character) => total + character.charCodeAt(0),
+        0,
+      );
+      const appearance = {
+        bodyType: peer.appearance?.bodyType,
+        shirt: peer.appearance?.topColor || shirts[seed % shirts.length],
+        trousers: peer.appearance?.bottomColor,
+        hair: peer.appearance?.hairColor,
+        skin: peer.appearance?.skinTone || skins[seed % skins.length],
+        shoes: peer.appearance?.shoeColor,
+        style:
+          peer.appearance?.outfitStyle ||
+          (peer.userType === "local" ? "casual" : "tourist"),
+        hairStyle:
+          peer.appearance?.hairStyle ||
+          ["short", "curly", "bob", "bun"][seed % 4],
+      };
+      const signature = JSON.stringify([peer.handle, appearance]);
+      let record = peerRecords.get(peer.id);
+      if (record && record.signature !== signature) {
+        disposeGroup(record.character);
+        peerRecords.delete(peer.id);
+        record = null;
+      }
+      if (!record) {
+        const character = createCharacter(appearance);
         const label = canvasLabel(`@${peer.handle}`, "#446b5a");
         label.position.y = 2.75;
         label.scale.set(1.45, 0.32, 1);
-        label.userData.peer = peer;
         character.add(label);
-        peerMeshes.push(label);
         peerPopulation.add(character);
-        peerActors.push(character);
-        if (frameSelected && focus?.peerId === peer.id) {
-          controls.target
-            .copy(character.position)
-            .add(new THREE.Vector3(0, 1, 0));
-          const distance = focus.range || 18;
-          camera.position
-            .copy(character.position)
-            .add(new THREE.Vector3(distance * 0.35, distance * 0.42, distance));
-          controls.update();
-        }
+        record = { character, signature };
+        peerRecords.set(peer.id, record);
+      }
+      const character = record.character;
+      const target = point3([peer.longitude, peer.latitude]);
+      const nearest = nearestPath(target, true);
+      character.position.copy(
+        nearest
+          ? sample(nearest.line, nearest.d + 2.5 + index * 1.7, 1.2).v
+          : target,
+      );
+      character.position.y =
+        geoY(unprojectGeo(character.position.x, character.position.z)) + 0.2;
+      character.rotation.y = ((seed % 8) * Math.PI) / 4;
+      character.traverse((mesh) => {
+        if (!mesh.isMesh && !mesh.isSprite) return;
+        mesh.userData.peer = peer;
+        peerMeshes.push(mesh);
       });
+      peerActors.push(character);
+      if (frameSelected && focus?.peerId === peer.id) {
+        controls.target
+          .copy(character.position)
+          .add(new THREE.Vector3(0, 1, 0));
+        const distance = focus.range || 18;
+        camera.position
+          .copy(character.position)
+          .add(new THREE.Vector3(distance * 0.35, distance * 0.42, distance));
+        controls.update();
+      }
+    });
   }
   function refreshMarkers() {
     const hotspots = options.hotspots || [];
