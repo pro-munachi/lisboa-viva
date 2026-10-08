@@ -1,0 +1,201 @@
+.controls.controls {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 6px;
+  overflow: visible;
+}
+.controls.controls[data-expanded="true"] {
+  z-index: 14;
+}
+.controls.controls button {
+  min-width: 44px;
+  min-height: 44px;
+  gap: 6px;
+  padding: 8px 10px;
+  color: #243452;
+  font-size: 11px;
+}
+.controls.controls button[aria-pressed="true"] {
+  color: white;
+}
+.controls.controls button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+.controls.controls .gestures button span,
+.controls.controls .optionsTrigger span {
+  display: inline;
+  font-size: inherit;
+}
+.gestures.gestures,
+.zoom.zoom {
+  gap: 2px;
+}
+.zoom.zoom {
+  padding-inline: 4px;
+}
+.controls.controls .zoom button {
+  padding: 8px;
+}
+.controls.controls .optionsTrigger {
+  background: #eef2fc;
+  color: #3154b7;
+}
+.controls.controls .optionsTrigger[aria-expanded="true"] {
+  background: #3156d3;
+  color: #fff;
+}
+.options {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 0;
+  width: min(330px, calc(100vw - 36px));
+  max-height: calc(100svh - 250px);
+  padding: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #d5def0;
+  border-radius: 19px;
+  color: #243452;
+  background: #fffefb;
+  box-shadow: 0 13px 40px #2134522c;
+}
+.options[hidden] {
+  display: none;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: -4px -3px 6px 3px;
+}
+.heading strong {
+  font-family: var(--font-roam-game), sans-serif;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+}
+.controls.controls .heading button {
+  padding: 8px;
+  border-radius: 50%;
+  background: #edf2fb;
+}
+.actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.controls.controls .actions button {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px;
+  background: #edf2fb;
+  white-space: normal;
+  text-align: left;
+}
+.actions button svg {
+  flex-shrink: 0;
+}
+.controls.controls .motion {
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin: 9px 0;
+  background: #eaf3ed;
+  color: #326557;
+}
+.controls.controls .motion span {
+  display: inline;
+}
+.time {
+  display: grid;
+  gap: 9px;
+  padding: 10px 2px 1px;
+  border-top: 1px solid #dce3ef;
+  font-size: 11px;
+}
+.timeHeading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 650;
+}
+.timeHeading > span {
+  margin-left: auto;
+  color: #66748c;
+  font-variant-numeric: tabular-nums;
+}
+.time select {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid #ccd7ec;
+  border-radius: 10px;
+  color: #243452;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+.controls.controls button:focus-visible,
+.time select:focus-visible {
+  outline: 3px solid #ec806c;
+  outline-offset: 2px;
+}
+.controls.controls button:active:focus-visible {
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .controls.controls .optionsTrigger:hover,
+  .controls.controls .actions button:hover,
+  .controls.controls .heading button:hover {
+    background: #e0e8fb;
+  }
+  .controls.controls .optionsTrigger[aria-expanded="true"]:hover {
+    background: #2549bf;
+  }
+  .controls.controls .motion:hover {
+    background: #dcecdf;
+  }
+}
+@media (max-width: 600px) {
+  .controls.controls {
+    width: max-content;
+    max-width: calc(100% - 24px);
+    gap: 2px;
+  }
+  .controls.controls .gestures button {
+    flex-direction: column;
+    gap: 3px;
+    min-width: 48px;
+    padding: 6px;
+    font-size: 10px;
+  }
+  .controls.controls .optionsTrigger span {
+    display: none;
+  }
+  .controls.controls .optionsTrigger {
+    padding: 8px;
+  }
+  .time select {
+    font-size: 16px;
+  }
+}
+@media (max-width: 360px) {
+  .controls.controls {
+    padding: 4px;
+    gap: 0;
+  }
+  .controls.controls .gestures button {
+    min-width: 44px;
+    padding: 7px;
+  }
+  .controls.controls .gestures button span {
+    display: none;
+  }
+  .zoom.zoom {
+    padding-inline: 2px;
+  }
+}

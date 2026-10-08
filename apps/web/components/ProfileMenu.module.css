@@ -1,0 +1,149 @@
+.profile {
+  min-width: 0;
+  padding: 6px 0;
+  color: #213052;
+}
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 6px 4px 20px;
+  border-bottom: 1px solid #dce3ef;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 58px;
+  height: 58px;
+  border-radius: 19px;
+  color: #244ba8;
+  background: #d9ec99;
+}
+.identity > div {
+  min-width: 0;
+}
+.identity h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-roam-game), sans-serif;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.45px;
+}
+.identity p {
+  margin: 4px 0;
+  color: #4c5f7c;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.identity small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #67748a;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.group {
+  display: grid;
+  gap: 6px;
+  margin-top: 19px;
+}
+.group h3 {
+  margin: 0 4px 3px;
+  color: #69758b;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.action {
+  display: grid;
+  grid-template-columns: 39px minmax(0, 1fr) 17px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 65px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: #213052;
+  background: #eef3ff;
+  text-align: left;
+  transition: background-color 120ms ease-out;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border-radius: 11px;
+  color: #3156c1;
+  background: #dce6ff;
+}
+.characterIcon {
+  color: #2c7165;
+  background: #d5eee3;
+}
+.actionText {
+  min-width: 0;
+}
+.actionText strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.actionText small {
+  display: block;
+  margin-top: 3px;
+  color: #65728b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.signOut {
+  color: #963f4d;
+  background: #f8edf0;
+}
+.signOut .icon {
+  color: #963f4d;
+  background: #f2dce2;
+}
+.signOut .actionText small {
+  color: #86535f;
+}
+.error {
+  margin: 0 4px 5px;
+  color: #a33548;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.action:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+.action:focus-visible {
+  outline: 3px solid #ec806c;
+  outline-offset: 2px;
+}
+.action:active:not(:disabled):not(:focus-visible) {
+  transform: scale(0.98);
+}
+@media (hover: hover) and (pointer: fine) {
+  .action:hover:not(:disabled) {
+    background: #e1eaff;
+  }
+  .signOut:hover:not(:disabled) {
+    background: #f3dfe5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action {
+    transition: none;
+  }
+  .action:active:not(:disabled) {
+    transform: none;
+  }
+}

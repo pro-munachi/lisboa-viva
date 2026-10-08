@@ -2,6 +2,25 @@
 
 Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, React 19.2.4, TypeScript 5.9.3 and Three.js 0.160.0. The project supports Node 22 or newer; GitHub Actions is configured for Node 22.
 
+## Phone and city navigation — 8 October 2026
+
+The final Phone/HUD source passes **317 web tests** and the typechecked production build. The Phone replaces scattered personal controls with eight real apps: Profile, Messages, Nearby, Journey, Journal, Wallet, Home and City guide. Profile, Messages, Journal, Wallet and City guide keep their content inside the Phone; Nearby, Journey and Home close it before opening the existing feature or destination. Trip commands and transport callbacks remain the existing implementations. No booking, appearance save, account change or private message was submitted in this navigation review.
+
+The production browser showed all eight apps in the original desktop handset. Profile → Edit character opened exactly one wardrobe dialog with focus on **Close wardrobe**. Closing it returned focus to the dock's **Phone** button. Journey opened the existing transport hubs. [Desktop Phone](review-assets/roam-phone-desktop.jpg), [city controls](review-assets/roam-city-controls.jpg).
+
+The mobile Phone fills the entire viewport, with no decorative rim or rounded screen edges. In portrait, Profile retained the same full-screen geometry, fixed Home control and Back focus. All eight app targets were measured. The captured viewport and controls were:
+
+| Viewport | Native Phone rectangle | Document width | Navigation and app targets |
+| --- | --- | --- | --- |
+| 390 × 844 | x=0, y=0, width=390, height=844 | 390px | Apps 103px high; Close 44px; Home 52px, bottom=834px |
+| 844 × 390 | x=0, y=0, width=844, height=390 | 844px | All eight apps fully visible at 87px high; Home 48px, bottom=386px |
+
+Real browser evidence: [full-screen portrait](review-assets/roam-phone-fullscreen.jpg), [landscape](review-assets/roam-phone-landscape.jpg). A subsequent CSS fallback stacks the clock and three-column grid below 600px in landscape to avoid narrow app columns; that additional viewport is not claimed as browser-verified here. The footer cannot shrink, while the app body can scroll. Safe-area padding is present; these desktop viewport checks do not measure an actual mobile device's inset or performance.
+
+Messages now keeps its inbox, transcript, tabs and composer inside the Phone instead of opening a separate chat panel. The main Chats control and player Message actions target the Messages app directly. The production browser checked the main Chats path and the existing test account's private inbox: opening its saved conversation retained the transcript and composer inside the same native Phone. DOM inspection recorded **one open dialog**, chat and composer inside the Phone, and **zero nested dialog roles**. Back-to-Phone focus and private composer focus were observed. Closing the Phone or changing apps unmounts embedded chat and stops its timers. An account-scoped draft store outside the active app retains unsent text and retry IDs through that lifecycle.
+
+At **390 × 844**, the private conversation stayed in the full-screen Phone at x=0/y=0/width=390/height=844, with document width 390. Its textarea measured x=10/y=647/width=370/height=72, ending at y=719 above fixed Home. [Mobile conversation proof](review-assets/roam-phone-chat.jpg). The review typed an unsent test draft, returned to Phone home, reopened Messages and the same private conversation, and confirmed the exact draft text remained. The test draft was then cleared; **Send was not pressed**. This verifies draft retention, rather than sending or retry behavior, in that browser flow. The 844 × 390 landscape check covers the home screen and navigation; a landscape conversation was not exercised.
+
 ## Character creator and mapped street life — 8 October 2026
 
 This increment passes **314 web tests**, the typechecked Next.js production build, **52 top-level Go race tests** with real loopback PostgreSQL integrations and no skips, `go vet` and `git diff --check`. The local database received additive migration `009_character_body_type.sql`; the owned review API was rebuilt and restarted. Browser evidence appears below.
