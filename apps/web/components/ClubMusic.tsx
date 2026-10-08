@@ -35,12 +35,22 @@ export default function ClubMusic({
     setPlaying(false);
     setStarting(false);
   }, [enabled]);
+  useEffect(() => {
+    const onOtherAudio = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== "club") stop();
+    };
+    window.addEventListener("roam:audio-start", onOtherAudio);
+    return () => window.removeEventListener("roam:audio-start", onOtherAudio);
+  }, []);
   async function play() {
     if (!enabled || starting) return;
     const instance =
       audio.current ||
       (audio.current = createClubAudio({ volume: volume / 100 }));
     const token = ++request.current;
+    window.dispatchEvent(
+      new CustomEvent("roam:audio-start", { detail: "club" }),
+    );
     setError(null);
     setStarting(true);
     const ready = await instance.play();

@@ -54,6 +54,7 @@ import type { AuthUser } from "../../lib/auth";
 import { accountStorageKeys } from "../../lib/account-storage";
 import { TRAVELLER_COLOURS } from "../../lib/traveller-colours";
 import MultiplayerDock from "../../components/MultiplayerDock";
+import LocalRadio from "../../components/LocalRadio";
 import { interiorForHotspot, type InteriorVisit } from "../../lib/interiors";
 import Dialog from "../../components/Dialog";
 import JourneyPanel from "../../components/JourneyPanel";
@@ -237,6 +238,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
   } = useMultiplayer();
   const [nearbyOpen, setNearbyOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
+  const [radioOpenRequest, setRadioOpenRequest] = useState(0);
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [cityNow, setCityNow] = useState<Date | null>(null);
   const phoneTrigger = useRef<HTMLButtonElement>(null);
@@ -1395,6 +1397,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
       }) || "Your Lisbon chapter";
   const phoneApps: PhoneApp[] = [
     {
+      id: "radio",
+      label: "Local radio",
+      detail: "Listen live while you explore Lisbon",
+      icon: Music,
+      onOpen: () => setRadioOpenRequest((count) => count + 1),
+    },
+    {
       id: "profile",
       label: "Profile",
       detail: "Your character, trip & account",
@@ -1706,6 +1715,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
             inside={Boolean(interior)}
           />
         )}
+        <LocalRadio openRequest={radioOpenRequest} />
         {!travelSequence && (
           <header className="topbar">
             <a className="brand" href="/" aria-label="ROAM home">
