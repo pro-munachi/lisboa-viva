@@ -106,6 +106,7 @@ test("nearby DTOs have bounded public fields, identifiers, coordinates, timestam
     peer({ lastSeenAt: "yesterday" }),
     peer({ lastSeenAt: new Date(time + 6000).toISOString() }),
     peer({ appearance: { ...DEFAULT_APPEARANCE, hairStyle: "injected" } }),
+    peer({ appearance: { ...DEFAULT_APPEARANCE, bodyType: "injected" } }),
     peer({ appearance: { ...DEFAULT_APPEARANCE, topColor: "url(secret)" } }),
   ];
   const valid = peer({
@@ -139,6 +140,31 @@ test("nearby DTOs have bounded public fields, identifiers, coordinates, timestam
   );
   assert.equal(validPresenceLocation(point), true);
   assert.equal(validPresenceLocation({ ...point, area: " " }), false);
+});
+
+test("nearby appearances preserve female choice and default only missing legacy body types", () => {
+  const { bodyType: _bodyType, ...legacy } = DEFAULT_APPEARANCE;
+  for (const [appearance, expected] of [
+    [{ ...DEFAULT_APPEARANCE, bodyType: "female" }, "female"],
+    [legacy, "male"],
+  ] as const) {
+    const result = nearbyPresencePeers(
+      { players: [peer({ appearance })], expiresInSeconds: 45 },
+      time,
+    )!;
+    assert.equal(result.length, 1);
+    assert.equal(result[0].appearance.bodyType, expected);
+  }
+  for (const bodyType of ["", null, 1, "Female", undefined]) {
+    const result = nearbyPresencePeers(
+      {
+        players: [peer({ appearance: { ...DEFAULT_APPEARANCE, bodyType } })],
+        expiresInSeconds: 45,
+      },
+      time,
+    )!;
+    assert.deepEqual(result, []);
+  }
 });
 
 test("duplicate refresh triggers share one bounded PUT/GET chain", async () => {

@@ -67,6 +67,7 @@ func TestPresenceAppearancePostgresLoopbackIntegration(t *testing.T) {
 		return authUser{}, nil
 	}
 	custom := defaultAppearance
+	custom.BodyType = "female"
 	custom.OutfitStyle, custom.HairStyle, custom.SkinTone = "dress", "bun", "#5b3d30"
 	userA, cookieA := register("presence_first", nil)
 	userB, cookieB := register("presence_second", &custom)
@@ -91,6 +92,7 @@ func TestPresenceAppearancePostgresLoopbackIntegration(t *testing.T) {
 		status(request(route.method, route.path, nil, nil), http.StatusUnauthorized)
 	}
 	updatedAppearance := defaultAppearance
+	updatedAppearance.BodyType = "female"
 	updatedAppearance.OutfitStyle, updatedAppearance.TopColor, updatedAppearance.HairStyle = "jacket", "#c19a4b", "curly"
 	updated := request(http.MethodPatch, "/v1/auth/appearance", updatedAppearance, cookieA)
 	status(updated, http.StatusOK)
@@ -104,6 +106,23 @@ func TestPresenceAppearancePostgresLoopbackIntegration(t *testing.T) {
 	invalid := updatedAppearance
 	invalid.TopColor = "javascript:red"
 	status(request(http.MethodPatch, "/v1/auth/appearance", invalid, cookieA), http.StatusBadRequest)
+	incompatible := updatedAppearance
+	incompatible.BodyType, incompatible.OutfitStyle = "male", "dress"
+	status(request(http.MethodPatch, "/v1/auth/appearance", incompatible, cookieA), http.StatusBadRequest)
+	if userFrom(request(http.MethodGet, "/v1/auth/me", nil, cookieA)).Appearance != updatedAppearance {
+		t.Fatal("incompatible male dress update changed the saved appearance")
+	}
+	for _, raw := range []string{`""`, `null`, `1`, `"other"`, `"Female"`} {
+		encoded, err := json.Marshal(updatedAppearance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		invalidBody := strings.Replace(string(encoded), `"bodyType":"female"`, `"bodyType":`+raw, 1)
+		status(request(http.MethodPatch, "/v1/auth/appearance", invalidBody, cookieA), http.StatusBadRequest)
+		if userFrom(request(http.MethodGet, "/v1/auth/me", nil, cookieA)).Appearance != updatedAppearance {
+			t.Fatal("invalid body type changed the saved appearance")
+		}
+	}
 	status(request(http.MethodPatch, "/v1/auth/appearance", `{"userId":"spoofed"}`, cookieA), http.StatusBadRequest)
 	status(request(http.MethodPatch, "/v1/auth/appearance", strings.Repeat(" ", 16<<10)+"{}", cookieA), http.StatusRequestEntityTooLarge)
 	status(request(http.MethodPut, "/v1/multiplayer/presence", strings.Repeat(" ", 16<<10)+"{}", cookieA), http.StatusRequestEntityTooLarge)

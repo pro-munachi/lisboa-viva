@@ -75,7 +75,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Appearance"
+              $ref: "#/components/schemas/AppearanceInput"
       responses:
         "200":
           description: Updated account and appearance
@@ -330,10 +330,11 @@ components:
         password: { type: string, minLength: 10, maxLength: 72 }
         userType: { type: string, enum: [tourist, local] }
         adultConfirmed: { type: boolean, const: true }
-        appearance: { $ref: "#/components/schemas/Appearance" }
+        appearance: { $ref: "#/components/schemas/AppearanceInput" }
     Appearance:
       type: object
       additionalProperties: false
+      description: Eight saved appearance fields. Current account and nearby responses include bodyType; legacy missing values default to male. Existing Male + Dress records remain readable without rewriting saved identity; the editor and renderer show Casual until an explicit compatible save.
       required:
         [
           outfitStyle,
@@ -345,6 +346,7 @@ components:
           shoeColor,
         ]
       properties:
+        bodyType: { type: string, enum: [male, female], default: male }
         outfitStyle: { type: string, enum: [casual, jacket, dress, tourist] }
         topColor:
           {
@@ -359,6 +361,17 @@ components:
         skinTone:
           { type: string, enum: ["#5b3d30", "#76513b", "#a87955", "#d5af8b"] }
         shoeColor: { type: string, enum: ["#eee8df", "#5c4b42", "#292d31"] }
+    AppearanceInput:
+      description: Registration and wardrobe inputs use approved body-specific clothes. Male supports Casual, Jacket and Explorer; Female also supports Dress. All four hairstyle IDs remain stable with model-specific geometry and labels. Missing bodyType defaults to male, so Dress requires an explicit female choice. Invalid, empty or null body types are rejected.
+      allOf:
+        - $ref: "#/components/schemas/Appearance"
+        - if:
+            properties:
+              outfitStyle: { const: dress }
+          then:
+            required: [bodyType]
+            properties:
+              bodyType: { const: female }
     Login:
       type: object
       additionalProperties: false

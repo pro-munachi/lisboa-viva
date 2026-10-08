@@ -7,6 +7,7 @@ import type { InteriorKind } from "../lib/interiors";
 const THREE = require("three");
 const venueId = "node:11341409242";
 const appearance = {
+  bodyType: "male",
   outfitStyle: "jacket",
   topColor: "#b47459",
   bottomColor: "#34444f",
@@ -333,6 +334,52 @@ test("passive roster updates preserve actor resources, room camera and an active
       h.runtime.update(1 / 60, true);
     assert.equal(h.events.at(-1)?.state, "complete");
     assert.equal(h.events.at(-1)?.zoneId, "weights");
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
+test("saving the local wardrobe keeps the room, camera, active workout and other players in place", () => {
+  const h = harness();
+  try {
+    h.enter("gym");
+    h.runtime.setPeers([peer(1)]);
+    h.runtime.perform("weights", 2000);
+    for (let i = 0; i < 1200 && h.events.at(-1)?.state !== "active"; i++)
+      h.runtime.update(1 / 60, true);
+    assert.equal(h.events.at(-1)?.state, "active");
+    const old = h.localActor(),
+      room = h.room(),
+      others = [...h.actors()];
+    const location = old.position.toArray(),
+      camera = h.camera.position.toArray(),
+      target = h.controls.target.toArray();
+    const events = h.events.length,
+      controls = h.controls.updates;
+    const counts = watchResources(old);
+    h.runtime.setAppearance({
+      ...appearance,
+      bodyType: "female",
+      outfitStyle: "dress",
+      hairStyle: "bob",
+      topColor: "#687f73",
+    });
+    assert.equal(h.room(), room);
+    assert.notEqual(h.localActor(), old);
+    assert.equal(h.localActor().userData.bodyType, "female");
+    assert.equal(h.localActor().userData.style, "dress");
+    assert.equal(h.localActor().userData.hairStyle, "bob");
+    assert.deepEqual(h.localActor().position.toArray(), location);
+    assert.deepEqual(h.actors(), others);
+    assert.deepEqual(h.camera.position.toArray(), camera);
+    assert.deepEqual(h.controls.target.toArray(), target);
+    assert.equal(h.controls.updates, controls);
+    assert.equal(h.events.length, events);
+    assert.ok([...counts.values()].every((count) => count === 1));
+    for (let i = 0; i < 600 && h.events.at(-1)?.state !== "complete"; i++)
+      h.runtime.update(1 / 60, true);
+    assert.equal(h.events.at(-1)?.zoneId, "weights");
+    assert.equal(h.events.at(-1)?.state, "complete");
   } finally {
     h.runtime.dispose();
   }

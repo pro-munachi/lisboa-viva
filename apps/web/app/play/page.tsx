@@ -294,10 +294,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [loaded, setLoaded] = useState(false);
   const [archive, setArchive] = useState<Trip[]>([]);
   const [setup, setSetup] = useState<Setup>(initial);
-  const travellerAppearance = useMemo(
-    () => ({ ...appearance, topColor: trip?.setup.shirt || setup.shirt }),
-    [appearance, trip?.setup.shirt, setup.shirt],
-  );
+  const travellerAppearance = appearance;
   const [calendarValid, setCalendarValid] = useState(true);
   const [panel, setPanel] = useState<Panel>(null);
   const [destination, setDestination] = useState<PlaceId | null>(null);
@@ -746,7 +743,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
       <div className={clean || travelSequence ? "game clean-world" : "game"}>
         <World
           focus={mapFocus}
-          shirt={trip?.setup.shirt || setup.shirt}
+          shirt={appearance.topColor}
           appearance={travellerAppearance}
           hotspots={worldHotspots}
           onHotspot={pickHotspot}
@@ -1687,7 +1684,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
               </div>
             </fieldset>
             <fieldset className="avatar-field">
-              <legend>Your traveller’s colour</legend>
+              <legend>Your trip colour</legend>
               <div className="swatches">
                 {colors.map((shirt, i) => (
                   <button

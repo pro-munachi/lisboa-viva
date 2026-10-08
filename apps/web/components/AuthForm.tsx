@@ -65,7 +65,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
 
   const registering = mode === "register";
   return (
-    <main className="auth-page">
+    <main className={`auth-page${registering ? " auth-register" : ""}`}>
       <section className="auth-story" aria-label="ROAM — Lisbon pilot">
         <Link className="auth-brand" href="/">
           ROAM
@@ -110,28 +110,30 @@ export default function AuthForm({ mode }: { mode: Mode }) {
           <form onSubmit={submit} className="auth-form">
             {registering ? (
               <>
-                <label>
-                  Username
-                  <input
-                    name="handle"
-                    autoComplete="username"
-                    minLength={3}
-                    maxLength={24}
-                    pattern="[a-z0-9_]+"
-                    placeholder="e.g. ines_in_lisbon"
-                    required
-                  />
-                </label>
-                <label>
-                  Email
-                  <input
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@example.com"
-                    required
-                  />
-                </label>
+                <div className="auth-identity">
+                  <label>
+                    Username
+                    <input
+                      name="handle"
+                      autoComplete="username"
+                      minLength={3}
+                      maxLength={24}
+                      pattern="[a-z0-9_]+"
+                      placeholder="e.g. ines_in_lisbon"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Email
+                    <input
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </label>
+                </div>
                 <fieldset className="auth-type">
                   <legend>You will explore as…</legend>
                   <button

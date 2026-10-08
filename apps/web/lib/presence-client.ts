@@ -1,4 +1,7 @@
-import type { CharacterAppearance } from "./appearance";
+import {
+  normalizeCharacterAppearance,
+  type CharacterAppearance,
+} from "./appearance";
 import { GEO_BOUNDS } from "./geography";
 import { playerPlace } from "./player-places";
 
@@ -24,7 +27,6 @@ export type PresenceStatus =
   | "hidden";
 type Snapshot = { peers: MultiplayerPeer[]; status: PresenceStatus };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const color = /^#[0-9a-f]{6}$/i;
 const timestamp =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
@@ -48,22 +50,6 @@ export function validPresenceLocation(
       point.placeId === "" ||
       (typeof point.placeId === "string" &&
         Boolean(playerPlace(point.placeId))))
-  );
-}
-
-function validAppearance(value: unknown): value is CharacterAppearance {
-  if (!value || typeof value !== "object") return false;
-  const appearance = value as CharacterAppearance;
-  return (
-    ["casual", "jacket", "dress", "tourist"].includes(appearance.outfitStyle) &&
-    ["short", "curly", "bob", "bun"].includes(appearance.hairStyle) &&
-    [
-      appearance.topColor,
-      appearance.bottomColor,
-      appearance.hairColor,
-      appearance.skinTone,
-      appearance.shoeColor,
-    ].every((value) => typeof value === "string" && color.test(value))
   );
 }
 
@@ -94,6 +80,7 @@ export function nearbyPresencePeers(
     if (!item || typeof item !== "object" || !validPresenceLocation(item))
       return [];
     const peer = item as MultiplayerPeer;
+    const appearance = normalizeCharacterAppearance(peer.appearance);
     if (
       typeof peer.id !== "string" ||
       !uuid.test(peer.id) ||
@@ -108,14 +95,13 @@ export function nearbyPresencePeers(
       !timestamp.test(peer.lastSeenAt) ||
       !Number.isFinite(Date.parse(peer.lastSeenAt)) ||
       Date.parse(peer.lastSeenAt) > now + 5000 ||
-      !validAppearance(peer.appearance)
+      !appearance
     )
       return [];
     const id = peer.id.toLowerCase();
     if (seen.has(id) || Date.parse(peer.lastSeenAt) <= now - PRESENCE_TTL_MS)
       return [];
     seen.add(id);
-    const a = peer.appearance;
     return [
       {
         id,
@@ -127,15 +113,7 @@ export function nearbyPresencePeers(
         ...(peer.placeId ? { placeId: peer.placeId } : {}),
         distanceMetres: peer.distanceMetres,
         lastSeenAt: peer.lastSeenAt,
-        appearance: {
-          outfitStyle: a.outfitStyle,
-          topColor: a.topColor,
-          bottomColor: a.bottomColor,
-          hairStyle: a.hairStyle,
-          hairColor: a.hairColor,
-          skinTone: a.skinTone,
-          shoeColor: a.shoeColor,
-        },
+        appearance,
       },
     ];
   });

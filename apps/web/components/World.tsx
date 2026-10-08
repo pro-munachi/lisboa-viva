@@ -34,6 +34,7 @@ type CityController = {
   setFocus: (f: WorldFocus, street?: boolean) => void;
   setMarkers: (h: WorldHotspot[]) => void;
   setPeers: (peers: MultiplayerPeer[]) => void;
+  setAppearance: (appearance: CharacterAppearance) => void;
   overview: () => void;
   characters: () => void;
   people: () => void;
@@ -283,7 +284,7 @@ export default function World({
       controller.current = null;
       startedTravel.current = null;
     };
-  }, [googleVisible, shirt, appearance]);
+  }, [googleVisible]);
   useEffect(() => {
     setTravelPhase(null);
     setTravelError("");
@@ -321,6 +322,9 @@ export default function World({
   useEffect(() => {
     controller.current?.setPeers(peers);
   }, [peers]);
+  useEffect(() => {
+    controller.current?.setAppearance(appearance);
+  }, [appearance]);
   useEffect(() => {
     setGallery(false);
     setPerson(null);

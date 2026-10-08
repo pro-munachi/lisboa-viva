@@ -991,6 +991,7 @@ export function createInteriorScene(
     home: [
       {
         name: "Your Lisbon host",
+        bodyType: "female",
         x: 5.6,
         z: -3.2,
         zone: "kitchen",
@@ -1002,6 +1003,7 @@ export function createInteriorScene(
     cafe: [
       {
         name: "Barista",
+        bodyType: "male",
         x: 1.8,
         z: -5.9,
         zone: "espresso",
@@ -1011,6 +1013,7 @@ export function createInteriorScene(
       },
       {
         name: "Café guest",
+        bodyType: "female",
         x: -2.1,
         z: 2.4,
         zone: "table",
@@ -1022,6 +1025,7 @@ export function createInteriorScene(
     gym: [
       {
         name: "Studio trainer",
+        bodyType: "male",
         x: 0.5,
         z: 0.3,
         zone: "weights",
@@ -1031,6 +1035,7 @@ export function createInteriorScene(
       },
       {
         name: "Runner",
+        bodyType: "female",
         x: -4.5,
         z: -3.5,
         y: 0.385,
@@ -1044,6 +1049,7 @@ export function createInteriorScene(
     shop: [
       {
         name: "Shopkeeper",
+        bodyType: "female",
         x: 5.3,
         z: 1.7,
         zone: "counter",
@@ -1053,6 +1059,7 @@ export function createInteriorScene(
       },
       {
         name: "Browsing guest",
+        bodyType: "male",
         x: -3.1,
         z: -2.9,
         zone: "browse",
@@ -1064,6 +1071,7 @@ export function createInteriorScene(
     museum: [
       {
         name: "Gallery guide",
+        bodyType: "female",
         x: 1.4,
         z: -4.2,
         zone: "gallery",
@@ -1073,6 +1081,7 @@ export function createInteriorScene(
       },
       {
         name: "Art visitor",
+        bodyType: "male",
         x: -6.6,
         z: -2.5,
         zone: "tiles",
@@ -1084,6 +1093,7 @@ export function createInteriorScene(
     bar: [
       {
         name: "Bartender",
+        bodyType: "male",
         x: 4.2,
         z: -5.95,
         zone: "counter",
@@ -1093,6 +1103,7 @@ export function createInteriorScene(
       },
       {
         name: "Musician",
+        bodyType: "female",
         x: -4.7,
         z: -4.7,
         y: 0.26,

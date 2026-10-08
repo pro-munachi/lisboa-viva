@@ -1,5 +1,9 @@
 import * as THREE from "three";
-import { createCharacter, animateCharacter } from "./characters";
+import {
+  createCharacter,
+  animateCharacter,
+  replaceCharacterAppearance,
+} from "./characters";
 import { createInteriorScene } from "./city-interiors";
 import { findRoomRoute } from "./city-room-navigation";
 import { createHotspotBadgeLayer } from "./city-hotspot-badges";
@@ -8,6 +12,7 @@ import { chatPlaceFor } from "./chat-rooms";
 const peerUUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const peerAppearanceFields = [
+  "bodyType",
   "outfitStyle",
   "topColor",
   "bottomColor",
@@ -33,6 +38,8 @@ function publicInteriorPeers(peers) {
       !Number.isFinite(peer.longitude) ||
       !chatPlaceFor(peer.placeId) ||
       !appearance ||
+      (appearance.bodyType !== undefined &&
+        !["male", "female"].includes(appearance.bodyType)) ||
       !["casual", "jacket", "dress", "tourist"].includes(
         appearance.outfitStyle,
       ) ||
@@ -49,7 +56,13 @@ function publicInteriorPeers(peers) {
     const id = peer.id.toLowerCase();
     if (seen.has(id)) return [];
     seen.add(id);
-    return [{ ...peer, id, appearance: { ...appearance } }];
+    return [
+      {
+        ...peer,
+        id,
+        appearance: { ...appearance, bodyType: appearance.bodyType || "male" },
+      },
+    ];
   });
 }
 
@@ -264,6 +277,7 @@ export function createInteriorRuntime({
       }
       const a = peer.appearance;
       const character = createCharacter({
+        bodyType: a.bodyType,
         shirt: a.topColor,
         trousers: a.bottomColor,
         hair: a.hairColor,
@@ -296,6 +310,12 @@ export function createInteriorRuntime({
     if (disposed) return;
     latestPeers = publicInteriorPeers(peers);
     refreshPeers();
+  }
+  function setAppearance(next) {
+    if (disposed || !next) return;
+    appearance = { ...next };
+    shirt = next.topColor;
+    if (actor) actor = replaceCharacterAppearance(actor, next);
   }
   function updateBadges() {
     if (!badges || disposed) return;
@@ -342,6 +362,7 @@ export function createInteriorRuntime({
     room.setNight?.(lightingNight);
     room.group.position.copy(origin);
     actor = createCharacter({
+      bodyType: appearance?.bodyType,
       shirt: appearance?.topColor || shirt || "#c58e59",
       trousers: appearance?.bottomColor,
       hair: appearance?.hairColor,
@@ -566,6 +587,7 @@ export function createInteriorRuntime({
     selectZone,
     setLighting,
     setPeers,
+    setAppearance,
     perform,
     pick,
     update,
