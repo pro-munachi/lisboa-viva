@@ -2,7 +2,7 @@
 
 The prepared configuration is [deploy/render.staging.yaml](../deploy/render.staging.yaml). It has not been deployed. No staging URL is recorded here; Render assigns the public URLs when the services are created.
 
-This review environment uses two free Docker web services and a fresh free PostgreSQL database in Frankfurt. It uses the `feat/arrival-and-city-experience` branch and the repository root as both Docker build contexts. The containers include the bundled Lisbon map data; Google Maps and AI credentials are optional. Without those keys, the open-data city and authored profile recommendations remain available.
+This review environment uses two free Docker web services and a fresh free PostgreSQL database in Frankfurt. It uses the `feat/arrival-and-city-experience` branch and the repository root as the Go build context and `apps/web` as the web build context. The containers include the bundled Lisbon map data; Google Maps and AI credentials are optional. Without those keys, the open-data city and authored profile recommendations remain available.
 
 ## Create the review environment
 

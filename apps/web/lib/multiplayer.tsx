@@ -60,7 +60,8 @@ export function MultiplayerProvider({
     setVisibleLocation((current) =>
       current.latitude === next.latitude &&
       current.longitude === next.longitude &&
-      current.area === next.area
+      current.area === next.area &&
+      current.placeId === next.placeId
         ? current
         : { ...next },
     );

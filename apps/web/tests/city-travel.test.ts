@@ -16,7 +16,7 @@ const modes = [
   "cycle",
 ];
 
-function setup(reducedMotion = false, callbacks: any = {}) {
+function setup(reducedMotion = false, callbacks: any = {}, options: any = {}) {
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(45);
   camera.position.set(11, 22, 33);
@@ -42,6 +42,7 @@ function setup(reducedMotion = false, callbacks: any = {}) {
     projectGeo,
     geoY,
     reducedMotion,
+    ...options,
     onPhase(value: any) {
       phases.push(value);
       callbacks.onPhase?.(value);
@@ -102,8 +103,11 @@ function auditStage(root: any) {
       ? node.material
       : node.material
         ? [node.material]
-        : [])
+        : []) {
       resources.add(mat);
+      for (const key of ["map", "bumpMap", "roughnessMap"])
+        if (mat[key]) resources.add(mat[key]);
+    }
   });
   const counts = new Map<any, number>();
   for (const resource of resources) {
@@ -172,6 +176,559 @@ test("every original transport mode finishes once with ordered phases and the ma
     assert.equal(env.finishes.length, 1);
     verify();
   }
+});
+
+test("the original aircraft has a complete transport silhouette while airport detail stays bounded", () => {
+  const env = setup();
+  env.runtime.start(sequence("flight"));
+  const tableau = stage(env),
+    plane = tableau.getObjectByName("arrival-plane"),
+    airport = tableau.getObjectByName("illustrative airport airside");
+  const named = (name: string) => {
+    const nodes: any[] = [];
+    plane.traverse((node: any) => {
+      if (node.name === name) nodes.push(node);
+    });
+    return nodes;
+  };
+  assert.equal(named("turbofan nacelle").length, 2);
+  assert.equal(named("engine fan").length, 2);
+  assert.equal(named("upswept winglet").length, 2);
+  assert.equal(named("cockpit glazing").length, 2);
+  assert.equal(named("cabin window").length, 40);
+  assert.equal(named("main gear tyre").length, 4);
+  assert.equal(named("nose gear tyre").length, 2);
+  assert.equal(named("original ROAM livery").length, 2);
+  assert.equal(airport.userData.illustrative, true);
+  assert.equal(airport.userData.runwayTop, 0.1);
+  assert.ok(
+    airport.children.some(
+      (node: any) => node.name === "batched airport scenery",
+    ),
+  );
+  const airframe = plane.getObjectByName("tapered airframe");
+  airframe.geometry.computeBoundingBox();
+  const bodySize = airframe.geometry.boundingBox.getSize(new THREE.Vector3());
+  assert.ok(bodySize.x > 36 && bodySize.x < 39);
+  assert.ok(bodySize.y > 3.5 && bodySize.y < 4.1);
+  assert.equal(airframe.material.vertexColors, true);
+  const colors = airframe.geometry.getAttribute("color");
+  assert.ok(
+    Array.from(colors.array).some(
+      (value, index) => index % 3 === 0 && Number(value) < 0.1,
+    ),
+    "the cobalt belly is baked into the white airframe",
+  );
+  const geometry = new Set<any>(),
+    materials = new Set<any>();
+  let meshes = 0;
+  tableau.traverse((node: any) => {
+    if (!node.isMesh) return;
+    meshes++;
+    geometry.add(node.geometry);
+    materials.add(node.material);
+    if (node.material.map) {
+      assert.equal(node.material.map.isDataTexture, true);
+      assert.equal(node.material.map.image.width, 128);
+      assert.equal(node.material.map.image.height, 128);
+    }
+  });
+  // Bound scene complexity independently of the number of airport lamps,
+  // terminal mullions and runway stripes; they share merged material batches.
+  assert.ok(meshes <= 200, `${meshes} draw objects`);
+  assert.ok(geometry.size <= 64, `${geometry.size} geometries`);
+  assert.ok(materials.size <= 64, `${materials.size} materials`);
+  const vertices = [...geometry].reduce(
+    (sum, value) => sum + value.attributes.position.count,
+    0,
+  );
+  assert.ok(vertices <= 25_000, `${vertices} unique vertices`);
+  env.runtime.dispose();
+});
+
+test("landing flares onto the main wheels, settles the nose and decelerates before the mapped-city cut", () => {
+  const env = setup();
+  env.runtime.start(sequence("flight"));
+  const tableau = stage(env),
+    plane = tableau.getObjectByName("arrival-plane"),
+    runway = tableau.getObjectByName("runway asphalt");
+  let elapsed = 0;
+  const at = (time: number) => {
+    env.runtime.update(time - elapsed);
+    elapsed = time;
+    tableau.updateMatrixWorld(true);
+  };
+  // Use actual transformed tyre vertices. A transformed cached AABB expands
+  // when a cylinder spins and cannot measure tyre-to-runway contact.
+  const tyreBottom = (name: string) => {
+    const bottoms: number[] = [];
+    plane.traverse((node: any) => {
+      if (node.name === name)
+        bottoms.push(new THREE.Box3().setFromObject(node, true).min.y);
+    });
+    return Math.min(...bottoms);
+  };
+  tableau.updateMatrixWorld(true);
+  const runwayTop = new THREE.Box3().setFromObject(runway, true).max.y;
+  assert.equal(tableau.userData.flightShot, "approach");
+  at(3.5);
+  assert.equal(tableau.userData.flightShot, "flare");
+  assert.ok(tyreBottom("main gear tyre") > runwayTop + 1);
+  at(4.4);
+  assert.equal(tableau.userData.flightShot, "touchdown");
+  assert.ok(plane.rotation.z > 0.06);
+  assert.ok(Math.abs(tyreBottom("main gear tyre") - runwayTop) < 0.01);
+  assert.ok(tyreBottom("nose gear tyre") > runwayTop + 1);
+  at(5.4);
+  assert.equal(tableau.userData.flightShot, "rollout");
+  assert.equal(plane.rotation.z, 0);
+  assert.ok(Math.abs(tyreBottom("main gear tyre") - runwayTop) < 0.01);
+  assert.ok(Math.abs(tyreBottom("nose gear tyre") - runwayTop) < 0.01);
+  const x54 = plane.position.x;
+  at(6.4);
+  const x64 = plane.position.x;
+  at(7.4);
+  assert.ok(plane.position.x - x64 < x64 - x54);
+  assert.equal(tableau.visible, true);
+  at(8.2);
+  assert.equal(tableau.visible, false);
+  const point = env.projectGeo([destination.lng, destination.lat]);
+  assert.deepEqual(env.controls.target.toArray(), [
+    point.x,
+    env.geoY([destination.lng, destination.lat]),
+    point.z,
+  ]);
+  at(10.5);
+  assert.equal(env.finishes.length, 1);
+  exactDestination(env);
+  env.runtime.dispose();
+});
+
+test("flight framing keeps the full airframe visible on desktop and portrait screens", () => {
+  for (const aspect of [1.5, 390 / 844]) {
+    for (const departure of [false, true]) {
+      const env = setup();
+      env.camera.aspect = aspect;
+      env.camera.updateProjectionMatrix();
+      env.runtime.start(sequence("flight", "framing", { departure }));
+      const tableau = stage(env),
+        plane = tableau.getObjectByName("arrival-plane");
+      let elapsed = 0;
+      for (const time of [0, 3.5, 4.4, 5.4, 7.6]) {
+        if (time > elapsed) env.runtime.update(time - elapsed);
+        elapsed = time;
+        tableau.updateMatrixWorld(true);
+        env.camera.updateMatrixWorld(true);
+        const bounds = new THREE.Box3().setFromObject(plane, true);
+        for (const x of [bounds.min.x, bounds.max.x])
+          for (const y of [bounds.min.y, bounds.max.y])
+            for (const z of [bounds.min.z, bounds.max.z]) {
+              const point = new THREE.Vector3(x, y, z).project(env.camera);
+              assert.ok(
+                Math.abs(point.x) < 1 &&
+                  Math.abs(point.y) < 1 &&
+                  point.z > -1 &&
+                  point.z < 1,
+                `aircraft clipped at ${time}s, aspect ${aspect}, departure ${departure}`,
+              );
+            }
+      }
+      env.runtime.dispose();
+    }
+  }
+});
+
+test("departure accelerates before rotation then climbs and retracts the gear", () => {
+  const env = setup();
+  env.runtime.start(sequence("flight", "departure", { departure: true }));
+  const tableau = stage(env),
+    plane = tableau.getObjectByName("arrival-plane"),
+    gear = plane.getObjectByName("landing gear");
+  const initialY = plane.position.y;
+  assert.equal(tableau.userData.flightShot, "taxi");
+  env.runtime.update(2.5);
+  assert.equal(tableau.userData.flightShot, "takeoff-roll");
+  assert.equal(plane.position.y, initialY);
+  const startX = plane.position.x;
+  env.runtime.update(0.5);
+  const firstDistance = plane.position.x - startX,
+    nextX = plane.position.x;
+  env.runtime.update(0.5);
+  assert.ok(plane.position.x - nextX > firstDistance);
+  env.runtime.update(1);
+  assert.equal(tableau.userData.flightShot, "rotation");
+  assert.ok(plane.position.y > initialY);
+  assert.ok(plane.rotation.z > 0);
+  assert.equal(gear.visible, true);
+  env.runtime.update(2);
+  assert.equal(tableau.userData.flightShot, "climb");
+  assert.ok(plane.position.y > initialY + 10);
+  assert.equal(gear.visible, false);
+  env.runtime.dispose();
+});
+
+test("flight lighting accepts a bounded time-of-day snapshot without changing aircraft identity", () => {
+  for (const input of [0, 1, 9, NaN]) {
+    let reads = 0;
+    const env = setup(
+      false,
+      {},
+      {
+        night() {
+          reads++;
+          return input;
+        },
+      },
+    );
+    env.runtime.start(sequence("flight"));
+    const tableau = stage(env),
+      sun = tableau.children.find((node: any) => node.isDirectionalLight),
+      fill = tableau.children.find((node: any) => node.isHemisphereLight);
+    const normalized = Number.isFinite(input) ? Math.min(1, input) : 0;
+    assert.ok(Math.abs(sun.intensity - (1.35 - normalized * 0.8)) < 1e-8);
+    assert.ok(Math.abs(fill.intensity - (0.95 + normalized * 0.35)) < 1e-8);
+    assert.equal(reads, 1);
+    env.runtime.update(1);
+    assert.equal(reads, 1);
+    const plane = tableau.getObjectByName("arrival-plane");
+    assert.equal(plane.userData.aircraft.original, true);
+    const nav = plane.getObjectByName("wing navigation light");
+    assert.ok(nav.material.emissiveIntensity > 1);
+    env.runtime.dispose();
+  }
+});
+
+test("detailed flight resources are disposed exactly once on replacement, cancel and skip", () => {
+  const env = setup();
+  for (const operation of ["replace", "cancel", "skip"]) {
+    env.runtime.start(sequence("flight", operation));
+    const tableau = stage(env),
+      verify = auditStage(tableau);
+    env.runtime.update(4.5);
+    if (operation === "replace") {
+      env.runtime.start(sequence("flight", "replacement"));
+      verify();
+      const nextVerify = auditStage(stage(env));
+      env.runtime.cancel();
+      nextVerify();
+    } else if (operation === "cancel") env.runtime.cancel();
+    else env.runtime.skip();
+    verify();
+    assert.equal(tableau.parent, null);
+  }
+  assert.deepEqual(
+    env.finishes.map((event) => event.id),
+    ["skip"],
+  );
+  env.runtime.dispose();
+});
+
+test("flight view changes preserve the running timeline and saved seated appearance", () => {
+  const appearance = {
+    outfitStyle: "jacket",
+    topColor: "#42b894",
+    bottomColor: "#30324a",
+    hairStyle: "bun",
+    hairColor: "#b98452",
+    skinTone: "#5b3d30",
+    shoeColor: "#292d31",
+  };
+  const env = setup();
+  assert.equal(env.runtime.setView("cabin"), false);
+  env.runtime.start(sequence("flight", "views", { appearance }));
+  const tableau = stage(env),
+    plane = tableau.getObjectByName("arrival-plane"),
+    airport = tableau.getObjectByName("illustrative airport airside");
+  assert.equal(env.runtime.view, "outside");
+  assert.equal(
+    tableau.getObjectByName("original ROAM flight cabin"),
+    undefined,
+  );
+  env.runtime.update(3.5);
+  const pose = plane.position.toArray(),
+    exteriorCamera = env.camera.position.toArray(),
+    phases = env.phases.map((event) => event.phase);
+  assert.equal(env.runtime.setView("unknown"), false);
+  assert.equal(env.runtime.setView("cabin"), true);
+  const cabin = tableau.getObjectByName("original ROAM flight cabin"),
+    avatar = cabin.getObjectByName("traveller");
+  assert.equal(env.runtime.view, "cabin");
+  assert.deepEqual(plane.position.toArray(), pose);
+  assert.deepEqual(
+    env.phases.map((event) => event.phase),
+    phases,
+  );
+  assert.equal(plane.visible, false);
+  assert.equal(airport.visible, false);
+  assert.equal(cabin.visible, true);
+  assert.equal(avatar.visible, true);
+  assert.equal(avatar.userData.activity, "seated");
+  assert.equal(avatar.userData.flightSeat, "3A");
+  assert.equal(avatar.userData.style, "jacket");
+  assert.equal(avatar.userData.hairStyle, "bun");
+  for (const [name, color] of [
+    ["tailored top", "42b894"],
+    ["pelvis", "30324a"],
+    ["bun hair", "b98452"],
+    ["face", "5b3d30"],
+    ["left shoe", "292d31"],
+  ])
+    assert.equal(
+      avatar.getObjectByName(name).material.color.getHexString(),
+      color,
+    );
+  assert.equal(env.runtime.setView("seat"), true);
+  assert.equal(avatar.visible, false);
+  assert.deepEqual(plane.position.toArray(), pose);
+  assert.equal(env.runtime.setView("outside"), true);
+  assert.deepEqual(env.camera.position.toArray(), exteriorCamera);
+  assert.equal(plane.visible, true);
+  assert.equal(airport.visible, true);
+  assert.equal(cabin.visible, false);
+  assert.equal(env.runtime.setView("cabin"), true);
+  assert.equal(tableau.getObjectByName("original ROAM flight cabin"), cabin);
+  env.runtime.update(1);
+  assert.equal(tableau.userData.flightShot, "touchdown");
+  assert.ok(plane.position.x > pose[0]);
+  assert.equal(env.runtime.setView("seat"), true);
+  env.runtime.update(3.7);
+  assert.equal(tableau.visible, false);
+  const mapCamera = env.camera.position.toArray();
+  assert.equal(env.runtime.setView("outside"), false);
+  assert.equal(env.runtime.setView("cabin"), false);
+  assert.deepEqual(env.camera.position.toArray(), mapCamera);
+  env.runtime.update(2.3);
+  assert.equal(env.finishes.length, 1);
+  exactDestination(env);
+  assert.equal(env.runtime.setView("seat"), false);
+  env.runtime.dispose();
+});
+
+test("the lazy cabin has bounded rounded furnishings and clear immersive/window camera views", () => {
+  for (const aspect of [1.5, 390 / 844]) {
+    const env = setup();
+    env.camera.aspect = aspect;
+    env.camera.updateProjectionMatrix();
+    env.runtime.start(sequence("flight"));
+    assert.equal(env.runtime.setView("cabin"), true);
+    const tableau = stage(env),
+      cabin = tableau.getObjectByName("original ROAM flight cabin");
+    assert.equal(cabin.userData.illustrative, true);
+    assert.equal(cabin.userData.seatLayout, "3+3");
+    assert.equal(cabin.userData.seats, 30);
+    assert.equal(cabin.userData.decorativePassengers, 7);
+    const crew = cabin.getObjectByName("decorative cabin crew");
+    assert.ok(crew);
+    const geometry = new Set<any>(),
+      materials = new Set<any>();
+    let meshes = 0;
+    tableau.traverse((node: any) => {
+      if (!node.isMesh) return;
+      meshes++;
+      geometry.add(node.geometry);
+      materials.add(node.material);
+      for (const attribute of Object.values(node.geometry.attributes) as any[])
+        assert.ok(Array.from(attribute.array).every(Number.isFinite));
+    });
+    assert.ok(meshes <= 280, `${meshes} lazy-cabin meshes`);
+    assert.ok(geometry.size <= 160, `${geometry.size} lazy-cabin geometries`);
+    assert.ok(materials.size <= 130, `${materials.size} lazy-cabin materials`);
+    const vertices = [...geometry].reduce(
+      (sum, value) => sum + value.attributes.position.count,
+      0,
+    );
+    assert.ok(vertices <= 200_000, `${vertices} lazy-cabin vertices`);
+    tableau.updateMatrixWorld(true);
+    env.camera.updateMatrixWorld(true);
+    // An immersive camera sits inside the room rather than framing the room's
+    // exterior bounding box. The crew face must be visible down the aisle.
+    const head = crew
+        .getObjectByName("head")
+        .getWorldPosition(new THREE.Vector3()),
+      projected = head.clone().project(env.camera);
+    assert.ok(Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1);
+    const headDirection = head.clone().sub(env.camera.position),
+      headDistance = headDirection.length(),
+      headRay = new THREE.Raycaster(
+        env.camera.position,
+        headDirection.normalize(),
+        0,
+        headDistance - 0.14,
+      );
+    assert.equal(
+      headRay.intersectObject(cabin.getObjectByName("cabin furniture"), true)
+        .length,
+      0,
+    );
+    const cameraBounds = new THREE.Box3().setFromObject(cabin, true);
+    assert.ok(cameraBounds.containsPoint(env.camera.position));
+    const ceiling = cabin
+      .getObjectByName("cabin furniture")
+      .children.find(
+        (node: any) =>
+          node.isMesh && node.material.color.getHexString() === "c3c5b9",
+      );
+    assert.ok(ceiling);
+    assert.ok(
+      Array.from(ceiling.geometry.attributes.normal.array).some(
+        (value, index) => index % 3 === 1 && Number(value) < -0.9,
+      ),
+    );
+    assert.equal(env.runtime.setView("seat"), true);
+    // The first-person camera turns toward the oval window from seat 3A.
+    // Seatbacks and nearby passengers must not cover that view.
+    const target = env.controls.target.clone(),
+      direction = target.clone().sub(env.camera.position),
+      distance = direction.length(),
+      ray = new THREE.Raycaster(
+        env.camera.position,
+        direction.normalize(),
+        0,
+        distance - 0.05,
+      );
+    assert.equal(
+      ray.intersectObject(cabin.getObjectByName("cabin furniture"), true)
+        .length,
+      0,
+    );
+    assert.ok(cabin.getObjectByName("original oval sky window"));
+    env.runtime.dispose();
+  }
+});
+
+test("flight cabin switching is static under reduced motion and all lazily created resources dispose once", () => {
+  const reduced = setup(true);
+  reduced.runtime.start(sequence("flight"));
+  reduced.runtime.setView("cabin");
+  const tableau = stage(reduced),
+    camera = reduced.camera.position.toArray(),
+    verify = auditStage(tableau);
+  reduced.runtime.update(0.4);
+  assert.deepEqual(reduced.camera.position.toArray(), camera);
+  assert.equal(reduced.runtime.setView("seat"), true);
+  const seatCamera = reduced.camera.position.toArray();
+  reduced.runtime.update(0.2);
+  assert.deepEqual(reduced.camera.position.toArray(), seatCamera);
+  reduced.runtime.update(0.1);
+  assert.equal(reduced.runtime.setView("cabin"), false);
+  exactDestination(reduced);
+  reduced.runtime.update(0.3);
+  verify();
+  assert.equal(reduced.finishes.length, 1);
+  reduced.runtime.dispose();
+  for (const method of ["skip", "cancel", "replace"]) {
+    const env = setup();
+    env.runtime.start(sequence("flight"));
+    env.runtime.setView("seat");
+    const cleanup = auditStage(stage(env));
+    if (method === "replace") env.runtime.start(sequence("bus", "replacement"));
+    else if (method === "skip") env.runtime.skip();
+    else env.runtime.cancel();
+    cleanup();
+    if (method === "replace") assert.equal(env.runtime.setView("cabin"), false);
+    env.runtime.dispose();
+  }
+});
+
+test("flight lighting layers and view FOV restore the original camera on every exit", () => {
+  for (const reduced of [false, true]) {
+    for (const exit of ["cancel", "skip", "arrive"]) {
+      const env = setup(reduced);
+      env.camera.layers.enable(3);
+      env.camera.fov = 48;
+      env.camera.updateProjectionMatrix();
+      const original = env.camera.layers.mask;
+      env.runtime.start(sequence("flight"));
+      const isolated = env.camera.layers.mask;
+      assert.notEqual(isolated, original);
+      stage(env).traverse((node: any) =>
+        assert.equal(node.layers.mask, isolated),
+      );
+      env.runtime.setView("cabin");
+      assert.equal(env.camera.fov, 52);
+      stage(env).traverse((node: any) =>
+        assert.equal(node.layers.mask, isolated),
+      );
+      env.runtime.setView("seat");
+      assert.equal(env.camera.fov, 65);
+      if (exit === "cancel") env.runtime.cancel();
+      else if (exit === "skip") env.runtime.skip();
+      else {
+        env.runtime.update(reduced ? 0.7 : 8.2);
+        assert.equal(stage(env).visible, false);
+        assert.equal(env.camera.layers.mask, original);
+        assert.equal(env.camera.fov, 48);
+        env.runtime.update(3);
+      }
+      assert.equal(env.camera.layers.mask, original);
+      assert.equal(env.camera.fov, 48);
+      env.runtime.dispose();
+    }
+  }
+});
+
+test("the shared flight environment survives journey changes and disposes once with the runtime", async () => {
+  let resolve: (texture: any) => void = () => {};
+  const pending = new Promise<any>((done) => {
+      resolve = done;
+    }),
+    env = setup(false, {}, { loadEnvironment: () => pending }),
+    texture = new THREE.DataTexture(new Uint16Array(16), 2, 2);
+  let disposed = 0;
+  texture.addEventListener("dispose", () => disposed++);
+  env.runtime.start(sequence("flight"));
+  resolve(texture);
+  await new Promise((done) => setImmediate(done));
+  const airframe = stage(env).getObjectByName("tapered airframe"),
+    sky = stage(env).getObjectByName("original flight sky");
+  assert.equal(airframe.material.envMap, texture);
+  assert.equal(sky.material.map, texture);
+  assert.equal(sky.material.vertexColors, false);
+  env.runtime.skip();
+  assert.equal(disposed, 0);
+  env.runtime.start(sequence("flight", "next"));
+  assert.equal(
+    stage(env).getObjectByName("tapered airframe").material.envMap,
+    texture,
+  );
+  env.runtime.setView("cabin");
+  const avatar = stage(env).getObjectByName("traveller");
+  assert.ok(avatar);
+  env.runtime.dispose();
+  env.runtime.dispose();
+  assert.equal(disposed, 1);
+});
+
+test("late or failed flight environment loads preserve cleanup and generated sky fallback", async () => {
+  let resolve: (texture: any) => void = () => {};
+  const pending = new Promise<any>((done) => {
+      resolve = done;
+    }),
+    env = setup(false, {}, { loadEnvironment: () => pending }),
+    texture = new THREE.DataTexture(new Uint16Array(16), 2, 2);
+  let disposed = 0;
+  texture.addEventListener("dispose", () => disposed++);
+  env.runtime.dispose();
+  resolve(texture);
+  await new Promise((done) => setImmediate(done));
+  assert.equal(disposed, 1);
+  const fallback = setup(
+    false,
+    {},
+    { loadEnvironment: () => Promise.reject(new Error("unavailable")) },
+  );
+  fallback.runtime.start(sequence("flight"));
+  await new Promise((done) => setImmediate(done));
+  assert.equal(
+    stage(fallback).getObjectByName("original flight sky").material.map,
+    null,
+  );
+  assert.equal(
+    stage(fallback).getObjectByName("original flight sky").material
+      .vertexColors,
+    true,
+  );
+  fallback.runtime.dispose();
 });
 
 test("flight arrival descends onto a runway at the destination, while departure takes off from the origin", () => {
@@ -255,10 +812,15 @@ test("reduced motion holds a static preview then cuts to destination and complet
   const tableau = stage(env),
     plane = tableau.getObjectByName("arrival-plane"),
     camera = env.camera.position.clone(),
-    planePosition = plane.position.clone();
+    planePosition = plane.position.clone(),
+    fan = plane.getObjectByName("engine fan"),
+    gear = plane.getObjectByName("landing gear");
   env.runtime.update(0.4);
   assert.deepEqual(env.camera.position.toArray(), camera.toArray());
   assert.deepEqual(plane.position.toArray(), planePosition.toArray());
+  assert.equal(fan.rotation.x, 0);
+  assert.equal(gear.position.y, 0);
+  assert.equal(gear.visible, true);
   assert.equal(tableau.visible, true);
   env.runtime.update(0.3);
   assert.equal(tableau.visible, false);

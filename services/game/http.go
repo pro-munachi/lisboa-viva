@@ -111,6 +111,8 @@ func fail(w http.ResponseWriter, err error) {
 			"rate_limited":           http.StatusTooManyRequests,
 			"payload_too_large":      http.StatusRequestEntityTooLarge,
 			"nonce_conflict":         http.StatusConflict,
+			"invalid_peer":           http.StatusBadRequest,
+			"peer_unavailable":       http.StatusNotFound,
 		}[code]
 	}
 	if status == 0 {

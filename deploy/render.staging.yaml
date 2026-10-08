@@ -37,7 +37,7 @@ services:
     repo: https://github.com/pro-munachi/lisboa-viva
     branch: feat/arrival-and-city-experience
     autoDeployTrigger: "off"
-    dockerContext: .
+    dockerContext: ./apps/web
     dockerfilePath: ./apps/web/Dockerfile
     healthCheckPath: /
     envVars:

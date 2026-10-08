@@ -78,6 +78,9 @@ func TestPresenceAppearancePostgresLoopbackIntegration(t *testing.T) {
 		WHERE name IN ('004_chat.sql','004_player_presence.sql')`).Scan(&migrationCount) != nil || migrationCount != 2 {
 		t.Fatal("both complete 004 migration filenames must remain registered")
 	}
+	if pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations WHERE name='007_presence_place.sql'`).Scan(&migrationCount) != nil || migrationCount != 1 {
+		t.Fatal("the optional public presence place migration must be applied exactly once")
+	}
 	nearbyPath := "/v1/multiplayer/nearby?latitude=38.7061&longitude=-9.1459&radius=1000"
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPatch, "/v1/auth/appearance"},
@@ -128,12 +131,55 @@ func TestPresenceAppearancePostgresLoopbackIntegration(t *testing.T) {
 		return result.Players
 	}
 	players := nearby(cookieA)
-	if len(players) != 1 || players[0].ID != userB.ID || players[0].Appearance != custom || players[0].DistanceMetres <= 0 {
+	if len(players) != 1 || players[0].ID != userB.ID || players[0].Appearance != custom || players[0].DistanceMetres <= 0 || players[0].PlaceID != "" {
 		t.Fatal("nearby presence did not expose the other active player and their saved appearance")
 	}
 	players = nearby(cookieB)
 	if len(players) != 1 || players[0].ID != userA.ID || players[0].Appearance != updatedAppearance {
 		t.Fatal("nearby presence did not exclude self or use persisted appearance")
+	}
+	// Exact public venue IDs are supplied only when the frontend is visiting a
+	// venue. The service returns that ID, never a client-invented display name.
+	locationB.PlaceID = "node:11341409242"
+	status(request(http.MethodPut, "/v1/multiplayer/presence", locationB, cookieB), http.StatusOK)
+	if players := nearby(cookieA); len(players) != 1 || players[0].PlaceID != locationB.PlaceID {
+		t.Fatal("nearby player did not retain its canonical public venue")
+	}
+	locationB.PlaceID = "maat"
+	status(request(http.MethodPut, "/v1/multiplayer/presence", locationB, cookieB), http.StatusOK)
+	if players := nearby(cookieA); len(players) != 1 || players[0].PlaceID != "maat" {
+		t.Fatal("moving to another public venue did not replace the old place")
+	}
+	for _, invalidID := range []string{"home", "private-room", "lisbon:hotspot:comercio", "node:unknown", "comercio "} {
+		invalidLocation := locationB
+		invalidLocation.PlaceID = invalidID
+		status(request(http.MethodPut, "/v1/multiplayer/presence", invalidLocation, cookieB), http.StatusBadRequest)
+		if players := nearby(cookieA); len(players) != 1 || players[0].PlaceID != "maat" {
+			t.Fatal("a rejected private/unknown venue changed the persisted public place")
+		}
+	}
+	status(request(http.MethodPut, "/v1/multiplayer/presence", `{"latitude":38.7062,"longitude":-9.1458,"area":"Cais","placeId":"maat","placeName":"My private home"}`, cookieB), http.StatusBadRequest)
+	status(request(http.MethodPut, "/v1/multiplayer/presence", `{"latitude":38.7062,"longitude":-9.1458,"area":"Cais","placeId":""}`, cookieB), http.StatusOK)
+	var placeIsNull bool
+	if pool.QueryRow(ctx, "SELECT place_id IS NULL FROM player_presence WHERE user_id=$1", userB.ID).Scan(&placeIsNull) != nil || !placeIsNull {
+		t.Fatal("explicitly leaving a venue did not clear place_id to NULL")
+	}
+	if players := nearby(cookieA); len(players) != 1 || players[0].PlaceID != "" {
+		t.Fatal("outdoor nearby presence retained its former public venue")
+	}
+	status(request(http.MethodPut, "/v1/multiplayer/presence", locationB, cookieB), http.StatusOK)
+	locationB.PlaceID = ""
+	status(request(http.MethodPut, "/v1/multiplayer/presence", locationB, cookieB), http.StatusOK)
+	if pool.QueryRow(ctx, "SELECT place_id IS NULL FROM player_presence WHERE user_id=$1", userB.ID).Scan(&placeIsNull) != nil || !placeIsNull {
+		t.Fatal("an omitted placeId did not clear prior indoor presence")
+	}
+	// Peers in one public venue share the same canonical identity. They remain
+	// bounded by the existing nearby radius and expiration, rather than names.
+	locationA.PlaceID, locationB.PlaceID = "comercio", "comercio"
+	status(request(http.MethodPut, "/v1/multiplayer/presence", locationA, cookieA), http.StatusOK)
+	status(request(http.MethodPut, "/v1/multiplayer/presence", locationB, cookieB), http.StatusOK)
+	if players := nearby(cookieA); len(players) != 1 || players[0].PlaceID != "comercio" {
+		t.Fatal("same public venue peer was missing from nearby presence")
 	}
 	// The account loader now joins appearances; chat must still resolve identities.
 	status(request(http.MethodPost, "/v1/chat/messages", chatInput{Room: "lisbon:city", Body: "Olá from the merged city", ClientID: testChatNonce}, cookieA), http.StatusCreated)

@@ -58,17 +58,24 @@ test("chat exposes real signed-in identity, public-room disclosure and manual dr
   assert.ok(html.includes("Loading recent messages"));
 });
 
-test("chat offers an authorized nearby group and private nearby-player conversation", () => {
+test("chat opens the nearby shared room while keeping a separate private message inbox", () => {
   const html = render(undefined, true);
   assert.ok(html.includes("Nearby"));
-  assert.ok(html.includes("Private"));
+  assert.ok(html.includes("Messages"));
   assert.ok(html.includes("Around Cais do Sodré"));
   assert.ok(
     html.includes(
       "Shared with signed-in players currently around Cais do Sodré.",
     ),
   );
-  assert.ok(html.includes("Chat privately with a player you met nearby"));
+  assert.ok(html.includes("Your private conversations and message inbox"));
+  assert.ok(
+    html.includes('aria-label="Messages in people around Cais do Sodré"'),
+  );
+  assert.ok(!html.includes("Only you and @ines"));
+  assert.ok(!html.includes("Anyone signed in can join this room."));
+  assert.ok(!html.includes("Direct conversation"));
+  assert.match(html, /<button type="submit" disabled="">Send/);
 });
 
 test("unmapped locations do not offer a pretend place room and sending awaits initial history", () => {
@@ -79,4 +86,54 @@ test("unmapped locations do not offer a pretend place room and sending awaits in
   );
   assert.match(html, /<button type="submit" disabled="">Send/);
   assert.ok(html.includes('aria-label="Messages in Lisbon"'));
+  assert.match(
+    html,
+    /<button[^>]*disabled=""[^>]*title="Join multiplayer to chat nearby"/,
+  );
+  assert.ok(html.includes("Your private conversations and message inbox"));
+});
+
+test("selecting another account opens a private conversation with inbox navigation and no public prompts", () => {
+  const html = renderToStaticMarkup(
+    createElement(ChatPanel, {
+      user,
+      cityId: "lisbon",
+      initialPeer: {
+        id: "49b27cb0-0011-441a-814e-f3f3ebdf7fd3",
+        handle: "ines<script>",
+        userType: "local",
+      },
+      openPeerRequest: 1,
+      nearbyArea: "Cais do Sodré",
+      peers: [peer],
+      onClose: () => undefined,
+    }),
+  );
+  assert.ok(html.includes("Your messages"));
+  assert.ok(
+    html.includes(
+      "Only you and @ines&lt;script&gt; can access this conversation.",
+    ),
+  );
+  assert.ok(html.includes('aria-label="Back to message inbox"'));
+  assert.ok(html.includes("Message @ines&lt;script&gt;"));
+  assert.ok(!html.includes("Anyone signed in can join this room."));
+  assert.ok(!html.includes("Ask a local"));
+  assert.ok(!html.includes("Shared with signed-in players currently around"));
+  assert.ok(!html.includes("Around Cais do Sodré</h2>"));
+  assert.ok(!html.includes("<script>"));
+  assert.match(html, /<button type="submit" disabled="">Send/);
+});
+
+test("the current account cannot accidentally start a conversation with itself", () => {
+  const html = renderToStaticMarkup(
+    createElement(ChatPanel, {
+      user,
+      cityId: "lisbon",
+      initialPeer: { id: user.id, handle: user.handle, userType: "tourist" },
+      onClose: () => undefined,
+    }),
+  );
+  assert.ok(html.includes("Lisbon city chat"));
+  assert.ok(!html.includes("Direct conversation"));
 });

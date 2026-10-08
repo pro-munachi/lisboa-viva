@@ -1,6 +1,6 @@
 # One Render service for the client and server
 
-The [single-service Dockerfile](../deploy/Dockerfile.single) runs Next.js and Go in one container. Render exposes Next.js on port 10000. Go listens only on `127.0.0.1:8080`, and Next.js forwards its `/api/` routes to Go. PostgreSQL is still a separate database; it can be your existing staging database or a Render database.
+The [single-service Dockerfile](../deploy/Dockerfile.single) runs Next.js and Go in one container. Render exposes Next.js on port 10000. Go listens only on `127.0.0.1:18080` (or `18081` when the public port is `18080`), and Next.js forwards its `/api/` routes to Go. PostgreSQL is still a separate database; it can be your existing staging database or a Render database.
 
 ## Deploy with the Blueprint
 

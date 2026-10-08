@@ -7,6 +7,7 @@ import {
   PRESENCE_TTL_MS,
 } from "../lib/presence-client";
 import { DEFAULT_APPEARANCE } from "../lib/appearance";
+import { VENUES } from "../lib/venues";
 
 const time = Date.UTC(2026, 9, 7, 20, 0);
 const point = { latitude: 38.7061, longitude: -9.1459, area: "Cais do Sodré" };
@@ -35,7 +36,48 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
-function harness(fetcher: typeof fetch, clock = () => time, timeoutMs = 100) {
+
+test("venue presence copies only canonical public place IDs and rejects private rooms", () => {
+  const gym = VENUES.find((venue) => venue.category === "gym")!;
+  assert.equal(validPresenceLocation({ ...point, placeId: gym.id }), true);
+  for (const placeId of ["home", "made-up", 42])
+    assert.equal(validPresenceLocation({ ...point, placeId }), false);
+  const result = nearbyPresencePeers(
+    {
+      players: [
+        peer({ placeId: gym.id, placeName: "Forged" }),
+        peer({ id: "22345678-1234-4123-8123-123456789012", placeId: "home" }),
+      ],
+      expiresInSeconds: 45,
+    },
+    time,
+  )!;
+  assert.equal(result.length, 1);
+  assert.equal(result[0].placeId, gym.id);
+  assert.equal("placeName" in result[0], false);
+});
+
+test("entering and leaving at unchanged coordinates immediately updates the shared venue", async () => {
+  const writes: any[] = [];
+  const { client } = harness((async (_, init) => {
+    if (init?.method === "PUT") {
+      writes.push(JSON.parse(init.body as string));
+      return Response.json({ online: true });
+    }
+    return nearby([]);
+  }) as typeof fetch);
+  await client.sync();
+  client.setLocation({ ...point, placeId: "transit-cais-bus" });
+  await tick();
+  client.setLocation(point);
+  await tick();
+  assert.deepEqual(
+    writes.map((p) => p.placeId),
+    [undefined, "transit-cais-bus", undefined],
+  );
+  client.dispose();
+});
+function harness(fetcher: typeof fetch, clock = () => time, timeoutMs = 5000) {
   const states: any[] = [];
   const client = createPresenceClient({
     location: point,

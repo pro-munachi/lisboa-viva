@@ -44,6 +44,14 @@ import JourneyPanel from "../../components/JourneyPanel";
 import TripCalendar from "../../components/TripCalendar";
 import TripRecommendations from "../../components/TripRecommendations";
 import ChatPanel from "../../components/ChatPanel";
+import PlayerMenu from "../../components/PlayerMenu";
+import NearbyPlayers from "../../components/NearbyPlayers";
+import { playerPlace } from "../../lib/player-places";
+import type {
+  PresenceLocation,
+  MultiplayerPeer,
+} from "../../lib/presence-client";
+import type { ChatPeer } from "../../lib/direct-client";
 import { chatPlaceFor } from "../../lib/chat-rooms";
 import {
   TravelCompletionGate,
@@ -185,8 +193,21 @@ const transitHubFor = (hotspot: WorldHotspot | null) =>
   );
 function RoamExperience({ user }: { user: AuthUser }) {
   const storage = accountStorageKeys(user.id);
-  const { peers, setLocation, appearance, location, enabled } =
-    useMultiplayer();
+  const {
+    peers,
+    setLocation,
+    appearance,
+    location,
+    enabled,
+    status: presenceStatus,
+  } = useMultiplayer();
+  const [nearbyOpen, setNearbyOpen] = useState(false);
+  const [visitedLocation, setVisitedLocation] = useState<PresenceLocation>({
+    latitude: placeFocus.cais.lat,
+    longitude: placeFocus.cais.lng,
+    area: placeFocus.cais.name,
+  });
+
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -203,6 +224,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [pinName, setPinName] = useState("");
   const [clean, setClean] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<ChatPeer | null>(null);
+  const [chatPeer, setChatPeer] = useState<ChatPeer | null>(null);
+  const [openPeerRequest, setOpenPeerRequest] = useState(0);
   const chatTrigger = useRef<HTMLButtonElement>(null);
   const [interior, setInterior] = useState<InteriorVisit | null>(null);
   const beforeInterior = useRef(false);
@@ -291,7 +315,14 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }, []);
   useEffect(() => {
     if (!trip || travelSequence) return;
-    setMapFocus(tripFocus(trip));
+    const focus = tripFocus(trip);
+    setMapFocus(focus);
+    if (!interior)
+      setVisitedLocation({
+        latitude: focus.lat,
+        longitude: focus.lng,
+        area: focus.presenceArea || focus.name,
+      });
   }, [trip?.place, trip?.setup.base, trip?.journey.hub, travelSequence?.id]);
   useEffect(() => {
     if (travelGate.current.pending && !travelGate.current.matches(trip))
@@ -318,6 +349,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setTravelSequence(sequence);
     setPanel(null);
     setChatOpen(false);
+    setNearbyOpen(false);
+    setSelectedPlayer(null);
     setMapHotspot(null);
     setNotice("");
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -334,27 +367,24 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }
   useEffect(() => {
     if (travelSequence) return;
-    setLocation({
-      latitude: mapFocus.lat,
-      longitude: mapFocus.lng,
-      area: mapFocus.presenceArea || mapFocus.name,
-    });
-  }, [
-    mapFocus.lat,
-    mapFocus.lng,
-    mapFocus.name,
-    mapFocus.presenceArea,
-    travelSequence?.id,
-    setLocation,
-  ]);
+    setLocation(visitedLocation);
+  }, [visitedLocation, travelSequence?.id, setLocation]);
   function pickHotspot(h: WorldHotspot) {
     if (travelGate.current.pending) return;
-    setInterior(null);
+    if (interior) leaveRoom();
     setMapHotspot(h);
     setMapFocus({ ...h, range: 140 });
     setPanel("hotspot");
   }
   function enterRoom(visit: InteriorVisit) {
+    const place = playerPlace(visit.id);
+    if (place?.kind)
+      setVisitedLocation({
+        latitude: place.lat,
+        longitude: place.lng,
+        area: place.area,
+        placeId: place.id,
+      });
     if (!interior) beforeInterior.current = clean;
     setInterior(visit);
     setClean(true);
@@ -362,10 +392,17 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }
   function leaveRoom() {
     setInterior(null);
+    setVisitedLocation(({ placeId: _placeId, ...location }) => location);
     setClean(beforeInterior.current);
   }
   function enterHome() {
-    setMapFocus(focusFor("home", trip?.setup.base || setup.base));
+    const focus = focusFor("home", trip?.setup.base || setup.base);
+    setMapFocus(focus);
+    setVisitedLocation({
+      latitude: focus.lat,
+      longitude: focus.lng,
+      area: trip?.setup.base || setup.base,
+    });
     enterRoom({
       id: "home",
       kind: "home",
@@ -632,6 +669,78 @@ function RoamExperience({ user }: { user: AuthUser }) {
       : mapHotspot?.id ||
           (trip?.journey.hub ? `transit-${trip.journey.hub}` : undefined),
   );
+  const selectedPresence = selectedPlayer
+    ? peers.find((peer) => peer.id === selectedPlayer.id)
+    : undefined;
+  function selectPlayer(player: ChatPeer) {
+    if (player.id === user.id || travelSequence) return;
+    setPanel(null);
+    setNearbyOpen(false);
+    setSelectedPlayer({
+      id: player.id,
+      handle: player.handle,
+      userType: player.userType,
+    });
+  }
+  function messagePlayer(player: ChatPeer | null = selectedPlayer) {
+    if (!player) return;
+    setChatPeer(player);
+    setOpenPeerRequest((request) => request + 1);
+    setSelectedPlayer(null);
+    setNearbyOpen(false);
+    setPanel(null);
+    setChatOpen(true);
+  }
+  function findPlayer() {
+    if (!selectedPresence) return;
+    const place = playerPlace(selectedPresence.placeId);
+    setSelectedPlayer(null);
+    setChatOpen(false);
+    leaveRoom();
+    setMapHotspot(place?.hotspot || null);
+    setPanel(place ? "hotspot" : null);
+    setMapFocus({
+      lat: place?.lat ?? selectedPresence.latitude,
+      lng: place?.lng ?? selectedPresence.longitude,
+      name:
+        place?.name || `@${selectedPresence.handle} · ${selectedPresence.area}`,
+      range: place ? 140 : 18,
+      ...(place ? {} : { peerId: selectedPresence.id }),
+      presenceArea: selectedPresence.area,
+    });
+  }
+  function joinPlayer(peer: MultiplayerPeer) {
+    // Resolve again from the current live roster; a player may have left since opening the directory.
+    const live = peers.find((candidate) => candidate.id === peer.id);
+    const place = playerPlace(live?.placeId);
+    if (!live || !place?.kind) {
+      notify(
+        "This player has left that venue. Find their latest location nearby.",
+      );
+      return;
+    }
+    setNearbyOpen(false);
+    setSelectedPlayer(null);
+    setChatOpen(false);
+    if (interior?.id === place.id) {
+      notify(`You’re already together at ${place.name}.`);
+      return;
+    }
+    setMapHotspot(place.hotspot);
+    setMapFocus({
+      lat: place.lat,
+      lng: place.lng,
+      name: place.name,
+      range: 140,
+    });
+    enterRoom({
+      id: place.id,
+      name: place.name,
+      kind: place.kind,
+      sourceUrl: place.hotspot.sourceUrl,
+    });
+    notify(`You joined @${live.handle} at ${place.name}.`);
+  }
   return (
     <main className="app-shell">
       <div className={clean || travelSequence ? "game clean-world" : "game"}>
@@ -651,21 +760,19 @@ function RoamExperience({ user }: { user: AuthUser }) {
             else setPanel("setup");
           }}
           peers={peers}
+          onPlayer={selectPlayer}
         />
-        {!travelSequence && !clean && (
+        {!travelSequence && (
           <MultiplayerDock
-            onSelect={(peer) => {
-              setInterior(null);
-              setMapHotspot(null);
-              setMapFocus({
-                lat: peer.latitude,
-                lng: peer.longitude,
-                name: `@${peer.handle} · ${peer.area}`,
-                range: 18,
-                peerId: peer.id,
-                presenceArea: peer.area,
-              });
+            onSelect={selectPlayer}
+            onFind={() => {
+              setPanel(null);
+              setChatOpen(false);
+              setSelectedPlayer(null);
+              setNearbyOpen(true);
             }}
+            currentPlaceId={visitedLocation.placeId}
+            inside={Boolean(interior)}
           />
         )}
         {!travelSequence && (
@@ -688,7 +795,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
                 setChatOpen((open) => !open);
               }}
             >
-              <MessageCircle size={16} /> City chat
+              <MessageCircle size={16} /> Chats
             </button>
             {!interior && (
               <button onClick={() => setClean((v) => !v)}>
@@ -1039,7 +1146,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
             </>
           ))}
         <footer className="game-footnote">
-          ROAM · SIMULATED TRIPS & FICTIONAL CHARACTERS
+          ROAM · SIMULATED TRIPS & CITY ENCOUNTERS
         </footer>
         {storageError && !travelSequence && (
           <div className="save-warning" role="alert">
@@ -1061,15 +1168,46 @@ function RoamExperience({ user }: { user: AuthUser }) {
       </div>
       {chatOpen && (
         <ChatPanel
+          key={user.id}
           user={user}
           cityId="lisbon"
           place={chatPlace}
+          initialPeer={chatPeer}
+          openPeerRequest={openPeerRequest}
+          onSelectPlayer={selectPlayer}
           peers={peers}
           nearbyArea={enabled ? location.area : undefined}
           onClose={() => {
             setChatOpen(false);
             chatTrigger.current?.focus();
           }}
+        />
+      )}
+      {selectedPlayer && !travelSequence && (
+        <PlayerMenu
+          key={selectedPlayer.id}
+          player={selectedPlayer}
+          presence={selectedPresence}
+          onMessage={() => messagePlayer()}
+          onFind={findPlayer}
+          onJoin={
+            selectedPresence && playerPlace(selectedPresence.placeId)?.kind
+              ? () => joinPlayer(selectedPresence)
+              : undefined
+          }
+          onClose={() => setSelectedPlayer(null)}
+        />
+      )}
+      {nearbyOpen && !travelSequence && (
+        <NearbyPlayers
+          peers={peers}
+          enabled={enabled}
+          status={presenceStatus}
+          currentPlaceId={visitedLocation.placeId}
+          onSelect={selectPlayer}
+          onMessage={messagePlayer}
+          onJoin={joinPlayer}
+          onClose={() => setNearbyOpen(false)}
         />
       )}
       <div className="below-game">

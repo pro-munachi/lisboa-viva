@@ -2,6 +2,31 @@
 
 Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, React 19.2.4, TypeScript 5.9.3 and Three.js 0.160.0. The project supports Node 22 or newer; GitHub Actions is configured for Node 22.
 
+## Main integration and PR review — 8 October 2026
+
+Merged main `083bca554f590ae2e5d4cab45a7dc5bd4e65226b`, preserving Muna’s presence-authorized Nearby room, legacy private API and single-service Render/Railway deployment. The new Messages inbox uses one private store across both API forms. Migration `008_legacy_direct_messages.sql` imports old pair history in order and preserves participants, bodies, retry UUIDs and timestamps; incompatible nonce data or malformed pairs abort migration. Legacy private polling cursors must reset after upgrading.
+
+The combined source passes **278 web tests**, the typechecked Next.js production build, **49 top-level Go race tests** with real PostgreSQL and no skips, `go vet`, shell syntax checks and `git diff --check`. New database cases verify old/new direct API interoperability, imported inbox/history and migration failures without partial data loss. The two-service staging web context was corrected to `apps/web` to match Muna’s relative Docker COPY paths; the single-service deployment files remain intact. Docker image execution and hosted deployment were not performed by this push review.
+
+The restarted local preview loaded the new Nearby conversation in Baixa and the existing test-account inbox. Its saved two-person thread opened with both original messages, and the traveller’s Baixa trip still showed day 1, 09:36 and €297.5. Earlier flight/player screenshots below remain the evidence for the visual slice.
+
+## Private chat, nearby venues and flight finish — 7 October 2026
+
+This increment adds player action cards, participant-only direct conversations, an inbox, temporary arrival notifications and a permanent nearby-player directory. Public venue entry determines shared room presence; inspecting the map does not publish a false visit. Joining another player resolves their latest canonical public venue again. Public rooms render up to twelve saved peer characters, while private homes remain separate.
+
+The final source passes **277 web tests**, the typechecked Next.js production build and `git diff --check`. The backend slice passes all **45 top-level Go tests with the race detector**, including real loopback PostgreSQL integration tests in isolated schemas. New frontend checks cover direct-chat requests/proxy boundaries, canonical public venues, nearby notification limits, shared-room actor lifecycle, all transport modes, cabin/window cameras, layer/FOV restoration, surface-map ownership and successful/failed/late HDR loading. The unchanged backend was verified before the final graphics-only pass.
+
+The local production browser and loopback API were checked with separate test accounts and an isolated browser origin, preserving the user's existing accounts and trips:
+
+1. Clicking a live player opened the action card. A private message appeared in the second account's conversation; its reply appeared through polling. A duplicate send with the same nonce returned the original message rather than inserting another. [Private conversation screenshot](review-assets/private-chat.png).
+2. **Find nearby players** showed the mapped ABHYASA YOGA LISBON venue for the test peer. **Join them** entered that gym from the other player's current city location; the peer appeared there with its handle and saved appearance. Clicking the peer's 3D character opened its action card. [Directory](review-assets/nearby-venues.png), [shared gym](review-assets/shared-gym.png).
+3. A newly arriving third test account produced the temporary popup and another same-room character. The first roster remained silent. [Arrival popup](review-assets/nearby-popup.png).
+4. At 390 × 844, the permanent nearby control remained above the airport's room panel and opened the directory. Its target was at least 44 pixels high; document width stayed at 390 pixels. [Phone directory](review-assets/nearby-phone.png). Temporary viewport overrides were reset.
+5. The final flight build rendered the textured runway/apron, extended ground and airport context, cloud sky, airliner and contact shadows. **Outside**, **Cabin** and **My seat** switched to their distinct views during the same journey. The cabin has a closed curved ceiling, rounded seats, seven decorative passengers and crew; the seat view shows its window surround and wing. Natural completion returned to the airport arrival controls with the activity budget still €300. [Exterior](review-assets/flight-exterior.png), [landing approach](review-assets/flight-landing.png), [cabin](review-assets/flight-cabin.png), [window seat](review-assets/flight-seat.png).
+6. At 390 × 844, all three flight view controls stayed in one row, each 44 pixels high, without horizontal overflow. **Cabin** rendered the interior and **Skip journey** returned to the arrival controls. [Phone cabin](review-assets/flight-cabin-phone.png). No warning/error logs appeared in the captured flight checks. The final viewport override was reset.
+
+The exact API boundaries and review steps are in [chat.md](chat.md) and [multiplayer.md](multiplayer.md). Aircraft geometry, camera choreography, materials, external-asset provenance and render-resource limits are in [travel-visuals.md](travel-visuals.md). These browser checks cover the listed accounts, views and interactions; they do not establish device frame rates, surveyed interiors, real transport bookings or a hosted deployment.
+
 ## City appearance, transport cameras and beaches — 7 October 2026
 
 The current increment passes **225 web tests**, the typechecked production build, all **33 Go race tests** with real loopback PostgreSQL integrations, `go vet` and `git diff --check`. New checks cover seven architecture families, source footprint and height envelopes, four bounded overview prototypes, shared lighting/resource cleanup, outdoor beach provenance/placement, transport camera visibility, all vehicle modes, reduced motion, skip/cancel/replacement and stale completion protection.

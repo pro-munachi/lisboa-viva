@@ -197,6 +197,7 @@ export function createCity(host, options) {
     appearance: options.appearance,
     onZone: options.onInteriorZone,
     onActivity: options.onInteriorActivity,
+    onPeer: options.onPeer,
     reducedMotion: reduce,
     night: exteriorLighting.night,
   });
@@ -208,6 +209,7 @@ export function createCity(host, options) {
     projectGeo,
     geoY,
     reducedMotion: reduce,
+    night: () => exteriorLighting.night,
     onPhase(event) {
       travelPhase = event.phase;
       // The last shot returns to the actual mapped destination from the
@@ -862,6 +864,7 @@ export function createCity(host, options) {
     // Presence polling records the latest roster during a journey, leaving its
     // camera and existing peer resources untouched until the city is restored.
     if (destroyed || travel.active) return;
+    indoor.setPeers(options.peers);
     disposeGroup(peerPopulation);
     peerPopulation = new THREE.Group();
     scene.add(peerPopulation);
@@ -874,67 +877,70 @@ export function createCity(host, options) {
     if (!manifest || indoor.active || characterGallery) return;
     const shirts = ["#bd7557", "#4f7370", "#77748c", "#c19a4b", "#52735b"];
     const skins = ["#a87955", "#76513b", "#d5af8b", "#5b3d30"];
-    options.peers.slice(0, 40).forEach((peer, index) => {
-      if (
-        !peer ||
-        !Number.isFinite(peer.longitude) ||
-        !Number.isFinite(peer.latitude) ||
-        !containsGeo(manifest.bounds, [peer.longitude, peer.latitude]) ||
-        typeof peer.handle !== "string" ||
-        !peer.handle
-      )
-        return;
-      const seed = [...peer.handle].reduce(
-        (total, character) => total + character.charCodeAt(0),
-        0,
-      );
-      const character = createCharacter({
-        shirt: peer.appearance?.topColor || shirts[seed % shirts.length],
-        trousers: peer.appearance?.bottomColor,
-        hair: peer.appearance?.hairColor,
-        skin: peer.appearance?.skinTone || skins[seed % skins.length],
-        shoes: peer.appearance?.shoeColor,
-        style:
-          peer.appearance?.outfitStyle ||
-          (peer.userType === "local" ? "casual" : "tourist"),
-        hairStyle:
-          peer.appearance?.hairStyle ||
-          ["short", "curly", "bob", "bun"][seed % 4],
+    options.peers
+      .filter((peer) => !peer?.placeId)
+      .slice(0, 40)
+      .forEach((peer, index) => {
+        if (
+          !peer ||
+          !Number.isFinite(peer.longitude) ||
+          !Number.isFinite(peer.latitude) ||
+          !containsGeo(manifest.bounds, [peer.longitude, peer.latitude]) ||
+          typeof peer.handle !== "string" ||
+          !peer.handle
+        )
+          return;
+        const seed = [...peer.handle].reduce(
+          (total, character) => total + character.charCodeAt(0),
+          0,
+        );
+        const character = createCharacter({
+          shirt: peer.appearance?.topColor || shirts[seed % shirts.length],
+          trousers: peer.appearance?.bottomColor,
+          hair: peer.appearance?.hairColor,
+          skin: peer.appearance?.skinTone || skins[seed % skins.length],
+          shoes: peer.appearance?.shoeColor,
+          style:
+            peer.appearance?.outfitStyle ||
+            (peer.userType === "local" ? "casual" : "tourist"),
+          hairStyle:
+            peer.appearance?.hairStyle ||
+            ["short", "curly", "bob", "bun"][seed % 4],
+        });
+        const target = point3([peer.longitude, peer.latitude]);
+        const nearest = nearestPath(target, true);
+        character.position.copy(
+          nearest
+            ? sample(nearest.line, nearest.d + 2.5 + index * 1.7, 1.2).v
+            : target,
+        );
+        character.position.y =
+          geoY(unprojectGeo(character.position.x, character.position.z)) + 0.2;
+        character.rotation.y = ((seed % 8) * Math.PI) / 4;
+        character.traverse((mesh) => {
+          if (!mesh.isMesh) return;
+          mesh.userData.peer = peer;
+          peerMeshes.push(mesh);
+        });
+        const label = canvasLabel(`@${peer.handle}`, "#446b5a");
+        label.position.y = 2.75;
+        label.scale.set(1.45, 0.32, 1);
+        label.userData.peer = peer;
+        character.add(label);
+        peerMeshes.push(label);
+        peerPopulation.add(character);
+        peerActors.push(character);
+        if (frameSelected && focus?.peerId === peer.id) {
+          controls.target
+            .copy(character.position)
+            .add(new THREE.Vector3(0, 1, 0));
+          const distance = focus.range || 18;
+          camera.position
+            .copy(character.position)
+            .add(new THREE.Vector3(distance * 0.35, distance * 0.42, distance));
+          controls.update();
+        }
       });
-      const target = point3([peer.longitude, peer.latitude]);
-      const nearest = nearestPath(target, true);
-      character.position.copy(
-        nearest
-          ? sample(nearest.line, nearest.d + 2.5 + index * 1.7, 1.2).v
-          : target,
-      );
-      character.position.y =
-        geoY(unprojectGeo(character.position.x, character.position.z)) + 0.2;
-      character.rotation.y = ((seed % 8) * Math.PI) / 4;
-      character.traverse((mesh) => {
-        if (!mesh.isMesh) return;
-        mesh.userData.peer = peer;
-        peerMeshes.push(mesh);
-      });
-      const label = canvasLabel(`@${peer.handle}`, "#446b5a");
-      label.position.y = 2.75;
-      label.scale.set(1.45, 0.32, 1);
-      label.userData.peer = peer;
-      character.add(label);
-      peerMeshes.push(label);
-      peerPopulation.add(character);
-      peerActors.push(character);
-      if (frameSelected && focus?.peerId === peer.id) {
-        controls.target
-          .copy(character.position)
-          .add(new THREE.Vector3(0, 1, 0));
-        const distance = focus.range || 18;
-        camera.position
-          .copy(character.position)
-          .add(new THREE.Vector3(distance * 0.35, distance * 0.42, distance));
-        controls.update();
-      }
-    });
   }
   function refreshMarkers() {
     const hotspots = options.hotspots || [];
@@ -1688,6 +1694,7 @@ export function createCity(host, options) {
     }
     generation++;
     indoor.enter(next, point3([focus.lng, focus.lat]));
+    indoor.setPeers(options.peers || []);
     city.visible = population.visible = peerPopulation.visible = false;
     atmosphere.sky.visible = false;
     scene.background = new THREE.Color("#d9dfd3");
@@ -1698,6 +1705,7 @@ export function createCity(host, options) {
     setFocus,
     startTravel,
     skipTravel: () => travel.skip(),
+    setTravelView: (view) => travel.setView(view),
     cancelTravel,
     setTime,
     setMarkers,

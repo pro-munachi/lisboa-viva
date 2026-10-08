@@ -154,6 +154,11 @@ paths:
   /chat/messages:
     get:
       summary: Read a public, nearby, or two-person conversation
+      description: >-
+        Public rooms use bundled city/hotspot IDs. Nearby rooms require current
+        presence in the requested area. The compatible direct:<peer UUID> room
+        form uses the authenticated account's same private conversation as the
+        dedicated direct endpoints and inbox; it cannot identify another pair.
       security: [{ session: [] }]
       parameters:
         - { in: query, name: room, required: true, schema: { type: string } }
@@ -206,6 +211,98 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+  /chat/direct/messages:
+    get:
+      summary: Read the authenticated account's conversation with one peer
+      description: >-
+        Both participants must be active, adult-confirmed accounts. The viewer
+        comes from the session, never from a query parameter. Without after,
+        returns the newest window (50 messages by default) in ascending ID
+        order; after retrieves newer messages. Each message uses room
+        direct:<other account UUID>
+        from the authenticated viewer's perspective. Legacy direct room
+        requests use this same history.
+      security: [{ session: [] }]
+      parameters:
+        - in: query
+          name: peer
+          required: true
+          description: A different available account's UUID.
+          schema: { $ref: "#/components/schemas/PeerId" }
+        - in: query
+          name: after
+          description: >-
+            Canonical decimal cursor from 0 through 9223372036854775807.
+            Kept as a string to preserve 64-bit precision.
+          schema: { type: string, pattern: "^(0|[1-9][0-9]{0,18})$" }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 50 }
+      responses:
+        "200":
+          description: Participant-only messages ordered by forward cursor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Send a private message as the authenticated account
+      description: >-
+        The sender comes from the session. Both participants must be active,
+        adult-confirmed accounts. Body is trimmed plain text, limited to 1000
+        Unicode code points; tabs and line feeds are allowed, other control
+        characters are rejected. JSON requests are limited to 16 KiB. An
+        identical sender/clientId retry returns
+        the stored message. Reusing that UUID with changed text or recipient
+        returns 409. Public and private sends share a bounded account rate
+        limit of 20 valid attempts per minute on this API instance.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DirectMessageInput" }
+      responses:
+        "200":
+          description: Existing message returned for an identical retry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatMessageResult" }
+        "201":
+          description: Private message created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatMessageResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /chat/direct/conversations:
+    get:
+      summary: List the authenticated account's private message inbox
+      description: >-
+        Returns at most 50 distinct available peers, newest latest-message ID
+        first. Includes incoming and outgoing conversations, including legacy
+        direct room history. No query parameters or viewer ID are accepted.
+        Only the authenticated participant's conversations are returned;
+        identities exclude email, roles and session data. No unread or read
+        receipt state is implied.
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Participant-only inbox, including an empty array
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DirectInbox" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     session:
@@ -277,6 +374,14 @@ components:
         latitude: { type: number, minimum: 38.683, maximum: 38.832 }
         longitude: { type: number, minimum: -9.435, maximum: -9.085 }
         area: { type: string, minLength: 1, maxLength: 80 }
+        placeId:
+          type: string
+          maxLength: 145
+          description: >-
+            Optional canonical bundled public hotspot ID, including mapped
+            source IDs and authored public hubs. Homes, arbitrary names and
+            custom pins are rejected. Empty or omitted clears the public place
+            while retaining the coarse in-world location. This is not device GPS.
     NearbyPlayer:
       type: object
       required:
@@ -298,6 +403,14 @@ components:
         latitude: { type: number }
         longitude: { type: number }
         area: { type: string }
+        placeId:
+          type: string
+          minLength: 1
+          maxLength: 145
+          description: >-
+            Canonical bundled public hotspot ID shared by this account; omitted
+            outside a public place. It never identifies a private home or custom
+            pin. Clients resolve this ID against the bundled public directory.
         distanceMetres: { type: integer, minimum: 0 }
         lastSeenAt: { type: string, format: date-time }
         appearance: { $ref: "#/components/schemas/Appearance" }
@@ -335,6 +448,54 @@ components:
         id: { type: string, format: uuid }
         handle: { type: string }
         userType: { type: string, enum: [tourist, local] }
+    PeerId:
+      type: string
+      format: uuid
+      pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      not: { const: "00000000-0000-0000-0000-000000000000" }
+      description: Nonzero UUID of another eligible account; self is rejected.
+    DirectMessageInput:
+      type: object
+      additionalProperties: false
+      required: [recipientId, body, clientId]
+      properties:
+        recipientId: { $ref: "#/components/schemas/PeerId" }
+        body: { type: string, minLength: 1, maxLength: 1000 }
+        clientId:
+          type: string
+          format: uuid
+          not: { const: "00000000-0000-0000-0000-000000000000" }
+          description: >-
+            Nonzero retry UUID scoped to the authenticated sender. Keep it for
+            an uncertain send result; changed text or recipient needs a new UUID.
+    ChatMessageResult:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { $ref: "#/components/schemas/ChatMessage" }
+    DirectConversation:
+      type: object
+      additionalProperties: false
+      required: [peer, lastMessage]
+      properties:
+        peer:
+          $ref: "#/components/schemas/ChatAuthor"
+          description: Public identity of the other participant.
+        lastMessage:
+          $ref: "#/components/schemas/ChatMessage"
+          description: >-
+            Latest message in this pair, with room direct:<peer UUID> from
+            the authenticated viewer's perspective.
+    DirectInbox:
+      type: object
+      additionalProperties: false
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/DirectConversation" }
     ChatMessage:
       type: object
       required: [id, room, body, sentAt, author]

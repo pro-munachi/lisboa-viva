@@ -21,6 +21,7 @@ type presenceInput struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 	Area      string  `json:"area"`
+	PlaceID   string  `json:"placeId,omitempty"`
 }
 
 type nearbyPlayer struct {
@@ -30,6 +31,7 @@ type nearbyPlayer struct {
 	Latitude       float64             `json:"latitude"`
 	Longitude      float64             `json:"longitude"`
 	Area           string              `json:"area"`
+	PlaceID        string              `json:"placeId,omitempty"`
 	DistanceMetres int                 `json:"distanceMetres"`
 	LastSeenAt     time.Time           `json:"lastSeenAt"`
 	Appearance     characterAppearance `json:"appearance"`
@@ -41,7 +43,8 @@ func normalizePresence(input presenceInput) (presenceInput, error) {
 		math.IsNaN(input.Longitude) || math.IsInf(input.Longitude, 0) ||
 		input.Latitude < minPresenceLatitude || input.Latitude > maxPresenceLatitude ||
 		input.Longitude < minPresenceLongitude || input.Longitude > maxPresenceLongitude ||
-		len(input.Area) < 1 || len(input.Area) > 80 || strings.ContainsAny(input.Area, "\r\n\x00") {
+		len(input.Area) < 1 || len(input.Area) > 80 || strings.ContainsAny(input.Area, "\r\n\x00") ||
+		(input.PlaceID != "" && (len(input.PlaceID) > 145 || !validChatRoom("lisbon:hotspot:"+input.PlaceID))) {
 		return input, apiError("invalid_presence")
 	}
 	return input, nil
@@ -81,11 +84,11 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	_, err = s.db.Exec(r.Context(), `INSERT INTO player_presence(user_id,latitude,longitude,area,last_seen_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$5)
+	_, err = s.db.Exec(r.Context(), `INSERT INTO player_presence(user_id,latitude,longitude,area,place_id,last_seen_at,updated_at)
+		VALUES($1,$2,$3,$4,NULLIF($5,''),$6,$6)
 		ON CONFLICT (user_id) DO UPDATE SET latitude=EXCLUDED.latitude,
-		longitude=EXCLUDED.longitude,area=EXCLUDED.area,last_seen_at=EXCLUDED.last_seen_at,
-		updated_at=EXCLUDED.updated_at`, user.ID, input.Latitude, input.Longitude, input.Area, s.now())
+		longitude=EXCLUDED.longitude,area=EXCLUDED.area,place_id=EXCLUDED.place_id,last_seen_at=EXCLUDED.last_seen_at,
+		updated_at=EXCLUDED.updated_at`, user.ID, input.Latitude, input.Longitude, input.Area, input.PlaceID, s.now())
 	if err != nil {
 		fail(w, err)
 		return
@@ -109,7 +112,7 @@ func (s *server) nearbyPlayers(w http.ResponseWriter, r *http.Request) {
 	}
 	user := currentUser(r)
 	rows, err := s.db.Query(r.Context(), `SELECT u.id::text,u.handle,u.user_type::text,
-		p.latitude,p.longitude,p.area,
+		p.latitude,p.longitude,p.area,COALESCE(p.place_id,''),
 		ROUND(SQRT(POWER((p.latitude-$2)*111320,2)+POWER((p.longitude-$3)*87300,2)))::int AS distance_metres,
 		p.last_seen_at,ca.outfit_style,ca.top_color,ca.bottom_color,ca.hair_style,ca.hair_color,ca.skin_tone,ca.shoe_color
 		FROM player_presence p JOIN users u ON u.id=p.user_id
@@ -125,7 +128,7 @@ func (s *server) nearbyPlayers(w http.ResponseWriter, r *http.Request) {
 	players := []nearbyPlayer{}
 	for rows.Next() {
 		var player nearbyPlayer
-		if err = rows.Scan(&player.ID, &player.Handle, &player.UserType, &player.Latitude, &player.Longitude, &player.Area, &player.DistanceMetres, &player.LastSeenAt,
+		if err = rows.Scan(&player.ID, &player.Handle, &player.UserType, &player.Latitude, &player.Longitude, &player.Area, &player.PlaceID, &player.DistanceMetres, &player.LastSeenAt,
 			&player.Appearance.OutfitStyle, &player.Appearance.TopColor, &player.Appearance.BottomColor,
 			&player.Appearance.HairStyle, &player.Appearance.HairColor, &player.Appearance.SkinTone, &player.Appearance.ShoeColor); err != nil {
 			fail(w, err)

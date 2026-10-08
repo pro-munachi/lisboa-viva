@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -80,5 +81,19 @@ func TestPresenceQueryBoundsRadius(t *testing.T) {
 	request = httptest.NewRequest("GET", "/?latitude=38.7061&longitude=-9.1459&radius=99999", nil)
 	if _, _, _, err = presenceQuery(request); err == nil || err.Error() != "invalid_presence" {
 		t.Fatalf("expected bounded radius, got %v", err)
+	}
+}
+
+func TestPresencePlaceAcceptsOnlyCanonicalPublicHotspots(t *testing.T) {
+	for _, id := range []string{"", "comercio", "node:11341409242", "cais-station"} {
+		input, err := normalizePresence(presenceInput{Latitude: 38.7061, Longitude: -9.1459, Area: "Cais do Sodré", PlaceID: id})
+		if err != nil || input.PlaceID != id {
+			t.Fatalf("canonical public place %q rejected: %v", id, err)
+		}
+	}
+	for _, id := range []string{"home", "lisbon:city", "lisbon:hotspot:comercio", "private-room", "comercio ", "COMERCIO", "node:unknown", strings.Repeat("x", 146), "direct:" + directTestPeer} {
+		if _, err := normalizePresence(presenceInput{Latitude: 38.7061, Longitude: -9.1459, Area: "Cais do Sodré", PlaceID: id}); err != apiError("invalid_presence") {
+			t.Fatalf("private, unknown, or noncanonical place %q was accepted: %v", id, err)
+		}
 	}
 }

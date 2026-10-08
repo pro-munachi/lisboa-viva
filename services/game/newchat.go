@@ -71,20 +71,26 @@ func normalizeChatInput(input chatInput) (chatInput, error) {
 	if !validChatRoom(input.Room) {
 		return input, apiError("invalid_room")
 	}
-	input.Body = strings.TrimSpace(input.Body)
-	if !utf8.ValidString(input.Body) || utf8.RuneCountInString(input.Body) < 1 || utf8.RuneCountInString(input.Body) > 1000 {
-		return input, apiError("invalid_message")
+	var err error
+	input.Body, input.ClientID, err = normalizeMessageFields(input.Body, input.ClientID)
+	return input, err
+}
+
+// Public rooms and private conversations use the same plain-text validation.
+func normalizeMessageFields(body, clientID string) (string, string, error) {
+	body = strings.TrimSpace(body)
+	if !utf8.ValidString(body) || utf8.RuneCountInString(body) < 1 || utf8.RuneCountInString(body) > 1000 {
+		return body, clientID, apiError("invalid_message")
 	}
-	for _, character := range input.Body {
+	for _, character := range body {
 		if unicode.IsControl(character) && character != '\n' && character != '\t' {
-			return input, apiError("invalid_message")
+			return body, clientID, apiError("invalid_message")
 		}
 	}
-	if !chatUUID.MatchString(input.ClientID) || input.ClientID == "00000000-0000-0000-0000-000000000000" {
-		return input, apiError("invalid_client_id")
+	if !chatUUID.MatchString(clientID) || clientID == "00000000-0000-0000-0000-000000000000" {
+		return body, clientID, apiError("invalid_client_id")
 	}
-	input.ClientID = strings.ToLower(input.ClientID)
-	return input, nil
+	return body, strings.ToLower(clientID), nil
 }
 
 type chatQuery struct {
@@ -162,6 +168,7 @@ func (s *server) registerChatRoutes(mux *http.ServeMux) {
 	handler := &chatHandler{store: pgChatStore{s.db}, now: s.now, rates: newChatLimiter(1024, 20)}
 	mux.Handle("GET /v1/chat/messages", s.requireSession(http.HandlerFunc(handler.get)))
 	mux.Handle("POST /v1/chat/messages", s.requireSession(http.HandlerFunc(handler.send)))
+	s.registerDirectChatRoutes(mux, &handler.rates)
 }
 
 func (handler *chatHandler) get(w http.ResponseWriter, r *http.Request) {
@@ -267,31 +274,31 @@ func resolveChatRoom(ctx context.Context, q chatRoomQuerier, userID, requested s
 		var current string
 		err := q.QueryRow(ctx, `SELECT area FROM player_presence
 			WHERE user_id=$1 AND last_seen_at>now()-interval '45 seconds'`, userID).Scan(&current)
-		if err != nil || current != area {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return "", err
+		}
+		if errors.Is(err, pgx.ErrNoRows) || current != area {
 			return "", apiError("chat_presence_required")
 		}
 		return requested, nil
 	}
-	if strings.HasPrefix(requested, directRoomPrefix) {
-		peerID := strings.ToLower(strings.TrimPrefix(requested, directRoomPrefix))
-		if !chatUUID.MatchString(peerID) || peerID == strings.ToLower(userID) {
-			return "", apiError("invalid_room")
-		}
-		var active bool
-		if err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users
-			WHERE id=$1 AND account_status='active' AND deleted_at IS NULL)`, peerID).Scan(&active); err != nil {
-			return "", err
-		}
-		if !active {
-			return "", apiError("invalid_room")
-		}
-		ids := []string{strings.ToLower(userID), peerID}
-		if ids[1] < ids[0] {
-			ids[0], ids[1] = ids[1], ids[0]
-		}
-		return directRoomPrefix + ids[0] + ":" + ids[1], nil
-	}
 	return "", apiError("invalid_room")
+}
+
+func legacyDirectPeer(requested, viewer string) (string, error) {
+	if !strings.HasPrefix(requested, directRoomPrefix) {
+		return "", apiError("invalid_room")
+	}
+	peer, err := normalizeDirectPeer(strings.TrimPrefix(requested, directRoomPrefix), viewer)
+	return peer, legacyDirectError(err)
+}
+
+// Keep old clients' room errors while routing private messages to one store.
+func legacyDirectError(err error) error {
+	if errors.Is(err, apiError("invalid_peer")) || errors.Is(err, apiError("peer_unavailable")) {
+		return apiError("invalid_room")
+	}
+	return err
 }
 
 const chatColumns = `m.id,m.room,m.body,m.sent_at,u.id::text,u.handle,u.user_type::text`
@@ -311,6 +318,17 @@ func scanChatMessage(row pgx.Row) (chatMessage, error) {
 
 func (store pgChatStore) list(ctx context.Context, userID string, query chatQuery) (chatPage, error) {
 	page := chatPage{Messages: make([]chatMessage, 0, query.Limit)}
+	if strings.HasPrefix(query.Room, directRoomPrefix) {
+		peer, err := legacyDirectPeer(query.Room, userID)
+		if err != nil {
+			return page, err
+		}
+		page, err = (pgDirectChatStore{store.db}).list(ctx, userID, directChatQuery{Peer: peer, After: query.After, Limit: query.Limit})
+		for index := range page.Messages {
+			page.Messages[index].Room = query.Room
+		}
+		return page, legacyDirectError(err)
+	}
 	storageRoom, err := resolveChatRoom(ctx, store.db, userID, query.Room)
 	if err != nil {
 		return page, err
@@ -367,6 +385,19 @@ type chatTransaction interface {
 
 func (store pgChatStore) post(ctx context.Context, userID string, input chatInput) (chatMessage, bool, error) {
 	requestedRoom := input.Room
+	if strings.HasPrefix(requestedRoom, directRoomPrefix) {
+		peer, err := legacyDirectPeer(requestedRoom, userID)
+		if err != nil {
+			return chatMessage{}, false, err
+		}
+		message, created, err := (pgDirectChatStore{store.db}).post(ctx, userID, directChatInput{
+			RecipientID: peer, Body: input.Body, ClientID: input.ClientID,
+		})
+		if err == nil {
+			message.Room = requestedRoom
+		}
+		return message, created, legacyDirectError(err)
+	}
 	storageRoom, err := resolveChatRoom(ctx, store.db, userID, requestedRoom)
 	if err != nil {
 		return chatMessage{}, false, err
