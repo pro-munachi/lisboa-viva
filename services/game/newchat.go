@@ -59,20 +59,26 @@ func normalizeChatInput(input chatInput) (chatInput, error) {
 	if !validChatRoom(input.Room) {
 		return input, apiError("invalid_room")
 	}
-	input.Body = strings.TrimSpace(input.Body)
-	if !utf8.ValidString(input.Body) || utf8.RuneCountInString(input.Body) < 1 || utf8.RuneCountInString(input.Body) > 1000 {
-		return input, apiError("invalid_message")
+	var err error
+	input.Body, input.ClientID, err = normalizeMessageFields(input.Body, input.ClientID)
+	return input, err
+}
+
+// Public rooms and private conversations use the same plain-text validation.
+func normalizeMessageFields(body, clientID string) (string, string, error) {
+	body = strings.TrimSpace(body)
+	if !utf8.ValidString(body) || utf8.RuneCountInString(body) < 1 || utf8.RuneCountInString(body) > 1000 {
+		return body, clientID, apiError("invalid_message")
 	}
-	for _, character := range input.Body {
+	for _, character := range body {
 		if unicode.IsControl(character) && character != '\n' && character != '\t' {
-			return input, apiError("invalid_message")
+			return body, clientID, apiError("invalid_message")
 		}
 	}
-	if !chatUUID.MatchString(input.ClientID) || input.ClientID == "00000000-0000-0000-0000-000000000000" {
-		return input, apiError("invalid_client_id")
+	if !chatUUID.MatchString(clientID) || clientID == "00000000-0000-0000-0000-000000000000" {
+		return body, clientID, apiError("invalid_client_id")
 	}
-	input.ClientID = strings.ToLower(input.ClientID)
-	return input, nil
+	return body, strings.ToLower(clientID), nil
 }
 
 type chatQuery struct {
@@ -150,6 +156,7 @@ func (s *server) registerChatRoutes(mux *http.ServeMux) {
 	handler := &chatHandler{store: pgChatStore{s.db}, now: s.now, rates: newChatLimiter(1024, 20)}
 	mux.Handle("GET /v1/chat/messages", s.requireSession(http.HandlerFunc(handler.get)))
 	mux.Handle("POST /v1/chat/messages", s.requireSession(http.HandlerFunc(handler.send)))
+	s.registerDirectChatRoutes(mux, &handler.rates)
 }
 
 func (handler *chatHandler) get(w http.ResponseWriter, r *http.Request) {

@@ -3,6 +3,95 @@ import { createCharacter, animateCharacter } from "./characters";
 import { createInteriorScene } from "./city-interiors";
 import { findRoomRoute } from "./city-room-navigation";
 import { createHotspotBadgeLayer } from "./city-hotspot-badges";
+import { chatPlaceFor } from "./chat-rooms";
+
+const peerUUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const peerAppearanceFields = [
+  "outfitStyle",
+  "topColor",
+  "bottomColor",
+  "hairStyle",
+  "hairColor",
+  "skinTone",
+  "shoeColor",
+];
+
+function publicInteriorPeers(peers) {
+  const seen = new Set();
+  return (Array.isArray(peers) ? peers.slice(0, 40) : []).flatMap((peer) => {
+    const appearance = peer?.appearance;
+    if (
+      !peer ||
+      typeof peer.id !== "string" ||
+      !peerUUID.test(peer.id) ||
+      peer.id === "00000000-0000-0000-0000-000000000000" ||
+      typeof peer.handle !== "string" ||
+      !/^[a-z0-9_]{3,24}$/.test(peer.handle) ||
+      !["tourist", "local"].includes(peer.userType) ||
+      !Number.isFinite(peer.latitude) ||
+      !Number.isFinite(peer.longitude) ||
+      !chatPlaceFor(peer.placeId) ||
+      !appearance ||
+      !["casual", "jacket", "dress", "tourist"].includes(
+        appearance.outfitStyle,
+      ) ||
+      !["short", "curly", "bob", "bun"].includes(appearance.hairStyle) ||
+      peerAppearanceFields
+        .filter((key) => key.endsWith("Color") || key === "skinTone")
+        .some(
+          (key) =>
+            typeof appearance[key] !== "string" ||
+            !/^#[0-9a-f]{6}$/i.test(appearance[key]),
+        )
+    )
+      return [];
+    const id = peer.id.toLowerCase();
+    if (seen.has(id)) return [];
+    seen.add(id);
+    return [{ ...peer, id, appearance: { ...appearance } }];
+  });
+}
+
+function peerSeed(id) {
+  let seed = 2166136261;
+  for (const character of id)
+    seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
+  return seed >>> 0;
+}
+
+function peerNameLabel(handle) {
+  if (
+    typeof document === "undefined" ||
+    typeof document.createElement !== "function"
+  )
+    return null;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext?.("2d");
+  if (!context) return null;
+  canvas.width = 512;
+  canvas.height = 112;
+  context.fillStyle = "#2c716d";
+  context.beginPath();
+  if (context.roundRect) context.roundRect(4, 4, 504, 100, 26);
+  else context.rect(4, 4, 504, 100);
+  context.fill();
+  context.fillStyle = "#fffdf8";
+  context.font = "600 31px system-ui, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(`@${handle}`, 256, 54);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: texture, depthTest: false }),
+  );
+  sprite.name = `@${handle}`;
+  sprite.position.y = 2.35;
+  sprite.scale.set(1.8, 0.39, 1);
+  sprite.renderOrder = 6;
+  return sprite;
+}
 
 /** Local, original room exploration. It does not issue trip purchases or bookings. */
 export function createInteriorRuntime({
@@ -14,6 +103,7 @@ export function createInteriorRuntime({
   appearance = null,
   onZone,
   onActivity,
+  onPeer = (_peer) => {},
   badgeHost,
   reducedMotion = false,
   night = 0,
@@ -29,6 +119,9 @@ export function createInteriorRuntime({
       ? THREE.MathUtils.clamp(night, 0, 1)
       : 0;
   const origin = new THREE.Vector3();
+  let latestPeers = [],
+    peerGroup = null;
+  const peersById = new Map();
   const badges = badgeHost
     ? createHotspotBadgeLayer(badgeHost, { onSelect: selectZone })
     : null;
@@ -42,6 +135,7 @@ export function createInteriorRuntime({
   };
   function clear() {
     badges?.clear();
+    clearPeers();
     if (room) {
       room.dispose?.();
       disposeGroup(room.group);
@@ -52,7 +146,156 @@ export function createInteriorRuntime({
     if (disposed) return;
     clear();
     disposed = true;
+    latestPeers = [];
     badges?.dispose();
+  }
+
+  function removePeer(record) {
+    record.actor.removeFromParent();
+    disposeGroup(record.actor);
+    peersById.delete(record.peer.id);
+  }
+  function clearPeers() {
+    for (const record of [...peersById.values()]) removePeer(record);
+    peerGroup?.removeFromParent();
+    peerGroup = null;
+  }
+  function freePeerPosition(id) {
+    const [left, bottom, right, top] = boundsOf(),
+      radius = 0.38;
+    const obstacles = room.group.userData.room?.obstacles || [];
+    const candidates = [];
+    const columns = Math.min(40, Math.floor((right - left - radius * 2) / 1.3));
+    const rows = Math.min(40, Math.floor((top - bottom - radius * 2) / 1.3));
+    for (let row = 0; row <= rows; row++)
+      for (let col = 0; col <= columns; col++) {
+        const point = {
+          x:
+            left +
+            radius +
+            ((right - left - radius * 2) * col) / Math.max(1, columns),
+          z:
+            bottom +
+            radius +
+            ((top - bottom - radius * 2) * row) / Math.max(1, rows),
+        };
+        if (
+          obstacles.some(
+            (o) =>
+              point.x >= o.minX - radius &&
+              point.x <= o.maxX + radius &&
+              point.z >= o.minZ - radius &&
+              point.z <= o.maxZ + radius,
+          ) ||
+          Math.hypot(point.x - room.spawn.x, point.z - room.spawn.z) < 1.5 ||
+          Math.hypot(point.x - actor.position.x, point.z - actor.position.z) <
+            1.2 ||
+          room.zones.some(
+            (zone) =>
+              Math.hypot(
+                point.x - (zone.target || zone.point).x,
+                point.z - (zone.target || zone.point).z,
+              ) < 1,
+          ) ||
+          [...peersById.values()].some(
+            (peer) =>
+              Math.hypot(
+                point.x - peer.actor.position.x,
+                point.z - peer.actor.position.z,
+              ) < 1.3,
+          )
+        )
+          continue;
+        candidates.push(point);
+      }
+    if (!candidates.length) return null;
+    const offset = peerSeed(id) % candidates.length;
+    for (let i = 0; i < candidates.length; i++) {
+      const point = candidates[(offset + i) % candidates.length];
+      if (
+        findRoomRoute(room.spawn, point, {
+          bounds: boundsOf(),
+          obstacles,
+          clearance: radius,
+          cellSize: 0.4,
+        }).length
+      )
+        return point;
+    }
+    return null;
+  }
+  function tagPeer(record, peer) {
+    record.peer = peer;
+    record.actor.traverse((node) => {
+      node.userData.peer = peer;
+    });
+  }
+  function refreshPeers() {
+    if (!room) return;
+    const allowed = visit?.kind !== "home" && chatPlaceFor(visit?.id);
+    const visible = allowed
+      ? latestPeers
+          .filter((peer) => peer.placeId === visit.id)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, 12)
+      : [];
+    const next = new Set(visible.map((peer) => peer.id));
+    for (const record of [...peersById.values()])
+      if (!next.has(record.peer.id)) removePeer(record);
+    for (const peer of visible) {
+      const signature = JSON.stringify([
+        peer.handle,
+        peer.userType,
+        ...peerAppearanceFields.map((key) => peer.appearance[key]),
+      ]);
+      const existing = peersById.get(peer.id);
+      if (existing?.signature === signature) {
+        tagPeer(existing, peer);
+        continue;
+      }
+      const previous = existing?.actor.position.clone();
+      if (existing) removePeer(existing);
+      const point = previous || freePeerPosition(peer.id);
+      if (!point) continue;
+      if (!peerGroup) {
+        peerGroup = new THREE.Group();
+        peerGroup.name = "Nearby ROAM players";
+        room.group.add(peerGroup);
+      }
+      const a = peer.appearance;
+      const character = createCharacter({
+        shirt: a.topColor,
+        trousers: a.bottomColor,
+        hair: a.hairColor,
+        skin: a.skinTone,
+        shoes: a.shoeColor,
+        style: a.outfitStyle,
+        hairStyle: a.hairStyle,
+      });
+      character.name = `ROAM player @${peer.handle}`;
+      character.position.set(point.x, 0.02, point.z);
+      character.rotation.y = ((peerSeed(peer.id) % 8) * Math.PI) / 4;
+      const label = peerNameLabel(peer.handle);
+      if (label) character.add(label);
+      const record = {
+        actor: character,
+        peer,
+        signature,
+        phase: (peerSeed(peer.id) % 100) / 17,
+      };
+      tagPeer(record, peer);
+      peersById.set(peer.id, record);
+      peerGroup.add(character);
+    }
+    if (!peersById.size) {
+      peerGroup?.removeFromParent();
+      peerGroup = null;
+    }
+  }
+  function setPeers(peers) {
+    if (disposed) return;
+    latestPeers = publicInteriorPeers(peers);
+    refreshPeers();
   }
   function updateBadges() {
     if (!badges || disposed) return;
@@ -111,6 +354,7 @@ export function createInteriorRuntime({
     actor.rotation.y = Math.PI;
     room.group.add(actor);
     scene.add(room.group);
+    refreshPeers();
     selected = room.zones[0]?.id || null;
     badges?.setItems(
       room.zones.map((zone) => ({
@@ -231,6 +475,8 @@ export function createInteriorRuntime({
     clock += step;
     room.update?.(clock, step, motion, selected);
     if (!motion) return;
+    for (const record of peersById.values())
+      animateCharacter(record.actor, clock + record.phase, false);
     resetPose();
     let walking = false;
     if (action?.state === "walking") {
@@ -299,6 +545,11 @@ export function createInteriorRuntime({
   function pick(ray, mode) {
     if (!room) return false;
     const hits = ray.intersectObject(room.group, true);
+    const peerHit = hits.find((h) => h.object.userData.peer);
+    if (peerHit) {
+      onPeer?.(peerHit.object.userData.peer);
+      return true;
+    }
     const hit = hits.find(
       (h) => h.object.userData.zone || h.object.userData.roomGround,
     );
@@ -314,6 +565,7 @@ export function createInteriorRuntime({
     frameRoom,
     selectZone,
     setLighting,
+    setPeers,
     perform,
     pick,
     update,

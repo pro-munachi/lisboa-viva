@@ -76,6 +76,24 @@
 .panel button:active:focus-visible {
   transform: none;
 }
+.views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.panel .views button {
+  min-height: 44px;
+  padding: 8px 10px;
+  color: #53617b;
+  background: #eaf0ff;
+  font-size: 10px;
+  transition: none;
+}
+.panel .views button[aria-pressed="true"] {
+  background: #2456d8;
+  color: #fff;
+}
 @media (max-width: 600px) {
   .panel {
     position: fixed;
@@ -84,21 +102,45 @@
     bottom: max(14px, env(safe-area-inset-bottom));
     transform: none;
     width: auto;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
     gap: 11px;
     padding: 15px;
   }
   .copy h2 {
     font-size: 18px;
   }
-  .panel button {
-    margin-left: auto;
+  .icon {
+    align-self: start;
+    width: 40px;
+    height: 40px;
+    margin-top: 18px;
+  }
+  .panel > button {
+    grid-column: 2;
+    justify-self: end;
+    margin-left: 0;
+  }
+  .panel .views button {
+    margin-left: 0;
   }
 }
 @media (hover: hover) and (pointer: fine) {
   .panel button:hover {
     background: #193faf;
   }
+  .panel .views button:hover:not(:disabled) {
+    background: #dce6ff;
+    color: #2b456e;
+  }
+  .panel .views button[aria-pressed="true"]:hover {
+    background: #193faf;
+    color: #fff;
+  }
+}
+.panel .views button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 @media (prefers-reduced-motion: reduce) {
   .panel button {

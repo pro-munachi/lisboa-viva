@@ -58,3 +58,44 @@ test("unmapped locations do not offer a pretend place room and sending awaits in
   assert.match(html, /<button type="submit" disabled="">Send/);
   assert.ok(html.includes('aria-label="Messages in Lisbon"'));
 });
+
+test("selecting another account opens a private conversation with inbox navigation and no public prompts", () => {
+  const html = renderToStaticMarkup(
+    createElement(ChatPanel, {
+      user,
+      cityId: "lisbon",
+      initialPeer: {
+        id: "49b27cb0-0011-441a-814e-f3f3ebdf7fd3",
+        handle: "ines<script>",
+        userType: "local",
+      },
+      openPeerRequest: 1,
+      onClose: () => undefined,
+    }),
+  );
+  assert.ok(html.includes("Your messages"));
+  assert.ok(
+    html.includes(
+      "Only you and @ines&lt;script&gt; can access this conversation.",
+    ),
+  );
+  assert.ok(html.includes('aria-label="Back to message inbox"'));
+  assert.ok(html.includes("Message @ines&lt;script&gt;"));
+  assert.ok(!html.includes("Anyone signed in can join this room."));
+  assert.ok(!html.includes("Ask a local"));
+  assert.ok(!html.includes("<script>"));
+  assert.match(html, /<button type="submit" disabled="">Send/);
+});
+
+test("the current account cannot accidentally start a conversation with itself", () => {
+  const html = renderToStaticMarkup(
+    createElement(ChatPanel, {
+      user,
+      cityId: "lisbon",
+      initialPeer: { id: user.id, handle: user.handle, userType: "tourist" },
+      onClose: () => undefined,
+    }),
+  );
+  assert.ok(html.includes("Lisbon city chat"));
+  assert.ok(!html.includes("Direct conversation"));
+});

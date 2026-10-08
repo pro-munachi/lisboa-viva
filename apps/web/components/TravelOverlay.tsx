@@ -7,6 +7,9 @@ import {
   Bike,
   Bus,
   CarFront,
+  Eye,
+  Armchair,
+  Users,
   Footprints,
   Plane,
   TrainFront,
@@ -19,13 +22,17 @@ export default function TravelOverlay({
   phase,
   error,
   onSkip,
+  onView,
 }: {
   sequence: TravelSequence;
   phase: TravelPhase | null;
   error?: string;
   onSkip: () => void;
+  onView?: (view: "outside" | "cabin" | "seat") => boolean;
 }) {
   const [mounted, setMounted] = useState(false);
+  const [view, setView] = useState<"outside" | "cabin" | "seat">("outside");
+  useEffect(() => setView("outside"), [sequence.id]);
   const skipButton = useRef<HTMLButtonElement>(null);
   const heldKey = useRef<string | null>(null);
   useEffect(() => setMounted(true), []);
@@ -62,9 +69,37 @@ export default function TravelOverlay({
         <p role="status">
           {error || phase?.label || "Preparing your simulated journey…"}
         </p>
-        <small>
-          Original vehicle scene · Simulated journey · Nothing is booked
-        </small>
+        {sequence.mode === "flight" &&
+          onView &&
+          phase?.phase !== "arriving" &&
+          !error && (
+            <div
+              className={styles.views}
+              role="group"
+              aria-label="Flight camera view"
+            >
+              {(
+                [
+                  ["outside", "Outside", Eye],
+                  ["cabin", "Cabin", Users],
+                  ["seat", "My seat", Armchair],
+                ] as const
+              ).map(([id, label, ViewIcon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={view === id}
+                  disabled={!phase}
+                  onClick={() => {
+                    if (onView(id)) setView(id);
+                  }}
+                >
+                  <ViewIcon size={15} /> {label}
+                </button>
+              ))}
+            </div>
+          )}
+        <small>Simulated journey</small>
       </div>
       <button
         ref={skipButton}

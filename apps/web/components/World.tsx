@@ -44,6 +44,7 @@ type CityController = {
   rotate: (angle: number) => void;
   startTravel: (sequence: TravelSequence) => boolean;
   skipTravel: () => void;
+  setTravelView: (view: "outside" | "cabin" | "seat") => boolean;
   cancelTravel: () => void;
   dispose: () => void;
 };
@@ -61,6 +62,7 @@ export default function World({
   travelSequence = null,
   onTravelComplete,
   peers = [],
+  onPlayer,
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -74,11 +76,14 @@ export default function World({
   travelSequence?: TravelSequence | null;
   onTravelComplete?: (id: string) => void;
   peers?: MultiplayerPeer[];
+  onPlayer?: (player: MultiplayerPeer) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
   const callback = useRef(onHotspot);
   callback.current = onHotspot;
+  const playerCallback = useRef(onPlayer);
+  playerCallback.current = onPlayer;
   const travelCallback = useRef(onTravelComplete);
   travelCallback.current = onTravelComplete;
   const startedTravel = useRef<string | null>(null);
@@ -218,7 +223,10 @@ export default function World({
               if (latest.current.travelSequence) return;
               setPerson(null);
               setGallery(false);
-              setPeer(player);
+              if (playerCallback.current) {
+                setPeer(null);
+                playerCallback.current(player);
+              } else setPeer(player);
             },
             onInteriorZone: (id: string) => {
               setSelectedZone(id);
@@ -622,6 +630,7 @@ export default function World({
           sequence={travelSequence}
           phase={travelPhase?.id === travelSequence.id ? travelPhase : null}
           error={travelError}
+          onView={(view) => controller.current?.setTravelView(view) ?? false}
           onSkip={() => {
             const instance = controller.current;
             if (

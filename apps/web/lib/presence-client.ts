@@ -1,11 +1,13 @@
 import type { CharacterAppearance } from "./appearance";
 import { GEO_BOUNDS } from "./geography";
+import { playerPlace } from "./player-places";
 
 export const PRESENCE_TTL_MS = 45_000;
 export type PresenceLocation = {
   latitude: number;
   longitude: number;
   area: string;
+  placeId?: string;
 };
 export type MultiplayerPeer = PresenceLocation & {
   id: string;
@@ -41,7 +43,11 @@ export function validPresenceLocation(
     typeof point.area === "string" &&
     point.area.trim().length > 0 &&
     new TextEncoder().encode(point.area).length <= 80 &&
-    !/[\u0000-\u001f\u007f-\u009f]/.test(point.area)
+    !/[\u0000-\u001f\u007f-\u009f]/.test(point.area) &&
+    (point.placeId === undefined ||
+      point.placeId === "" ||
+      (typeof point.placeId === "string" &&
+        Boolean(playerPlace(point.placeId))))
   );
 }
 
@@ -118,6 +124,7 @@ export function nearbyPresencePeers(
         latitude: peer.latitude,
         longitude: peer.longitude,
         area: peer.area,
+        ...(peer.placeId ? { placeId: peer.placeId } : {}),
         distanceMetres: peer.distanceMetres,
         lastSeenAt: peer.lastSeenAt,
         appearance: {
@@ -280,7 +287,8 @@ export function createPresenceClient({
         !validPresenceLocation(next) ||
         (current.latitude === next.latitude &&
           current.longitude === next.longitude &&
-          current.area === next.area)
+          current.area === next.area &&
+          current.placeId === next.placeId)
       )
         return;
       current = { ...next };

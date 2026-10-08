@@ -1,0 +1,17 @@
+sky-day.hdr
+
+Asset: Kloofendal 48d Partly Cloudy (Pure Sky), 1K HDR
+Authors: Greg Zaal (original), Jarod Guest (sky edits)
+Source: https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky
+Download: https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr
+License: CC0 1.0 Universal
+License reference: https://polyhaven.com/license
+Legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+Retrieved: 2026-10-07
+Bytes: 1435119
+SHA-256: fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798
+
+The sky is used as an artistic lighting and atmosphere reference. It is not a
+photograph of Lisbon, a reconstruction of its airport, or live local weather.
+Other flight surface maps are original procedural textures generated in
+lib/travel-materials.js and do not contain third-party image assets.

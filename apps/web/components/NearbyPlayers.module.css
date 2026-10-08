@@ -1,0 +1,563 @@
+.dock {
+  position: absolute;
+  z-index: 8;
+  left: 30px;
+  bottom: 104px;
+  width: min(274px, calc(100% - 40px));
+  color: var(--ink, #213052);
+}
+.dockBar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid #ffffff;
+  border-radius: 18px;
+  background: #fffefbf2;
+  box-shadow: 0 8px 30px #21305226;
+  backdrop-filter: blur(12px);
+}
+.findButton {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 12px;
+  color: #213052;
+  background: transparent;
+  text-align: left;
+}
+.findButton > svg {
+  flex-shrink: 0;
+  color: #2456d8;
+}
+.findButton strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+.findButton small {
+  display: block;
+  margin-top: 3px;
+  color: #69748a;
+  font-size: 9px;
+}
+.findButton small[data-status="online"] {
+  color: #347458;
+}
+.visibility,
+.dismiss {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #eaf0ff;
+  color: #2456d8;
+}
+.visibility[aria-pressed="false"] {
+  background: #eef0f4;
+  color: #69748a;
+}
+.arrival {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  width: min(326px, calc(100vw - 40px));
+  padding: 7px;
+  border: 1px solid #ffffff;
+  border-radius: 17px;
+  background: #fffefb;
+  box-shadow: 0 10px 36px #21305233;
+}
+.arrivalPlayer {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  min-width: 0;
+  padding: 5px;
+  border-radius: 11px;
+  color: #213052;
+  background: transparent;
+  text-align: left;
+}
+.arrivalPlayer > span:nth-child(2) {
+  min-width: 0;
+}
+.arrivalIcon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  background: #d7ee83;
+  color: #213052;
+}
+.arrivalPlayer strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.arrivalPlayer small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: #616c80;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.arrivalPlayer small > svg {
+  flex-shrink: 0;
+}
+.dismiss {
+  background: transparent;
+  color: #616c80;
+}
+.directory {
+  width: min(660px, calc(100vw - 36px));
+  max-width: none;
+  max-height: calc(100dvh - 36px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #ffffff;
+  border-radius: 24px;
+  background: #fffefb;
+  color: #213052;
+  box-shadow: 0 20px 90px #10244966;
+}
+.directory::backdrop {
+  background: #10244966;
+  backdrop-filter: blur(3px);
+}
+.directoryContent {
+  display: flex;
+  flex-direction: column;
+  min-height: min(420px, calc(100dvh - 40px));
+  max-height: min(740px, calc(100dvh - 40px));
+}
+.header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 13px;
+  padding: 22px;
+  background: #2456d8;
+  color: #fff;
+}
+.headerSymbol {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+  background: #d7ee83;
+  color: #213052;
+}
+.header > div:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.header > div > span {
+  color: #e7edff;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+}
+.header h2 {
+  margin: 5px 0 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.8px;
+}
+.close {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #fff;
+  background: #ffffff17;
+}
+.directoryIntro {
+  flex-shrink: 0;
+  padding: 17px 22px;
+  border-bottom: 1px solid #e2e7f0;
+}
+.directoryIntro strong {
+  color: #213052;
+  font-size: 15px;
+}
+.directoryIntro p {
+  max-width: 500px;
+  margin-top: 6px;
+  color: #616c80;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.connectionNotice {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 11px 22px;
+  color: #914c39;
+  background: #fff0e9;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.connectionNotice > svg {
+  flex-shrink: 0;
+}
+.playerList {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #f6f8fc;
+}
+.playerCard {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e0e6f2;
+  border-radius: 17px;
+  background: #fffefb;
+}
+.playerIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.playerAvatar {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+}
+.playerAvatar > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: #ffffffed;
+  color: #213052;
+  font-size: 19px;
+  font-weight: 600;
+}
+.playerIdentity > div {
+  flex: 1;
+  min-width: 0;
+}
+.playerName {
+  display: block;
+  max-width: 100%;
+  min-height: 44px;
+  margin-top: -10px;
+  padding: 10px 0 4px;
+  overflow: hidden;
+  color: #193faf;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.playerIdentity > div > span {
+  display: block;
+  margin-top: -3px;
+  color: #616c80;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.placeLine {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 63px;
+  margin-block: 11px;
+  padding: 10px;
+  border-radius: 11px;
+  background: #edf7ef;
+  color: #347458;
+}
+.placeLine > svg {
+  flex-shrink: 0;
+}
+.placeLine > div {
+  min-width: 0;
+}
+.placeLine strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.placeLine span {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.playerActions {
+  display: flex;
+  gap: 7px;
+}
+.playerActions > button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.messageButton {
+  background: #eaf0ff;
+  color: #193faf;
+}
+.joinButton {
+  background: #d7ee83;
+  color: #213052;
+}
+.empty {
+  display: grid;
+  grid-column: 1 / -1;
+  justify-items: center;
+  gap: 11px;
+  padding: 36px 20px;
+  text-align: center;
+}
+.empty > span {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 2px;
+  border-radius: 23px;
+  background: #d7ee83;
+  color: #213052;
+}
+.empty strong {
+  font-size: 19px;
+  letter-spacing: -0.4px;
+}
+.empty p {
+  max-width: 340px;
+  color: #616c80;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.directoryNote {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 22px;
+  border-top: 1px solid #e2e7f0;
+  color: #616c80;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.directoryNote > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.dock button,
+.directory button {
+  transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.dock button:active,
+.directory button:active {
+  transform: scale(0.97);
+}
+.dock button:focus-visible,
+.directory button:focus-visible {
+  outline: 3px solid #2456d8;
+  outline-offset: 2px;
+}
+.dock button:active:focus-visible,
+.directory button:active:focus-visible {
+  transform: none;
+}
+.close:focus-visible {
+  outline-color: #d7ee83 !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .findButton:hover,
+  .arrivalPlayer:hover {
+    background: #eff3fb;
+  }
+  .playerActions > button:hover,
+  .visibility:hover {
+    filter: brightness(0.98);
+  }
+}
+@media (max-width: 600px) {
+  .dock {
+    left: 12px;
+    bottom: 250px;
+    width: min(254px, calc(100% - 24px));
+  }
+  .arrival {
+    width: min(326px, calc(100vw - 24px));
+  }
+  .dock[data-inside="true"] {
+    top: 254px;
+    right: 20px;
+    bottom: auto;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    min-height: 60px;
+    padding: 7px;
+    border: 1px solid #ffffff;
+    border-radius: 18px;
+    background: #fffefbf2;
+    box-shadow: 0 8px 30px #21305226;
+    backdrop-filter: blur(12px);
+  }
+  .dock[data-inside="true"] .dockBar {
+    display: contents;
+  }
+  .dock[data-inside="true"] .arrival {
+    display: contents;
+  }
+  .dock[data-inside="true"] .findButton {
+    order: 0;
+  }
+  .dock[data-inside="true"] .arrivalPlayer {
+    order: 1;
+    height: 44px;
+    min-height: 44px;
+    padding: 5px 7px;
+    background: #edf7ef;
+  }
+  .dock[data-inside="true"] .arrivalIcon {
+    display: none;
+  }
+  .dock[data-inside="true"] .arrivalPlayer strong {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1.2;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .dock[data-inside="true"] .arrivalPlayer small {
+    display: none;
+  }
+  .dock[data-inside="true"] .dismiss {
+    order: 2;
+  }
+  .dock[data-inside="true"] .visibility {
+    order: 3;
+  }
+  .dock[data-inside="true"]:has(.arrival) .findButton {
+    flex: 0 0 44px;
+    justify-content: center;
+    width: 44px;
+    padding: 6px;
+  }
+  .dock[data-inside="true"]:has(.arrival) .findButton > span {
+    display: none;
+  }
+  .directory {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 20px;
+  }
+  .directoryContent {
+    max-height: calc(100dvh - 28px);
+  }
+  .header {
+    padding: 18px;
+  }
+  .header h2 {
+    font-size: 25px;
+  }
+  .directoryIntro {
+    padding: 14px 18px;
+  }
+  .playerList {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+}
+@media (max-height: 550px) {
+  .dock {
+    left: 10px;
+    bottom: 90px;
+  }
+  .dock[data-inside="true"] {
+    top: auto;
+    right: auto;
+    bottom: 90px;
+    left: 10px;
+    width: min(274px, calc(100% - 20px));
+  }
+  .header {
+    padding: 12px 18px;
+  }
+  .headerSymbol {
+    width: 44px;
+    height: 44px;
+  }
+  .header h2 {
+    font-size: 22px;
+  }
+  .directoryIntro {
+    padding-block: 10px;
+  }
+  .directoryIntro p,
+  .directoryNote {
+    font-size: 9px;
+  }
+}
+@media (max-width: 600px) and (min-height: 551px) {
+  :global(.game):has(.dock[data-inside="true"])
+    :global(section[data-interior-kind]) {
+    /* Keep the social row above a scrollable room panel on shorter phones. */
+    max-height: min(480px, 54svh, calc(100svh - 370px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock button,
+  .directory button {
+    transition: none;
+  }
+  .dock button:active,
+  .directory button:active {
+    transform: none;
+  }
+}

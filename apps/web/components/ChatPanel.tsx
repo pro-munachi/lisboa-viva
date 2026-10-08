@@ -11,12 +11,14 @@ import {
 } from "react";
 import {
   ArrowDown,
+  ArrowLeft,
   Coffee,
   Globe2,
   MapPin,
   MessageCircle,
   Send,
   Sparkles,
+  Users,
   X,
 } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
@@ -34,12 +36,23 @@ import {
   type ChatDraft,
   type ChatMessage,
 } from "../lib/chat-client";
+import {
+  directRoom,
+  fetchDirectConversations,
+  fetchDirectPage,
+  sendDirectMessage,
+  type ChatPeer,
+  type DirectConversation,
+} from "../lib/direct-client";
 import styles from "./ChatPanel.module.css";
 
 export type ChatPanelProps = {
   user: AuthUser;
   cityId: string;
   place?: { id: string; label: string };
+  initialPeer?: ChatPeer | null;
+  openPeerRequest?: number;
+  onSelectPlayer?: (peer: ChatPeer) => void;
   onClose: () => void;
 };
 
@@ -55,21 +68,50 @@ export default function ChatPanel({
   user,
   cityId,
   place,
+  initialPeer,
+  openPeerRequest,
+  onSelectPlayer,
   onClose,
 }: ChatPanelProps) {
-  const [tab, setTab] = useState<"city" | "here">("city");
+  const [tab, setTab] = useState<"city" | "here" | "messages">(
+    initialPeer && initialPeer.id !== user.id ? "messages" : "city",
+  );
+  const [peer, setPeer] = useState<ChatPeer | null>(
+    initialPeer?.id !== user.id ? (initialPeer ?? null) : null,
+  );
   const [drafts, setDrafts] = useState<Record<string, ChatDraft>>({});
   const closeButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const cityName = getCity(cityId).name;
   const here = tab === "here" && place;
-  const room = here ? `${cityId}:hotspot:${place.id}` : `${cityId}:city`;
-  const roomLabel = here ? place.label : cityName;
+  const directPeer = tab === "messages" ? peer : null;
+  const room = directPeer
+    ? directRoom(directPeer.id)
+    : here
+      ? `${cityId}:hotspot:${place.id}`
+      : `${cityId}:city`;
+  const roomLabel = directPeer
+    ? `@${directPeer.handle}`
+    : here
+      ? place.label
+      : cityName;
   const draftKey = `${user.id}/${room}`;
   const setDraft = useCallback(
     (next: ChatDraft) => setDrafts((all) => ({ ...all, [draftKey]: next })),
     [draftKey],
   );
+
+  useEffect(() => {
+    if (!initialPeer || initialPeer.id === user.id) return;
+    setPeer(initialPeer);
+    setTab("messages");
+  }, [initialPeer, openPeerRequest, user.id]);
+
+  function openThread(person: ChatPeer) {
+    if (person.id === user.id) return;
+    setPeer(person);
+    setTab("messages");
+  }
 
   useEffect(() => {
     const previous = document.activeElement;
@@ -98,8 +140,16 @@ export default function ChatPanel({
           <MessageCircle size={21} />
         </div>
         <div className={styles.heading}>
-          <span>MAPS BECOME PLANS</span>
-          <h2 id={titleId}>{here ? place.label : `${cityName} city chat`}</h2>
+          <span>
+            {tab === "messages" ? "PEOPLE BECOME PLANS" : "MAPS BECOME PLANS"}
+          </span>
+          <h2 id={titleId}>
+            {tab === "messages"
+              ? "Your messages"
+              : here
+                ? place.label
+                : `${cityName} city chat`}
+          </h2>
         </div>
         <button
           ref={closeButton}
@@ -114,7 +164,7 @@ export default function ChatPanel({
       <div className={styles.rooms} role="group" aria-label="Chat room">
         <button
           type="button"
-          aria-pressed={!here}
+          aria-pressed={tab === "city"}
           onClick={() => setTab("city")}
         >
           <Globe2 size={16} /> {cityName}
@@ -130,18 +180,70 @@ export default function ChatPanel({
         >
           <MapPin size={16} /> Here
         </button>
+        <button
+          type="button"
+          aria-pressed={tab === "messages"}
+          onClick={() => {
+            setPeer(null);
+            setTab("messages");
+          }}
+        >
+          <Users size={16} /> Messages
+        </button>
       </div>
-      <p className={styles.disclosure}>
-        Anyone signed in can join this room. Messages are shared with the room.
-      </p>
-      <RoomConversation
-        key={draftKey}
-        user={user}
-        room={room}
-        roomLabel={roomLabel}
-        draft={drafts[draftKey] ?? emptyDraft}
-        setDraft={setDraft}
-      />
+      {tab === "messages" ? (
+        directPeer ? (
+          <>
+            <div className={styles.directHeading}>
+              <button
+                type="button"
+                aria-label="Back to message inbox"
+                onClick={() => setPeer(null)}
+              >
+                <ArrowLeft size={17} />
+              </button>
+              <div>
+                <strong>@{directPeer.handle}</strong>
+                <span>
+                  {directPeer.userType === "local" ? "Local" : "Traveller"} ·
+                  Direct conversation
+                </span>
+              </div>
+            </div>
+            <p className={styles.disclosure}>
+              Only you and @{directPeer.handle} can access this conversation.
+            </p>
+            <RoomConversation
+              key={draftKey}
+              user={user}
+              room={room}
+              roomLabel={roomLabel}
+              peerId={directPeer.id}
+              draft={drafts[draftKey] ?? emptyDraft}
+              setDraft={setDraft}
+              onSelectPlayer={onSelectPlayer}
+            />
+          </>
+        ) : (
+          <DirectInbox key={user.id} user={user} onOpen={openThread} />
+        )
+      ) : (
+        <>
+          <p className={styles.disclosure}>
+            Anyone signed in can join this room. Messages are shared with the
+            room.
+          </p>
+          <RoomConversation
+            key={draftKey}
+            user={user}
+            room={room}
+            roomLabel={roomLabel}
+            draft={drafts[draftKey] ?? emptyDraft}
+            setDraft={setDraft}
+            onSelectPlayer={onSelectPlayer}
+          />
+        </>
+      )}
     </section>
   );
 }
@@ -150,14 +252,18 @@ function RoomConversation({
   user,
   room,
   roomLabel,
+  peerId,
   draft,
   setDraft,
+  onSelectPlayer,
 }: {
   user: AuthUser;
   room: string;
   roomLabel: string;
+  peerId?: string;
   draft: ChatDraft;
   setDraft: (draft: ChatDraft) => void;
+  onSelectPlayer?: (peer: ChatPeer) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -181,6 +287,9 @@ function RoomConversation({
   const count = chatCharacterCount(normalizedBody);
   const validation = draft.body ? chatBodyError(draft.body) : null;
   const sessionExpired = loadError?.status === 401 || sendError?.status === 401;
+  const unavailable = [loadError?.status, sendError?.status].some(
+    (status) => status === 403 || status === 404,
+  );
   const retrying = Boolean(draft.attempt?.body === normalizedBody);
 
   function publish({
@@ -214,16 +323,27 @@ function RoomConversation({
       let hasMore = false;
       try {
         for (let pageNumber = 0; pageNumber < 4; pageNumber++) {
-          const page = await fetchChatPage(
-            room,
-            timeline.current.cursor,
-            controller.signal,
-          );
+          const page = peerId
+            ? await fetchDirectPage(
+                peerId,
+                user.id,
+                timeline.current.cursor,
+                controller.signal,
+              )
+            : await fetchChatPage(
+                room,
+                timeline.current.cursor,
+                controller.signal,
+              );
           if (!active) return;
           publish(timeline.current.acceptPage(page));
           hasMore = page.hasMore;
           setLoadError(null);
-          setSendError((failure) => (failure?.status === 401 ? null : failure));
+          setSendError((failure) =>
+            failure && [401, 403, 404].includes(failure.status)
+              ? null
+              : failure,
+          );
           setReady(true);
           if (!hasMore || document.hidden) break;
         }
@@ -232,7 +352,7 @@ function RoomConversation({
         if (!active || (requestController.signal.aborted && !timedOut)) return;
         const failure = errorMessage(error);
         setLoadError(failure);
-        halted = failure.status === 401 || failure.status === 403;
+        halted = [401, 403, 404].includes(failure.status);
       } finally {
         requesting = false;
         clearTimeout(timeout);
@@ -261,7 +381,11 @@ function RoomConversation({
       clearTimeout(continuation);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [room, user.id]);
+  }, [room, user.id, peerId]);
+
+  useEffect(() => {
+    if (peerId && ready) composer.current?.focus();
+  }, [peerId, ready]);
 
   useEffect(() => {
     if (!nearBottom.current) return;
@@ -285,7 +409,14 @@ function RoomConversation({
   }
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (sendingRef.current || loading || !ready || sessionExpired) return;
+    if (
+      sendingRef.current ||
+      loading ||
+      !ready ||
+      sessionExpired ||
+      unavailable
+    )
+      return;
     let attempt;
     try {
       attempt = chatAttempt(draft.body, draft.attempt);
@@ -302,7 +433,9 @@ function RoomConversation({
     sendController.current = controller;
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const message = await sendChatMessage(room, attempt, controller.signal);
+      const message = peerId
+        ? await sendDirectMessage(peerId, user.id, attempt, controller.signal)
+        : await sendChatMessage(room, attempt, controller.signal);
       if (!alive.current) return;
       publish(timeline.current.acceptSent(message));
       setDraft(emptyDraft);
@@ -349,12 +482,21 @@ function RoomConversation({
           ) : messages.length === 0 && !loadError ? (
             <div className={styles.empty}>
               <Sparkles size={25} aria-hidden="true" />
-              <strong>A place. A conversation. A plan.</strong>
+              <strong>
+                {peerId
+                  ? "Say hello. Make a plan."
+                  : "A place. A conversation. A plan."}
+              </strong>
               <p>
-                Travellers and locals can turn the map into shared plans. Ask
-                about {roomLabel}, find a coffee buddy, or plan a city walk.
+                {peerId
+                  ? `Start a direct conversation with ${roomLabel}. Introduce yourself, suggest a coffee or share a place to explore.`
+                  : `Travellers and locals can turn the map into shared plans. Ask about ${roomLabel}, find a coffee buddy, or plan a city walk.`}
               </p>
-              <span>Be the first to leave a message here.</span>
+              <span>
+                {peerId
+                  ? "Your messages stay in this conversation."
+                  : "Be the first to leave a message here."}
+              </span>
             </div>
           ) : (
             messages.map((message) => {
@@ -366,7 +508,20 @@ function RoomConversation({
                   key={message.id}
                 >
                   <div className={styles.byline}>
-                    <strong>{own ? "You" : `@${message.author.handle}`}</strong>
+                    {!own && onSelectPlayer ? (
+                      <button
+                        type="button"
+                        className={styles.author}
+                        aria-label={`Options for @${message.author.handle}`}
+                        onClick={() => onSelectPlayer(message.author)}
+                      >
+                        @{message.author.handle}
+                      </button>
+                    ) : (
+                      <strong>
+                        {own ? "You" : `@${message.author.handle}`}
+                      </strong>
+                    )}
                     <span>
                       {message.author.userType === "local"
                         ? "Local"
@@ -400,36 +555,44 @@ function RoomConversation({
           </button>
         </div>
       )}
-      <div className={styles.prompts} aria-label="Conversation starters">
-        <button
-          type="button"
-          disabled={sending}
-          onClick={() =>
-            prompt(`What is a local favourite around ${roomLabel}?`)
-          }
-        >
-          <MapPin size={13} /> Ask a local
-        </button>
-        <button
-          type="button"
-          disabled={sending}
-          onClick={() => prompt(`Anyone up for a coffee around ${roomLabel}?`)}
-        >
-          <Coffee size={13} /> Coffee buddy
-        </button>
-        <button
-          type="button"
-          disabled={sending}
-          onClick={() =>
-            prompt(`Would anyone like to plan a city walk around ${roomLabel}?`)
-          }
-        >
-          <Globe2 size={13} /> City walk
-        </button>
-      </div>
+      {!peerId && (
+        <div className={styles.prompts} aria-label="Conversation starters">
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() =>
+              prompt(`What is a local favourite around ${roomLabel}?`)
+            }
+          >
+            <MapPin size={13} /> Ask a local
+          </button>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() =>
+              prompt(`Anyone up for a coffee around ${roomLabel}?`)
+            }
+          >
+            <Coffee size={13} /> Coffee buddy
+          </button>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() =>
+              prompt(
+                `Would anyone like to plan a city walk around ${roomLabel}?`,
+              )
+            }
+          >
+            <Globe2 size={13} /> City walk
+          </button>
+        </div>
+      )}
       <form className={styles.composer} onSubmit={send}>
         <div className={styles.composerHeading}>
-          <label htmlFor={composerId}>Posting as @{user.handle}</label>
+          <label htmlFor={composerId}>
+            {peerId ? `Message ${roomLabel}` : `Posting as @${user.handle}`}
+          </label>
           <span data-over={count > CHAT_CHARACTER_LIMIT}>{count}/1,000</span>
         </div>
         <textarea
@@ -438,7 +601,11 @@ function RoomConversation({
           rows={2}
           maxLength={CHAT_CHARACTER_LIMIT * 2}
           value={draft.body}
-          placeholder={`Say something about ${roomLabel}…`}
+          placeholder={
+            peerId
+              ? `Say hello to ${roomLabel}…`
+              : `Say something about ${roomLabel}…`
+          }
           disabled={sending}
           aria-invalid={Boolean(validation)}
           aria-describedby={sendError || validation ? errorId : undefined}
@@ -462,6 +629,7 @@ function RoomConversation({
               loading ||
               !ready ||
               sessionExpired ||
+              unavailable ||
               Boolean(validation) ||
               !normalizedBody
             }
@@ -476,6 +644,148 @@ function RoomConversation({
           </Link>
         )}
       </form>
+    </>
+  );
+}
+
+function DirectInbox({
+  user,
+  onOpen,
+}: {
+  user: AuthUser;
+  onOpen: (peer: ChatPeer) => void;
+}) {
+  const [conversations, setConversations] = useState<DirectConversation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failure, setFailure] = useState<ChatRequestError | null>(null);
+  const retry = useRef<() => void>(() => undefined);
+
+  useEffect(() => {
+    let active = true;
+    let requesting = false;
+    let halted = false;
+    let controller: AbortController | null = null;
+    async function poll() {
+      if (!active || requesting || halted || document.hidden) return;
+      requesting = true;
+      controller = new AbortController();
+      const request = controller;
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        request.abort();
+      }, 10000);
+      try {
+        const threads = await fetchDirectConversations(user.id, request.signal);
+        if (!active) return;
+        setConversations(threads);
+        setFailure(null);
+      } catch (error) {
+        if (!active || (request.signal.aborted && !timedOut)) return;
+        const next = errorMessage(error);
+        setFailure(next);
+        halted = next.status === 401 || next.status === 403;
+      } finally {
+        clearTimeout(timeout);
+        requesting = false;
+        if (active) setLoading(false);
+      }
+    }
+    retry.current = () => {
+      halted = false;
+      void poll();
+    };
+    function visibility() {
+      if (document.hidden) controller?.abort();
+      else void poll();
+    }
+    void poll();
+    const interval = setInterval(() => void poll(), 5000);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      active = false;
+      controller?.abort();
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [user.id]);
+
+  return (
+    <>
+      <p className={styles.disclosure}>
+        Your direct conversations, wherever you are in the city.
+      </p>
+      <div
+        className={styles.inbox}
+        aria-label="Message inbox"
+        aria-busy={loading}
+      >
+        {loading ? (
+          <p className={styles.loading}>Loading your messages…</p>
+        ) : conversations.length ? (
+          conversations.map(({ peer, lastMessage }) => (
+            <button
+              type="button"
+              className={styles.thread}
+              key={peer.id}
+              onClick={() => onOpen(peer)}
+              aria-label={`Open conversation with @${peer.handle}`}
+            >
+              <span className={styles.contactAvatar} aria-hidden="true">
+                {peer.handle.slice(0, 1).toUpperCase()}
+              </span>
+              <span className={styles.threadText}>
+                <strong>@{peer.handle}</strong>
+                <span>
+                  {lastMessage.author.id === user.id ? "You: " : ""}
+                  {lastMessage.body}
+                </span>
+              </span>
+              <time
+                dateTime={lastMessage.sentAt}
+                title={new Date(lastMessage.sentAt).toLocaleString()}
+              >
+                {new Date(lastMessage.sentAt).toLocaleDateString([], {
+                  month: "short",
+                  day: "numeric",
+                })}
+              </time>
+            </button>
+          ))
+        ) : (
+          !failure && (
+            <div className={styles.empty}>
+              <Users size={28} aria-hidden="true" />
+              <strong>Your next city friend starts here.</strong>
+              <p>
+                Pick a real player on the map, in Find nearby players or in city
+                chat, then choose Message.
+              </p>
+              <span>Conversations appear here after the first message.</span>
+            </div>
+          )
+        )}
+      </div>
+      {failure && (
+        <div className={styles.loadError} role="status">
+          <p>{failure.message}</p>
+          <button type="button" onClick={() => retry.current()}>
+            Retry connection
+          </button>
+        </div>
+      )}
+      {failure?.status === 401 && (
+        <Link
+          className={`${styles.signIn} ${styles.inboxSignIn}`}
+          href="/login"
+        >
+          Sign in again
+        </Link>
+      )}
+      <p className={styles.inboxNote}>
+        Messages are visible to the two people in each conversation. City and
+        Here remain shared rooms.
+      </p>
     </>
   );
 }
