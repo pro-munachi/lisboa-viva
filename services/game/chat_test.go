@@ -33,6 +33,10 @@ func TestChatInputUnicodeAndCanonicalRooms(t *testing.T) {
 		{"invalid UTF8", "hi\xff", "lisbon:city", testChatNonce, "invalid_message"},
 		{"actual mapped ID", "Hello", "lisbon:hotspot:node:11341409242", testChatNonce, ""},
 		{"actual landmark", "Hello", "lisbon:hotspot:comercio", testChatNonce, ""},
+		{"nearby area", "Hello", "nearby:Cais do Sodré", testChatNonce, ""},
+		{"direct player", "Hello", "direct:443262f8-960b-4d3e-995b-b64608c6b1b0", testChatNonce, ""},
+		{"empty nearby area", "Hello", "nearby:", testChatNonce, "invalid_room"},
+		{"invalid direct player", "Hello", "direct:not-a-user", testChatNonce, "invalid_room"},
 		{"invented room", "Hello", "lisbon:hotspot:private-room", testChatNonce, "invalid_room"},
 		{"home is private", "Hello", "lisbon:hotspot:home", testChatNonce, "invalid_room"},
 		{"oversized room", "Hello", strings.Repeat("x", 161), testChatNonce, "invalid_room"},
@@ -64,6 +68,8 @@ func TestChatQueryStrictCursorAndLimit(t *testing.T) {
 		{"maximum int64", "room=lisbon:city&after=9223372036854775807&limit=50", ""},
 		{"BigInt-safe", "room=lisbon:city&after=9007199254740993&limit=1", ""},
 		{"zero", "room=lisbon:city&after=0", ""},
+		{"nearby", "room=nearby%3ACais+do+Sodr%C3%A9", ""},
+		{"direct", "room=direct%3A443262f8-960b-4d3e-995b-b64608c6b1b0", ""},
 		{"missing room", "after=1", "invalid_room"},
 		{"unknown room", "room=lisbon:hotspot:secret", "invalid_room"},
 		{"duplicate room", "room=lisbon:city&room=lisbon:city", "invalid_query"},
@@ -88,7 +94,7 @@ func TestChatQueryStrictCursorAndLimit(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || query.Limit < 1 || query.Limit > 50 || query.Room != "lisbon:city" {
+			if err != nil || query.Limit < 1 || query.Limit > 50 {
 				t.Fatalf("valid query rejected: %v", err)
 			}
 			if test.name == "BigInt-safe" && (query.After == nil || *query.After != 9007199254740993) {
@@ -134,8 +140,9 @@ func (store *fakeChatStore) post(_ context.Context, user string, input chatInput
 	return chatMessage{ID: "9007199254740993", Room: input.Room, Body: input.Body, SentAt: "2026-10-07T14:00:00Z", Author: chatAuthor{ID: user, Handle: "visitor", UserType: "tourist"}}, store.new, store.err
 }
 
-func (store *fakeChatStore) list(_ context.Context, query chatQuery) (chatPage, error) {
+func (store *fakeChatStore) list(_ context.Context, user string, query chatQuery) (chatPage, error) {
 	store.lists++
+	store.user = user
 	return chatPage{Messages: []chatMessage{}}, store.err
 }
 

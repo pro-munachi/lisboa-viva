@@ -16,12 +16,14 @@ import {
   Globe2,
   MapPin,
   MessageCircle,
+  MessagesSquare,
   Send,
   Sparkles,
   Users,
   X,
 } from "lucide-react";
 import type { AuthUser } from "../lib/auth";
+import type { MultiplayerPeer } from "../lib/multiplayer";
 import { getCity } from "../lib/cities";
 import {
   CHAT_CHARACTER_LIMIT,
@@ -50,6 +52,8 @@ export type ChatPanelProps = {
   user: AuthUser;
   cityId: string;
   place?: { id: string; label: string };
+  peers?: MultiplayerPeer[];
+  nearbyArea?: string;
   initialPeer?: ChatPeer | null;
   openPeerRequest?: number;
   onSelectPlayer?: (peer: ChatPeer) => void;
@@ -68,13 +72,19 @@ export default function ChatPanel({
   user,
   cityId,
   place,
+  peers = [],
+  nearbyArea,
   initialPeer,
   openPeerRequest,
   onSelectPlayer,
   onClose,
 }: ChatPanelProps) {
-  const [tab, setTab] = useState<"city" | "here" | "messages">(
-    initialPeer && initialPeer.id !== user.id ? "messages" : "city",
+  const [tab, setTab] = useState<"nearby" | "city" | "here" | "messages">(
+    initialPeer && initialPeer.id !== user.id
+      ? "messages"
+      : nearbyArea
+        ? "nearby"
+        : "city",
   );
   const [peer, setPeer] = useState<ChatPeer | null>(
     initialPeer?.id !== user.id ? (initialPeer ?? null) : null,
@@ -83,18 +93,26 @@ export default function ChatPanel({
   const closeButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const cityName = getCity(cityId).name;
-  const here = tab === "here" && place;
-  const directPeer = tab === "messages" ? peer : null;
+  const effectiveTab =
+    (tab === "nearby" && !nearbyArea) || (tab === "here" && !place)
+      ? "city"
+      : tab;
+  const here = effectiveTab === "here" && place;
+  const directPeer = effectiveTab === "messages" ? peer : null;
   const room = directPeer
     ? directRoom(directPeer.id)
-    : here
-      ? `${cityId}:hotspot:${place.id}`
-      : `${cityId}:city`;
+    : effectiveTab === "nearby"
+      ? `nearby:${nearbyArea}`
+      : here
+        ? `${cityId}:hotspot:${place.id}`
+        : `${cityId}:city`;
   const roomLabel = directPeer
     ? `@${directPeer.handle}`
-    : here
-      ? place.label
-      : cityName;
+    : effectiveTab === "nearby"
+      ? `people around ${nearbyArea}`
+      : here
+        ? place.label
+        : cityName;
   const draftKey = `${user.id}/${room}`;
   const setDraft = useCallback(
     (next: ChatDraft) => setDrafts((all) => ({ ...all, [draftKey]: next })),
@@ -109,7 +127,11 @@ export default function ChatPanel({
 
   function openThread(person: ChatPeer) {
     if (person.id === user.id) return;
-    setPeer(person);
+    setPeer({
+      id: person.id,
+      handle: person.handle,
+      userType: person.userType,
+    });
     setTab("messages");
   }
 
@@ -141,14 +163,18 @@ export default function ChatPanel({
         </div>
         <div className={styles.heading}>
           <span>
-            {tab === "messages" ? "PEOPLE BECOME PLANS" : "MAPS BECOME PLANS"}
+            {effectiveTab === "messages"
+              ? "PEOPLE BECOME PLANS"
+              : "MAPS BECOME PLANS"}
           </span>
           <h2 id={titleId}>
-            {tab === "messages"
+            {effectiveTab === "messages"
               ? "Your messages"
-              : here
-                ? place.label
-                : `${cityName} city chat`}
+              : effectiveTab === "nearby"
+                ? `Around ${nearbyArea}`
+                : here
+                  ? place.label
+                  : `${cityName} city chat`}
           </h2>
         </div>
         <button
@@ -164,7 +190,20 @@ export default function ChatPanel({
       <div className={styles.rooms} role="group" aria-label="Chat room">
         <button
           type="button"
-          aria-pressed={tab === "city"}
+          aria-pressed={effectiveTab === "nearby"}
+          disabled={!nearbyArea}
+          title={
+            nearbyArea
+              ? `Chat around ${nearbyArea}`
+              : "Join multiplayer to chat nearby"
+          }
+          onClick={() => setTab("nearby")}
+        >
+          <MessagesSquare size={16} /> Nearby
+        </button>
+        <button
+          type="button"
+          aria-pressed={effectiveTab === "city"}
           onClick={() => setTab("city")}
         >
           <Globe2 size={16} /> {cityName}
@@ -182,7 +221,8 @@ export default function ChatPanel({
         </button>
         <button
           type="button"
-          aria-pressed={tab === "messages"}
+          aria-pressed={effectiveTab === "messages"}
+          title="Your private conversations and message inbox"
           onClick={() => {
             setPeer(null);
             setTab("messages");
@@ -191,7 +231,7 @@ export default function ChatPanel({
           <Users size={16} /> Messages
         </button>
       </div>
-      {tab === "messages" ? (
+      {effectiveTab === "messages" ? (
         directPeer ? (
           <>
             <div className={styles.directHeading}>
@@ -225,13 +265,19 @@ export default function ChatPanel({
             />
           </>
         ) : (
-          <DirectInbox key={user.id} user={user} onOpen={openThread} />
+          <DirectInbox
+            key={user.id}
+            user={user}
+            peers={nearbyArea ? peers : []}
+            onOpen={openThread}
+          />
         )
       ) : (
         <>
           <p className={styles.disclosure}>
-            Anyone signed in can join this room. Messages are shared with the
-            room.
+            {effectiveTab === "nearby"
+              ? `Shared with signed-in players currently around ${nearbyArea}.`
+              : "Anyone signed in can join this room. Messages are shared with the room."}
           </p>
           <RoomConversation
             key={draftKey}
@@ -650,15 +696,24 @@ function RoomConversation({
 
 function DirectInbox({
   user,
+  peers,
   onOpen,
 }: {
   user: AuthUser;
+  peers: MultiplayerPeer[];
   onOpen: (peer: ChatPeer) => void;
 }) {
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<ChatRequestError | null>(null);
   const retry = useRef<() => void>(() => undefined);
+  const nearbyPeers = Array.from(
+    new Map(
+      peers
+        .filter((peer) => peer.id !== user.id)
+        .map((peer) => [peer.id, peer]),
+    ).values(),
+  ).slice(0, 50);
 
   useEffect(() => {
     let active = true;
@@ -712,6 +767,29 @@ function DirectInbox({
 
   return (
     <>
+      {nearbyPeers.length > 0 && (
+        <label className={styles.peerPicker}>
+          Message a nearby player
+          <select
+            value=""
+            onChange={(event) => {
+              const peer = nearbyPeers.find(
+                (person) => person.id === event.target.value,
+              );
+              if (peer) onOpen(peer);
+            }}
+          >
+            <option value="" disabled>
+              Choose a player
+            </option>
+            {nearbyPeers.map((peer) => (
+              <option key={peer.id} value={peer.id}>
+                @{peer.handle} · {peer.area}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p className={styles.disclosure}>
         Your direct conversations, wherever you are in the city.
       </p>
@@ -783,8 +861,8 @@ function DirectInbox({
         </Link>
       )}
       <p className={styles.inboxNote}>
-        Messages are visible to the two people in each conversation. City and
-        Here remain shared rooms.
+        Messages are visible to the two people in each conversation. Nearby,
+        City and Here remain shared rooms.
       </p>
     </>
   );

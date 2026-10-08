@@ -1,0 +1,21 @@
+# One Render web service runs both Next.js and the Go API in one container.
+# Supply DATABASE_URL in the Render dashboard when creating the Blueprint.
+services:
+  - type: web
+    name: lisboa-viva-single
+    runtime: docker
+    plan: free
+    region: frankfurt
+    repo: https://github.com/pro-munachi/lisboa-viva
+    branch: main
+    autoDeployTrigger: commit
+    dockerContext: .
+    dockerfilePath: ./deploy/Dockerfile.single
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: PORT
+        value: "10000"

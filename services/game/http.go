@@ -105,13 +105,14 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_locale":              http.StatusBadRequest, "handle_taken": http.StatusConflict,
 			"email_taken": http.StatusConflict, "credentials": http.StatusUnauthorized,
 			"session_expired": http.StatusUnauthorized, "forbidden": http.StatusForbidden,
-			"invalid_presence":   http.StatusBadRequest,
-			"invalid_appearance": http.StatusBadRequest,
-			"rate_limited":       http.StatusTooManyRequests,
-			"payload_too_large":  http.StatusRequestEntityTooLarge,
-			"nonce_conflict":     http.StatusConflict,
-			"invalid_peer":       http.StatusBadRequest,
-			"peer_unavailable":   http.StatusNotFound,
+			"invalid_presence":       http.StatusBadRequest,
+			"invalid_appearance":     http.StatusBadRequest,
+			"chat_presence_required": http.StatusForbidden,
+			"rate_limited":           http.StatusTooManyRequests,
+			"payload_too_large":      http.StatusRequestEntityTooLarge,
+			"nonce_conflict":         http.StatusConflict,
+			"invalid_peer":           http.StatusBadRequest,
+			"peer_unavailable":       http.StatusNotFound,
 		}[code]
 	}
 	if status == 0 {

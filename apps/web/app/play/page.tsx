@@ -197,6 +197,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     peers,
     setLocation,
     appearance,
+    location,
     enabled,
     status: presenceStatus,
   } = useMultiplayer();
@@ -206,6 +207,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     longitude: placeFocus.cais.lng,
     area: placeFocus.cais.name,
   });
+
   const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
@@ -1173,6 +1175,8 @@ function RoamExperience({ user }: { user: AuthUser }) {
           initialPeer={chatPeer}
           openPeerRequest={openPeerRequest}
           onSelectPlayer={selectPlayer}
+          peers={peers}
+          nearbyArea={enabled ? location.area : undefined}
           onClose={() => {
             setChatOpen(false);
             chatTrigger.current?.focus();

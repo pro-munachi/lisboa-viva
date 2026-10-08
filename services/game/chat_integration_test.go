@@ -121,6 +121,7 @@ func TestChatPostgresLoopbackIntegration(t *testing.T) {
 	}
 	userA, cookieA := register("chat_local", "local")
 	userB, cookieB := register("chat_visitor", "tourist")
+	_, cookieC := register("chat_third", "tourist")
 	input := chatInput{Room: "lisbon:city", Body: "Olá Lisboa 🌊", ClientID: testChatNonce}
 	send := func(input chatInput, cookie *http.Cookie) *httptest.ResponseRecorder {
 		body, _ := json.Marshal(input)
@@ -197,6 +198,33 @@ func TestChatPostgresLoopbackIntegration(t *testing.T) {
 	status(send(spot, cookieA), http.StatusCreated)
 	if page := get(spot.Room, "", 50, cookieB); len(page.Messages) != 1 || page.Messages[0].Body != spot.Body || page.HasMore {
 		t.Fatal("hotspot messages were not isolated from city chat")
+	}
+	// Nearby rooms are derived from live presence and reject stale or mismatched areas.
+	if _, err := pool.Exec(ctx, `INSERT INTO player_presence(user_id,latitude,longitude,area,last_seen_at)
+		VALUES($1,38.7061,-9.1459,'Cais do Sodré',now()),($2,38.7062,-9.1460,'Cais do Sodré',now())`, userA.ID, userB.ID); err != nil {
+		t.Fatal("could not seed nearby chat presence")
+	}
+	nearby := chatInput{Room: "nearby:Cais do Sodré", Body: "Anyone nearby for coffee?", ClientID: "4b4fe99b-0000-4000-9000-000000000010"}
+	status(send(nearby, cookieA), http.StatusCreated)
+	if page := get(nearby.Room, "", 50, cookieB); len(page.Messages) != 1 || page.Messages[0].Body != nearby.Body || page.Messages[0].Room != nearby.Room {
+		t.Fatal("nearby room did not share messages between present players")
+	}
+	wrongArea := request(http.MethodGet, "/v1/chat/messages?room="+url.QueryEscape("nearby:Alfama"), "", cookieA)
+	status(wrongArea, http.StatusForbidden)
+	noPresence := request(http.MethodGet, "/v1/chat/messages?room="+url.QueryEscape(nearby.Room), "", cookieC)
+	status(noPresence, http.StatusForbidden)
+	// Direct rooms resolve to one canonical pair regardless of which member opens it.
+	directAB := chatInput{Room: "direct:" + userB.ID, Body: "Private hello", ClientID: "4b4fe99b-0000-4000-9000-000000000011"}
+	directResponse := send(directAB, cookieA)
+	status(directResponse, http.StatusCreated)
+	if messageFrom(directResponse).Room != directAB.Room {
+		t.Fatal("direct response exposed its internal conversation key")
+	}
+	if page := get("direct:"+userA.ID, "", 50, cookieB); len(page.Messages) != 1 || page.Messages[0].Body != directAB.Body || page.Messages[0].Room != "direct:"+userA.ID {
+		t.Fatal("the other direct participant could not read the conversation")
+	}
+	if page := get("direct:"+userB.ID, "", 50, cookieC); len(page.Messages) != 0 {
+		t.Fatal("a third account could read another pair's direct conversation")
 	}
 	unknown := input
 	unknown.Room = "lisbon:hotspot:secret"

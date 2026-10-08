@@ -2,6 +2,14 @@
 
 Checks recorded on 7 October 2026 on macOS with Node 24.14.0, Next.js 16.3.8, React 19.2.4, TypeScript 5.9.3 and Three.js 0.160.0. The project supports Node 22 or newer; GitHub Actions is configured for Node 22.
 
+## Main integration and PR review — 8 October 2026
+
+Merged main `083bca554f590ae2e5d4cab45a7dc5bd4e65226b`, preserving Muna’s presence-authorized Nearby room, legacy private API and single-service Render/Railway deployment. The new Messages inbox uses one private store across both API forms. Migration `008_legacy_direct_messages.sql` imports old pair history in order and preserves participants, bodies, retry UUIDs and timestamps; incompatible nonce data or malformed pairs abort migration. Legacy private polling cursors must reset after upgrading.
+
+The combined source passes **278 web tests**, the typechecked Next.js production build, **49 top-level Go race tests** with real PostgreSQL and no skips, `go vet`, shell syntax checks and `git diff --check`. New database cases verify old/new direct API interoperability, imported inbox/history and migration failures without partial data loss. The two-service staging web context was corrected to `apps/web` to match Muna’s relative Docker COPY paths; the single-service deployment files remain intact. Docker image execution and hosted deployment were not performed by this push review.
+
+The restarted local preview loaded the new Nearby conversation in Baixa and the existing test-account inbox. Its saved two-person thread opened with both original messages, and the traveller’s Baixa trip still showed day 1, 09:36 and €297.5. Earlier flight/player screenshots below remain the evidence for the visual slice.
+
 ## Private chat, nearby venues and flight finish — 7 October 2026
 
 This increment adds player action cards, participant-only direct conversations, an inbox, temporary arrival notifications and a permanent nearby-player directory. Public venue entry determines shared room presence; inspecting the map does not publish a false visit. Joining another player resolves their latest canonical public venue again. Public rooms render up to twelve saved peer characters, while private homes remain separate.

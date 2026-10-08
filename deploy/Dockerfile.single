@@ -1,0 +1,26 @@
+FROM golang:1.26.0-alpine AS game-build
+WORKDIR /build
+COPY services/game/go.mod services/game/go.sum ./
+RUN go mod download
+COPY services/game/ ./
+RUN CGO_ENABLED=0 go build -o /game .
+
+FROM node:22-alpine AS web-build
+WORKDIR /build
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY apps/web/ ./
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 \
+    PROJECT_ROOT=/app PORT=10000
+COPY --from=game-build /game /app/game
+COPY --from=web-build --chown=node:node /build /app/web
+COPY db /app/db
+COPY deploy/start-single.sh /app/start-single.sh
+USER node
+EXPOSE 10000
+CMD ["sh", "/app/start-single.sh"]
