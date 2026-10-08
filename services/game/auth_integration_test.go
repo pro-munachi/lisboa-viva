@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -271,12 +272,25 @@ func TestAuthPostgresLoopbackIntegration(t *testing.T) {
 	}
 
 	const password = "roam-integration-password"
-	input := registerInput{Handle: "  ROAM_VISITOR  ", Email: "ROAM.VISITOR@EXAMPLE.TEST", Password: password, UserType: "tourist", HomeDistrict: "Baixa", AdultConfirmed: true}
+	input := registerInput{Handle: "ROAM_VISITOR", Email: "ROAM.VISITOR@EXAMPLE.TEST", Password: password, UserType: "tourist", HomeDistrict: "Baixa", AdultConfirmed: true}
 	registered := request(http.MethodPost, "/v1/auth/register", input, nil)
 	status(registered, http.StatusCreated, "")
 	user, registrationCookie := userFrom(registered), cookieFrom(registered)
 	if user.Handle != "ROAM_VISITOR" || user.Email != "roam.visitor@example.test" || user.PreferredLocale != "en" || user.AccountStatus != "active" || user.AdultConfirmedAt == nil || !hasRole(user, "player") || hasRole(user, "admin") {
 		t.Fatal("registration normalization, English default, adult confirmation or player role was not persisted")
+	}
+	spaced := input
+	spaced.Handle, spaced.Email = "two words", "words@example.test"
+	status(request(http.MethodPost, "/v1/auth/register", spaced, nil), http.StatusBadRequest, "invalid_input")
+	for _, handle := range []string{"two words", "two\u00a0words", "two\u2003words"} {
+		if _, err := pool.Exec(ctx, `INSERT INTO users(handle,user_type) VALUES($1,'tourist')`, handle); err == nil {
+			t.Fatalf("database accepted a new username containing whitespace: %q", handle)
+		} else {
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || pgErr.ConstraintName != "users_handle_no_whitespace" {
+				t.Fatalf("username was rejected for another reason: %v", err)
+			}
+		}
 	}
 	home := request(http.MethodGet, "/v1/player/home", nil, registrationCookie)
 	status(home, http.StatusOK, "")

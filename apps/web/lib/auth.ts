@@ -2,6 +2,7 @@ import {
   normalizeCharacterAppearance,
   type CharacterAppearance,
 } from "./appearance";
+import { validHandle } from "./handle";
 
 export type AuthUser = {
   id: string;
@@ -35,7 +36,7 @@ export function normalizeAuthUser(value: unknown): AuthUser | null {
     ) ||
     user.id === "00000000-0000-0000-0000-000000000000" ||
     typeof user.handle !== "string" ||
-    !/^[a-z0-9_]{3,24}$/.test(user.handle) ||
+    !validHandle(user.handle) ||
     typeof user.email !== "string" ||
     (user.userType !== "tourist" && user.userType !== "local") ||
     user.accountStatus !== "active" ||

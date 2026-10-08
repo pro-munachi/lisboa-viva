@@ -1,4 +1,4 @@
-/** Printable display usernames. @ stays reserved for mentions and email login. */
+/** Read existing usernames, including names created before whitespace was disallowed. */
 export function validHandle(value) {
   return (
     typeof value === "string" &&
@@ -8,4 +8,9 @@ export function validHandle(value) {
     !value.includes("@") &&
     !/[\p{Cc}\p{Cf}]/u.test(value)
   );
+}
+
+/** New usernames cannot contain any whitespace. */
+export function validNewHandle(value) {
+  return validHandle(value) && !/\p{White_Space}/u.test(value);
 }

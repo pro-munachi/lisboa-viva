@@ -104,7 +104,6 @@ type profileInput struct {
 }
 
 func normalizeRegistration(input registerInput) (registerInput, error) {
-	input.Handle = strings.TrimSpace(input.Handle)
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 	if !validHandle(input.Handle) || !validEmail(input.Email) {
 		return input, apiError("invalid_input")
@@ -138,11 +137,11 @@ func normalizeRegistration(input registerInput) (registerInput, error) {
 
 func validHandle(value string) bool {
 	count := utf8.RuneCountInString(value)
-	if count < 2 || count > 40 || !utf8.ValidString(value) || strings.ContainsRune(value, '@') || strings.TrimSpace(value) != value {
+	if count < 2 || count > 40 || !utf8.ValidString(value) || strings.ContainsRune(value, '@') {
 		return false
 	}
 	for _, r := range value {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.IsSpace(r) {
 			return false
 		}
 	}

@@ -7,6 +7,7 @@ import { ArrowRight, Compass, Home, MapPin } from "lucide-react";
 import { authError, type AuthUser } from "../lib/auth";
 import AppearanceCustomizer from "./AppearanceCustomizer";
 import { DEFAULT_APPEARANCE } from "../lib/appearance";
+import { validNewHandle } from "../lib/handle";
 
 type Mode = "login" | "register";
 
@@ -25,6 +26,15 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     setBusy(true);
     setError("");
     const data = new FormData(event.currentTarget);
+    const handle = data.get("handle");
+    if (
+      mode === "register" &&
+      (typeof handle !== "string" || !validNewHandle(handle))
+    ) {
+      setError("Use 2–40 characters with no spaces or @ in your username.");
+      setBusy(false);
+      return;
+    }
     const body =
       mode === "login"
         ? {
@@ -32,7 +42,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
             password: data.get("password"),
           }
         : {
-            handle: data.get("handle"),
+            handle,
             email: data.get("email"),
             password: data.get("password"),
             userType,
@@ -128,12 +138,14 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                       autoComplete="username"
                       minLength={2}
                       maxLength={40}
-                      placeholder="e.g. Inês from Lisbon"
+                      pattern={String.raw`\S+`}
+                      title="Usernames cannot contain spaces."
+                      placeholder="e.g. Inês_Lisboa"
                       required
                     />
                     <small>
-                      Use 2–40 characters. Spaces and punctuation are welcome;
-                      @ is reserved for mentions.
+                      Use 2–40 characters with no spaces. Punctuation is
+                      welcome; @ is reserved for mentions.
                     </small>
                   </label>
                   <label>

@@ -9,7 +9,7 @@ import (
 )
 
 func TestNormalizeRegistration(t *testing.T) {
-	input, err := normalizeRegistration(registerInput{Handle: "  Visitante_1 ", Email: "TEST@example.com", Password: "uma-senha-segura", UserType: "tourist", AdultConfirmed: true})
+	input, err := normalizeRegistration(registerInput{Handle: "Visitante_1", Email: "TEST@example.com", Password: "uma-senha-segura", UserType: "tourist", AdultConfirmed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,16 +18,19 @@ func TestNormalizeRegistration(t *testing.T) {
 	}
 }
 
-func TestFreeTextHandleValidation(t *testing.T) {
-	for _, handle := range []string{"Inês de Lisboa", "No underscore", "Lee!", "山田 太郎"} {
+func TestNoWhitespaceHandleValidation(t *testing.T) {
+	for _, handle := range []string{"Inês", "No_underscore", "Lee!", "山田太郎"} {
 		if !validHandle(handle) {
 			t.Fatalf("expected printable username %q to be allowed", handle)
 		}
 	}
-	for _, handle := range []string{"", "a", " a", "a ", "a@example.com", "line\nbreak", "zero\u200dwidth"} {
+	for _, handle := range []string{"", "a", " a", "a ", "two words", "山田 太郎", "a\tb", "a\u00a0b", "a@example.com", "line\nbreak", "zero\u200dwidth"} {
 		if validHandle(handle) {
 			t.Fatalf("expected username %q to be rejected", handle)
 		}
+	}
+	if _, err := normalizeRegistration(registerInput{Handle: " two words ", Email: "words@example.com", Password: "secure-password", UserType: "tourist", AdultConfirmed: true}); err != apiError("invalid_input") {
+		t.Fatalf("registration must reject whitespace rather than silently removing it: %v", err)
 	}
 }
 
