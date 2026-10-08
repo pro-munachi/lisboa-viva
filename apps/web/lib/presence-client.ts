@@ -4,6 +4,7 @@ import {
 } from "./appearance";
 import { GEO_BOUNDS } from "./geography";
 import { playerPlace } from "./player-places";
+import { validHandle } from "./handle";
 
 export const PRESENCE_TTL_MS = 45_000;
 export type PresenceLocation = {
@@ -86,7 +87,7 @@ export function nearbyPresencePeers(
       !uuid.test(peer.id) ||
       peer.id === "00000000-0000-0000-0000-000000000000" ||
       typeof peer.handle !== "string" ||
-      !/^[a-z0-9_]{3,24}$/.test(peer.handle) ||
+      !validHandle(peer.handle) ||
       !["tourist", "local"].includes(peer.userType) ||
       !Number.isInteger(peer.distanceMetres) ||
       peer.distanceMetres < 0 ||

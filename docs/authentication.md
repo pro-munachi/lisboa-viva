@@ -21,6 +21,10 @@ All authored authentication copy defaults to English. European Portuguese remain
 | `GET /api/auth/me`                 | `GET /v1/auth/me`                 | Valid session        | Return the current account and roles.                           |
 | `PATCH /api/auth/me`               | `PATCH /v1/auth/me`               | Valid session        | Change `userType` or `preferredLocale`.                         |
 | `PATCH /api/auth/appearance`       | `PATCH /v1/auth/appearance`       | Valid session        | Replace the player's validated appearance.                      |
+| `GET /api/player/home`             | `GET /v1/player/home`             | Valid session        | Read the player's saved Lisbon home district.                   |
+| `PATCH /api/player/home`           | `PATCH /v1/player/home`           | Valid session        | Change the home district to Graça, Baixa or Alfama.             |
+| `GET /api/player/wallet`           | `GET /v1/player/wallet`           | Valid session        | Read the game-credit balance and recent ledger entries.        |
+| `POST /api/player/wallet/spend`    | `POST /v1/player/wallet/spend`    | Valid session        | Record one idempotent game-credit debit.                        |
 | `PUT /api/multiplayer/presence`    | `PUT /v1/multiplayer/presence`    | Valid session        | Publish a bounded in-world location heartbeat.                  |
 | `DELETE /api/multiplayer/presence` | `DELETE /v1/multiplayer/presence` | Valid session        | Leave multiplayer immediately.                                  |
 | `GET /api/multiplayer/nearby`      | `GET /v1/multiplayer/nearby`      | Valid session        | List active nearby players without private account fields.      |
@@ -34,6 +38,12 @@ Each account has one `character_appearances` row linked by `user_id` with `ON DE
 Additive migration `009_character_body_type.sql` supplies `body_type='male'` for existing accounts and enforces the two supported values. Earlier migration files and checksums are unchanged. Missing `bodyType` in an older appearance request/response defaults to male; an explicitly unsupported, empty or null value is rejected. Browser account and peer normalization applies that compatibility rule while copying only approved fields. Current registration and wardrobe requests send all eight fields.
 
 An older saved Dress may therefore read as Male + Dress after the additive default. Reading that account remains valid and does not rewrite its identity or outfit in the database. The character renderer and initial wardrobe draft show Casual for that combination; only an explicit **Save look** stores a compatible choice. The request schema (`AppearanceInput`) applies the stricter new-save rule separately from the legacy-compatible response schema (`Appearance`).
+
+Each account also has one `player_homes` row, created during registration and linked by `user_id` with `ON DELETE CASCADE`. Local players select a district at signup; the migration gives existing accounts Graça. This pilot home is a saved neighbourhood anchor for the third-person starting view, not a unique mapped building. The trip ledger and current chapter remain browser-local.
+
+Each account has one `wallets` row starting at €300 of simulated euros. `wallet_ledger` records the opening credit and every euro-game debit with a unique transaction ID, amount and resulting balance. The debit endpoint locks the wallet row, rejects overdrafts, and treats a retry with the same transaction ID and payload as the same spend. Gameplay charges this wallet for paid trip actions and for transport before moving the character to an area more than 2 km away. This is an approximate map-distance rule, not pedestrian-route navigation. Trip progress remains browser-local and is not transactionally coupled to wallet debits. The shared-activity system from migration `010_activities.sql` retains a separate 200-credit `activity_wallets` balance and `activity_credit_ledger` for simulated drinks; credits and euros are not interchangeable.
+
+Handles accept 2–40 printable characters, including spaces and punctuation, while `@` is reserved for email login and chat mentions. The database retains a case-insensitive unique index, and login accepts a handle regardless of case. `character_appearances` was added in migration `005_character_appearances.sql` and is already linked one-to-one to users.
 
 ## Session and password rules
 

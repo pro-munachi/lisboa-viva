@@ -124,7 +124,9 @@ export function createCity(host, options) {
     overviewMesh = null,
     overviewLoading = false,
     mode = "orbit",
-    motion = !reduce;
+    motion = !reduce,
+    followPlayer = Boolean(options.thirdPerson),
+    lastPlayerPosition = null;
   let pendingTeleport = true;
   const chunkGroups = new Map(),
     chunkCache = new Map(),
@@ -1228,6 +1230,9 @@ export function createCity(host, options) {
           ),
         ),
       });
+    const startingRoad = nearest
+      ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 0.5)
+      : null;
     player.position.copy(
       safe
         ? new THREE.Vector3(
@@ -1235,10 +1240,11 @@ export function createCity(host, options) {
             geoY(unprojectGeo(safe.x, safe.z)) + 0.2,
             safe.z,
           )
-        : nearest
-          ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 0.5).v
+        : startingRoad
+          ? startingRoad.v
           : target,
     );
+    player.rotation.y = safe?.angle ?? startingRoad?.angle ?? 0;
     population.add(player);
     playerTarget = player.position.clone();
     const you = canvasLabel("YOU", "#292942");
@@ -1246,6 +1252,29 @@ export function createCity(host, options) {
     you.scale.set(1.2, 0.27, 1);
     player.add(you);
     setPeers(options.peers || [], teleport);
+    if (followPlayer) framePlayer();
+  }
+  function framePlayer() {
+    if (!player || travel.active || indoor.active) return false;
+    const target = player.position.clone().add(new THREE.Vector3(0, 1.2, 0));
+    const offset = new THREE.Vector3(0, 2.8, -7).applyAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      player.rotation.y,
+    );
+    controls.target.copy(target);
+    camera.position.copy(player.position).add(offset);
+    controls.update();
+    lastPlayerPosition = player.position.clone();
+    return true;
+  }
+  function playerView() {
+    followPlayer = true;
+    restoreCity();
+    if (characterGallery) {
+      disposeGroup(characterGallery);
+      characterGallery = null;
+    }
+    return framePlayer();
   }
   function setAppearance(next) {
     if (destroyed || !next) return;
@@ -1314,6 +1343,7 @@ export function createCity(host, options) {
     }
   }
   function overview() {
+    followPlayer = false;
     cancelTravel();
     restoreCity();
     generation++;
@@ -1454,6 +1484,12 @@ export function createCity(host, options) {
         player.rotation.y = Math.atan2(diff.x, diff.z);
       }
       animateCharacter(player, now / 1000, motion && distance > 0.1);
+      if (followPlayer && lastPlayerPosition) {
+        const shift = player.position.clone().sub(lastPlayerPosition);
+        controls.target.add(shift);
+        camera.position.add(shift);
+        lastPlayerPosition.copy(player.position);
+      }
     }
     if (
       !indoor.active &&
@@ -1747,6 +1783,7 @@ export function createCity(host, options) {
     setPeers,
     setAppearance,
     overview,
+    playerView,
     characters,
     people,
     setInterior,

@@ -99,7 +99,7 @@ export type JourneyRoute = {
   from: HubId;
   toPlace: PlaceId;
   name: string;
-  mode: "metro" | "bus" | "train" | "walk" | "flight";
+  mode: "metro" | "bus" | "train" | "walk" | "flight" | "taxi";
   cost: number;
   minutes: number;
   energy: number;
@@ -111,6 +111,34 @@ export type JourneyRoute = {
 /** Operator links provide place/network context. These values are game content,
  * not a fare table, timetable, real reservation or guaranteed service. */
 export const JOURNEY_ROUTES: readonly JourneyRoute[] = [
+  {
+    id: "airport-uber",
+    from: "airport",
+    toPlace: "home",
+    name: "Uber to your base · simulation",
+    mode: "taxi",
+    cost: 18,
+    minutes: 25,
+    energy: -2,
+    requiresCard: false,
+    description:
+      "Request an imagined Uber ride from the airport to your Lisbon base. The fare and booking use game credits only.",
+    sourceUrl: airportSource,
+  },
+  {
+    id: "airport-taxi",
+    from: "airport",
+    toPlace: "home",
+    name: "Airport taxi to your base · simulation",
+    mode: "taxi",
+    cost: 20,
+    minutes: 25,
+    energy: -2,
+    requiresCard: false,
+    description:
+      "Take an imagined airport taxi to your Lisbon base. No real driver is dispatched or fare charged.",
+    sourceUrl: airportSource,
+  },
   {
     id: "airport-metro",
     from: "airport",

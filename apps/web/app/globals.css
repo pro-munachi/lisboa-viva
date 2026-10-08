@@ -425,7 +425,8 @@ body {
   font-size: 12px;
   font-weight: 700;
 }
-.auth-form input:not([type="checkbox"]) {
+.auth-form input:not([type="checkbox"]),
+.auth-form select {
   width: 100%;
   border: 1px solid #d9d4d1;
   border-radius: 10px;
@@ -433,7 +434,8 @@ body {
   min-height: 48px;
   background: #fff;
 }
-.auth-form input:not([type="checkbox"]):focus {
+.auth-form input:not([type="checkbox"]):focus,
+.auth-form select:focus {
   border-color: #496793;
 }
 .auth-form small {

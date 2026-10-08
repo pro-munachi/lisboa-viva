@@ -136,6 +136,16 @@ import {
   type Accommodation,
 } from "../../lib/engine";
 import { useMultiplayer } from "../../lib/multiplayer";
+import {
+  loadWallet,
+  spendWallet,
+  type WalletSnapshot,
+} from "../../lib/wallet-client";
+import {
+  areaTransport,
+  distanceMetres,
+  WALKABLE_METRES,
+} from "../../lib/area-transport";
 const colors = TRAVELLER_COLOURS.map((colour) => colour.value);
 const interests: { id: Interest; name: string }[] = [
   { id: "food", name: "Food & cafés" },
@@ -179,7 +189,14 @@ type Panel =
   | "finish"
   | "new"
   | "clear"
+  | "area-transport"
   | null;
+type AreaEntry = {
+  focus: WorldFocus;
+  visit: InteriorVisit;
+  hubId?: HubId;
+  message?: string;
+};
 const iconFor = (id: PlaceId) =>
   ({
     home: Home,
@@ -229,12 +246,17 @@ function RoamExperience({ user }: { user: AuthUser }) {
     return () => clearInterval(timer);
   }, []);
   const [visitedLocation, setVisitedLocation] = useState<PresenceLocation>({
-    latitude: placeFocus.cais.lat,
-    longitude: placeFocus.cais.lng,
-    area: placeFocus.cais.name,
+    latitude:
+      user.userType === "local" ? placeFocus.home.lat : placeFocus.cais.lat,
+    longitude:
+      user.userType === "local" ? placeFocus.home.lng : placeFocus.cais.lng,
+    area:
+      user.userType === "local" ? placeFocus.home.name : placeFocus.cais.name,
   });
 
-  const [mapFocus, setMapFocus] = useState<WorldFocus>(placeFocus.cais);
+  const [mapFocus, setMapFocus] = useState<WorldFocus>(
+    user.userType === "local" ? focusFor("home", "Graça") : placeFocus.cais,
+  );
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
   const [pins, setPins] = useState<WorldHotspot[]>([]);
   const [search, setSearch] = useState("");
@@ -410,12 +432,28 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [travelSequence, setTravelSequence] = useState<TravelSequence | null>(
     null,
   );
+  const [areaEntry, setAreaEntry] = useState<AreaEntry | null>(null);
+  const pendingAreaTravel = useRef<{
+    sequence: TravelSequence;
+    entry: AreaEntry;
+  } | null>(null);
+  const [areaTravelBusy, setAreaTravelBusy] = useState(false);
   const travelGate = useRef(new TravelCompletionGate());
   const tripRef = useRef<Trip | null>(null);
   tripRef.current = trip;
   const [loaded, setLoaded] = useState(false);
+  const [wallet, setWallet] = useState<WalletSnapshot | null>(null);
+  const walletRef = useRef<WalletSnapshot | null>(null);
+  const walletBusy = useRef(false);
+  const pendingWalletAttempt = useRef<{ key: string; id: string } | null>(null);
+  const commandBusy = useRef(false);
+  const [walletError, setWalletError] = useState(false);
+  const [homeError, setHomeError] = useState(false);
   const [archive, setArchive] = useState<Trip[]>([]);
-  const [setup, setSetup] = useState<Setup>(initial);
+  const [setup, setSetup] = useState<Setup>({
+    ...initial,
+    shirt: user.appearance.topColor,
+  });
   const travellerAppearance = appearance;
   const [calendarValid, setCalendarValid] = useState(true);
   const [panel, setPanel] = useState<Panel>(null);
@@ -425,6 +463,23 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const [pending, setPending] = useState<Choice | null>(null);
   const [notice, setNotice] = useState("");
   const [storageError, setStorageError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void loadWallet()
+      .then((snapshot) => {
+        if (!active) return;
+        walletRef.current = snapshot;
+        setWallet(snapshot);
+        setWalletError(false);
+      })
+      .catch(() => {
+        if (active) setWalletError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user.id]);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try {
@@ -442,7 +497,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
         longitude: focus.lng,
         area: focus.presenceArea || focus.name,
       });
-  }, [trip?.place, trip?.setup.base, trip?.journey.hub, travelSequence?.id]);
+  }, [trip?.place, trip?.setup.base, trip?.journey.hub]);
   useEffect(() => {
     if (travelGate.current.pending && !travelGate.current.matches(trip))
       cancelTravelPreview();
@@ -450,6 +505,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
   useEffect(() => () => travelGate.current.cancel(), [user.id]);
   function cancelTravelPreview() {
     travelGate.current.cancel();
+    pendingAreaTravel.current = null;
     setTravelSequence(null);
   }
   function startTravelPreview(
@@ -478,10 +534,22 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setClean(false);
   }
   function completeTravelPreview(id: string) {
+    const areaTravel = pendingAreaTravel.current;
+    if (areaTravel?.sequence.id === id) {
+      pendingAreaTravel.current = null;
+      setTravelSequence(null);
+      void finishAreaEntry(areaTravel.entry);
+      return;
+    }
     const completion = travelGate.current.take(id, tripRef.current);
     if (!completion) return;
     setTravelSequence(null);
     setMapFocus(completion.sequence.to);
+    setVisitedLocation({
+      latitude: completion.sequence.to.lat,
+      longitude: completion.sequence.to.lng,
+      area: completion.sequence.to.presenceArea || completion.sequence.to.name,
+    });
     setPanel(completion.panel);
     notify(completion.outcome);
   }
@@ -510,6 +578,91 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setClean(true);
     setPanel(null);
   }
+  async function finishAreaEntry(entry: AreaEntry) {
+    if (entry.hubId) {
+      const currentTrip = tripRef.current;
+      if (
+        currentTrip?.journey.hub !== entry.hubId &&
+        !(await command({
+          kind: "journey",
+          action: "visit-hub",
+          hub: entry.hubId,
+        }))
+      )
+        return;
+    }
+    setMapFocus(entry.focus);
+    setVisitedLocation({
+      latitude: entry.focus.lat,
+      longitude: entry.focus.lng,
+      area: entry.focus.presenceArea || entry.focus.name,
+    });
+    enterRoom(entry.visit);
+    if (entry.message) notify(entry.message);
+  }
+  function requestAreaEntry(entry: AreaEntry) {
+    if (travelSequence || areaTravelBusy || walletBusy.current) return;
+    if (
+      entry.hubId &&
+      tripRef.current &&
+      tripRef.current.journey.hub !== entry.hubId &&
+      previewJourney(tripRef.current, { action: "visit-hub", hub: entry.hubId })
+        .reason
+    ) {
+      notify("Finish your current journey before visiting another hub.");
+      return;
+    }
+    const metres = distanceMetres(
+      { lat: visitedLocation.latitude, lng: visitedLocation.longitude },
+      entry.focus,
+    );
+    if (metres <= WALKABLE_METRES) {
+      void finishAreaEntry(entry);
+      return;
+    }
+    setAreaEntry(entry);
+    setPanel("area-transport");
+  }
+  async function takeAreaTransport(option: (typeof areaTransport)[number]) {
+    if (!areaEntry || areaTravelBusy || travelSequence) return;
+    setAreaTravelBusy(true);
+    try {
+      const charged = await chargeWallet(
+        option.costCents,
+        "travel",
+        `${option.label} to ${areaEntry.focus.name}`,
+        JSON.stringify({
+          kind: "area-travel",
+          from: [visitedLocation.latitude, visitedLocation.longitude],
+          to: [areaEntry.focus.lat, areaEntry.focus.lng],
+          mode: option.mode,
+        }),
+      );
+      if (!charged) return;
+      const sequence: TravelSequence = {
+        id: crypto.randomUUID(),
+        mode: option.mode,
+        from: {
+          lat: visitedLocation.latitude,
+          lng: visitedLocation.longitude,
+          name: visitedLocation.area,
+        },
+        to: areaEntry.focus,
+        appearance: travellerAppearance,
+      };
+      pendingAreaTravel.current = { sequence, entry: areaEntry };
+      setAreaEntry(null);
+      setPanel(null);
+      setTravelSequence(sequence);
+      setPhoneOpen(false);
+      setActivitiesOpen(false);
+      setNearbyOpen(false);
+      leaveRoom();
+      setClean(false);
+    } finally {
+      setAreaTravelBusy(false);
+    }
+  }
   function leaveRoom() {
     setSocialEvent(null);
     setInterior(null);
@@ -518,36 +671,29 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }
   function enterHome() {
     const focus = focusFor("home", trip?.setup.base || setup.base);
-    setMapFocus(focus);
-    setVisitedLocation({
-      latitude: focus.lat,
-      longitude: focus.lng,
-      area: trip?.setup.base || setup.base,
-    });
-    enterRoom({
-      id: "home",
-      kind: "home",
-      name: `Your ${trip?.setup.accommodation || setup.accommodation || "apartment"} · ${trip?.setup.base || setup.base}`,
+    requestAreaEntry({
+      focus,
+      visit: {
+        id: "home",
+        kind: "home",
+        name: `Your ${trip?.setup.accommodation || setup.accommodation || "apartment"} · ${trip?.setup.base || setup.base}`,
+      },
     });
   }
   function enterTransitHub(id: HubId) {
     const hub = JOURNEY_HUBS[id];
-    setMapFocus({ ...hub, range: 140 });
-    enterRoom({
-      id: `transit-${id}`,
-      kind: hub.kind,
-      name: hub.name,
-      sourceUrl: hub.sourceUrl,
+    requestAreaEntry({
+      focus: { ...hub, range: 140 },
+      hubId: id,
+      visit: {
+        id: `transit-${id}`,
+        kind: hub.kind,
+        name: hub.name,
+        sourceUrl: hub.sourceUrl,
+      },
     });
   }
   function visitTransitHub(id: HubId) {
-    const currentTrip = tripRef.current;
-    if (
-      currentTrip &&
-      currentTrip.journey.hub !== id &&
-      !command({ kind: "journey", action: "visit-hub", hub: id })
-    )
-      return;
     enterTransitHub(id);
   }
   async function addPin() {
@@ -591,6 +737,16 @@ function RoamExperience({ user }: { user: AuthUser }) {
       return "Board your ready ticket before continuing.";
     if (trip && destination === trip.place)
       return "You are already in this chapter.";
+    if (
+      mode === "walk" &&
+      trip &&
+      destination &&
+      distanceMetres(
+        { lat: visitedLocation.latitude, lng: visitedLocation.longitude },
+        focusFor(destination, trip.setup.base),
+      ) > WALKABLE_METRES
+    )
+      return "This area is too far to walk. Choose paid transport.";
     const r = route(mode);
     return !r
       ? "This mode does not serve this trip"
@@ -604,26 +760,134 @@ function RoamExperience({ user }: { user: AuthUser }) {
     toastTimer.current = setTimeout(() => setNotice(""), 6500);
   }
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storage.trips);
-      if (raw) {
-        const runs = JSON.parse(raw);
-        if (!Array.isArray(runs) || runs.length > 5) throw new Error();
-        const restored = runs.map((r) =>
-          typeof r === "string" ? restore(r) : null,
+    let active = true;
+    async function loadEntry() {
+      await Promise.resolve();
+      if (!active) return;
+      let saved: Trip | null = null;
+      let savedArchive: Trip[] = [];
+      let canCreate = true;
+      try {
+        const raw = localStorage.getItem(storage.trips);
+        if (raw) {
+          const runs = JSON.parse(raw);
+          if (!Array.isArray(runs) || runs.length > 5) throw new Error();
+          const restored = runs.map((r) =>
+            typeof r === "string" ? restore(r) : null,
+          );
+          if (restored.some((t) => !t)) throw new Error();
+          saved = restored[0] || null;
+          savedArchive = restored.slice(1) as Trip[];
+        }
+      } catch {
+        setNotice(
+          "Your saved trip could not be read. Start a fresh trip; the old save stays untouched until you begin.",
         );
-        if (restored.some((t) => !t)) throw new Error();
-        setTrip(restored[0]);
-        setArchive(restored.slice(1) as Trip[]);
+        setStorageError(true);
+        canCreate = false;
       }
-    } catch {
-      setNotice(
-        "Your saved trip could not be read. Start a fresh trip; the old save stays untouched until you begin.",
-      );
-      setStorageError(true);
+      let homeDistrict: Setup["base"] = "Graça";
+      if (user.userType === "local") {
+        try {
+          const response = await fetch("/api/player/home", {
+            cache: "no-store",
+          });
+          if (response.ok) {
+            const home = (await response.json()) as { district?: string };
+            if (
+              home.district === "Graça" ||
+              home.district === "Baixa" ||
+              home.district === "Alfama"
+            ) {
+              homeDistrict = home.district;
+            } else {
+              throw new Error("invalid_home");
+            }
+          } else {
+            throw new Error("home_unavailable");
+          }
+        } catch {
+          canCreate = false;
+          if (active) setHomeError(true);
+        }
+      }
+      if (!active) return;
+      if (saved) {
+        tripRef.current = saved;
+        setTrip(saved);
+        setArchive(savedArchive);
+      }
+      if (user.userType === "local") {
+        setSetup((value) => ({
+          ...value,
+          base: homeDistrict,
+          arrival: "home",
+        }));
+        if (!saved) {
+          const homeFocus = focusFor("home", homeDistrict);
+          setMapFocus(homeFocus);
+          setVisitedLocation({
+            latitude: homeFocus.lat,
+            longitude: homeFocus.lng,
+            area: homeDistrict,
+          });
+        }
+      }
+      const introKey = `roam.signup-intro.${user.id}`;
+      let freshSignup = false;
+      try {
+        freshSignup = sessionStorage.getItem(introKey) === user.userType;
+      } catch {}
+      if (!saved && canCreate && (user.userType === "local" || freshSignup)) {
+        try {
+          const next = newTrip(
+            {
+              ...initial,
+              shirt: user.appearance.topColor,
+              base: homeDistrict,
+              arrival: user.userType === "local" ? "home" : "airport",
+            },
+            crypto.randomUUID(),
+          );
+          try {
+            localStorage.setItem(
+              storage.trips,
+              JSON.stringify([serialize(next)]),
+            );
+          } catch {
+            setStorageError(true);
+          }
+          tripRef.current = next;
+          setTrip(next);
+          if (freshSignup && user.userType === "tourist") {
+            setMapFocus(tripFocus(next));
+            const sequence = arrivalTravel(next);
+            if (sequence)
+              startTravelPreview(
+                sequence,
+                next,
+                "journey",
+                "Welcome to Lisbon. Choose your airport ride.",
+              );
+          }
+          if (freshSignup && user.userType === "local")
+            setNotice(
+              `Welcome home, @${user.handle}. Explore from your neighbourhood.`,
+            );
+        } catch {
+          setNotice("Your new chapter could not start. Try the journey setup.");
+        }
+      }
+      if (freshSignup) {
+        try {
+          sessionStorage.removeItem(introKey);
+        } catch {}
+      }
+      setLoaded(true);
     }
-    setLoaded(true);
+    void loadEntry();
     return () => {
+      active = false;
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, []);
@@ -665,25 +929,123 @@ function RoamExperience({ user }: { user: AuthUser }) {
     window.addEventListener("storage", listener);
     return () => window.removeEventListener("storage", listener);
   }, []);
-  function command(
+  async function chargeWallet(
+    amountCents: number,
+    purpose: "travel" | "activity" | "ticket",
+    description: string,
+    attemptKey: string,
+  ): Promise<boolean> {
+    if (walletBusy.current) return false;
+    if (
+      pendingWalletAttempt.current &&
+      pendingWalletAttempt.current.key !== attemptKey
+    ) {
+      notify(
+        "Retry your last payment choice before starting another paid action.",
+      );
+      return false;
+    }
+    if (!walletRef.current) {
+      notify("Your euro wallet is unavailable. Try again before spending.");
+      return false;
+    }
+    if (walletRef.current.balanceCents < amountCents) {
+      notify("Your euro wallet does not have enough for this choice.");
+      return false;
+    }
+    walletBusy.current = true;
+    const transactionId =
+      pendingWalletAttempt.current?.id || crypto.randomUUID();
+    pendingWalletAttempt.current = { key: attemptKey, id: transactionId };
+    try {
+      const snapshot = await spendWallet({
+        transactionId,
+        amountCents,
+        purpose,
+        description: [...description].slice(0, 100).join(""),
+      });
+      walletRef.current = snapshot;
+      setWallet(snapshot);
+      setWalletError(false);
+      pendingWalletAttempt.current = null;
+      return true;
+    } catch (error) {
+      const code =
+        error instanceof Error ? error.message : "wallet_unavailable";
+      if (
+        code === "insufficient_funds" ||
+        code === "invalid_wallet_spend" ||
+        code === "wallet_conflict"
+      )
+        pendingWalletAttempt.current = null;
+      notify(
+        code === "insufficient_funds"
+          ? "Your euro wallet does not have enough for this choice."
+          : "Payment could not be confirmed. Retry this same choice to check it safely.",
+      );
+      setWalletError(true);
+      return false;
+    } finally {
+      walletBusy.current = false;
+    }
+  }
+
+  async function command(
     action:
       | Omit<Extract<Command, { kind: "travel" }>, "key" | "revision">
       | Omit<Extract<Command, { kind: "choice" }>, "key" | "revision">
       | ({ kind: "journey" } & JourneyAction)
       | { kind: "rest" | "night" | "finish" },
-  ) {
+  ): Promise<boolean> {
     const current = tripRef.current;
     if (!current) return false;
-    if (travelGate.current.pending) return false;
+    if (travelGate.current.pending || commandBusy.current) return false;
+    if (
+      action.kind === "travel" &&
+      action.mode === "walk" &&
+      distanceMetres(
+        { lat: visitedLocation.latitude, lng: visitedLocation.longitude },
+        focusFor(action.place, current.setup.base),
+      ) > WALKABLE_METRES
+    ) {
+      notify("This area is too far to walk. Choose paid transport.");
+      return false;
+    }
+    const attemptKey = JSON.stringify({
+      tripId: current.id,
+      revision: current.revision,
+      action,
+    });
     const appliedCommand = {
       ...action,
-      key: crypto.randomUUID(),
+      key:
+        pendingWalletAttempt.current?.key === attemptKey
+          ? pendingWalletAttempt.current.id
+          : crypto.randomUUID(),
       revision: current.revision,
     } as Command;
     const result = apply(current, appliedCommand);
     if (result.error) {
       notify(result.error);
       return false;
+    }
+    const costCents = Math.round((result.trip.spent - current.spent) * 100);
+    if (costCents > 0) {
+      commandBusy.current = true;
+      const purpose =
+        action.kind === "choice"
+          ? "activity"
+          : action.kind === "travel"
+            ? "travel"
+            : "ticket";
+      const charged = await chargeWallet(
+        costCents,
+        purpose,
+        result.trip.history.at(-1)?.title || "Lisbon activity",
+        attemptKey,
+      );
+      commandBusy.current = false;
+      if (!charged) return false;
     }
     tripRef.current = result.trip;
     setTrip(result.trip);
@@ -693,6 +1055,12 @@ function RoamExperience({ user }: { user: AuthUser }) {
       result.trip.history.at(-1)?.outcome || "Your trip is updated.";
     const sequence = commandTravel(current, result.trip, appliedCommand);
     if (sequence) {
+      if (action.kind === "travel")
+        sequence.from = {
+          lat: visitedLocation.latitude,
+          lng: visitedLocation.longitude,
+          name: visitedLocation.area,
+        };
       startTravelPreview(
         sequence,
         result.trip,
@@ -848,19 +1216,43 @@ function RoamExperience({ user }: { user: AuthUser }) {
       return;
     }
     setMapHotspot(place.hotspot);
-    setMapFocus({
-      lat: place.lat,
-      lng: place.lng,
-      name: place.name,
-      range: 140,
+    requestAreaEntry({
+      focus: {
+        lat: place.lat,
+        lng: place.lng,
+        name: place.name,
+        range: 140,
+      },
+      visit: {
+        id: place.id,
+        name: place.name,
+        kind: place.kind,
+        sourceUrl: place.hotspot.sourceUrl,
+      },
+      message: `You joined ${live.handle} at ${place.name}.`,
     });
-    enterRoom({
-      id: place.id,
-      name: place.name,
-      kind: place.kind,
-      sourceUrl: place.hotspot.sourceUrl,
-    });
-    notify(`You joined @${live.handle} at ${place.name}.`);
+  }
+  if (!loaded) {
+    return (
+      <main className="auth-status" role="status">
+        <p>
+          {user.userType === "tourist"
+            ? "Preparing your Lisbon arrival…"
+            : "Opening your Lisbon home…"}
+        </p>
+      </main>
+    );
+  }
+  if (homeError && !trip) {
+    return (
+      <main className="auth-status">
+        <h1>Your saved home could not be loaded.</h1>
+        <p>Try again when the account service is available.</p>
+        <button className="primary" onClick={() => window.location.reload()}>
+          Try again
+        </button>
+      </main>
+    );
   }
   function closePhone() {
     setPhoneOpen(false);
@@ -1243,6 +1635,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
       >
         <World
           focus={mapFocus}
+          thirdPerson={user.userType === "local"}
           shirt={appearance.topColor}
           appearance={travellerAppearance}
           hotspots={worldHotspots}
@@ -1325,6 +1718,14 @@ function RoamExperience({ user }: { user: AuthUser }) {
                 <span>A CITY TO TRY BEFORE YOU GO</span>
               </div>
             )}
+            <button
+              className="wallet"
+              disabled={Boolean(travelSequence)}
+              onClick={() => setPanel("pocket")}
+            >
+              <Wallet size={18} />
+              <span>{wallet ? euro(wallet.balanceCents / 100) : "Wallet"}</span>
+            </button>
           </header>
         )}
         {!travelSequence &&
@@ -1777,6 +2178,51 @@ function RoamExperience({ user }: { user: AuthUser }) {
           )}
         </Dialog>
       )}
+      {panel === "area-transport" && areaEntry && (
+        <Dialog
+          title={`Travel to ${areaEntry.focus.name}`}
+          onClose={() => {
+            if (!areaTravelBusy) {
+              setAreaEntry(null);
+              setPanel(null);
+            }
+          }}
+        >
+          <p className="lede">
+            This area is{" "}
+            {Math.round(
+              distanceMetres(
+                {
+                  lat: visitedLocation.latitude,
+                  lng: visitedLocation.longitude,
+                },
+                areaEntry.focus,
+              ) / 100,
+            ) / 10}{" "}
+            km away, beyond the 2 km walking range. Choose a ride to move your
+            character there.
+          </p>
+          <p className="quiet">
+            Wallet balance:{" "}
+            {wallet ? euro(wallet.balanceCents / 100) : "Unavailable"}
+          </p>
+          {areaTransport.map((option) => (
+            <button
+              key={option.mode}
+              className="secondary full"
+              disabled={
+                areaTravelBusy ||
+                !wallet ||
+                wallet.balanceCents < option.costCents
+              }
+              onClick={() => void takeAreaTransport(option)}
+            >
+              {option.label} · {euro(option.costCents / 100)}{" "}
+              <ArrowRight size={17} />
+            </button>
+          ))}
+        </Dialog>
+      )}
       {panel === "hotspot" && mapHotspot && (
         <Dialog title={mapHotspot.name} onClose={() => setPanel(null)}>
           <span className="eyebrow">
@@ -1808,11 +2254,14 @@ function RoamExperience({ user }: { user: AuthUser }) {
             <button
               className="secondary full"
               onClick={() =>
-                enterRoom({
-                  id: mapHotspot.id,
-                  name: mapHotspot.name,
-                  kind: interiorForHotspot(mapHotspot)!,
-                  sourceUrl: mapHotspot.sourceUrl,
+                requestAreaEntry({
+                  focus: { ...mapHotspot, range: 140 },
+                  visit: {
+                    id: mapHotspot.id,
+                    name: mapHotspot.name,
+                    kind: interiorForHotspot(mapHotspot)!,
+                    sourceUrl: mapHotspot.sourceUrl,
+                  },
                 })
               }
             >
@@ -2156,7 +2605,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
         >
           <JourneyPanel
             trip={trip}
-            onCommand={(action) => command({ kind: "journey", ...action })}
+            onCommand={(action) => {
+              if (action.action === "visit-hub") {
+                visitTransitHub(action.hub);
+                return Promise.resolve(false);
+              }
+              return command({ kind: "journey", ...action });
+            }}
             onEnterHub={enterTransitHub}
           />
           <TripRecommendations
@@ -2438,6 +2893,34 @@ function RoamExperience({ user }: { user: AuthUser }) {
           onClose={() => setPanel(null)}
         >
           <p className="lede">A little more about your world.</p>
+          <div className="budget-card">
+            <span>YOUR GAME WALLET</span>
+            <strong>
+              {wallet ? euro(wallet.balanceCents / 100) : "Loading…"}
+            </strong>
+            <p>
+              Simulated euros · starts at €300 · spending is saved to your
+              account.
+            </p>
+            {walletError && (
+              <p role="alert">
+                Wallet unavailable. Paid actions are paused until it reconnects.
+              </p>
+            )}
+          </div>
+          {wallet && wallet.entries.length > 0 && (
+            <section aria-label="Recent wallet transactions">
+              <h3>Recent activity</h3>
+              <ul>
+                {wallet.entries.slice(0, 8).map((entry) => (
+                  <li key={entry.id}>
+                    {entry.description} · {entry.amountCents > 0 ? "+" : "−"}
+                    {euro(Math.abs(entry.amountCents) / 100)}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {trip && (
             <>
               <div className="budget-card">

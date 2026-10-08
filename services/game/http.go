@@ -49,6 +49,10 @@ func (s *server) routes() http.Handler {
 	mux.Handle("GET /v1/auth/me", s.requireSession(http.HandlerFunc(s.me)))
 	mux.Handle("PATCH /v1/auth/me", s.requireSession(http.HandlerFunc(s.updateMe)))
 	mux.Handle("PATCH /v1/auth/appearance", s.requireSession(http.HandlerFunc(s.updateAppearance)))
+	mux.Handle("GET /v1/player/home", s.requireSession(http.HandlerFunc(s.getHome)))
+	mux.Handle("PATCH /v1/player/home", s.requireSession(http.HandlerFunc(s.updateHome)))
+	mux.Handle("GET /v1/player/wallet", s.requireSession(http.HandlerFunc(s.getWallet)))
+	mux.Handle("POST /v1/player/wallet/spend", s.requireSession(http.HandlerFunc(s.spendWallet)))
 	mux.Handle("PUT /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.updatePresence)))
 	mux.Handle("DELETE /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.clearPresence)))
 	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
@@ -112,6 +116,10 @@ func fail(w http.ResponseWriter, err error) {
 			"session_expired": http.StatusUnauthorized, "forbidden": http.StatusForbidden,
 			"invalid_presence":       http.StatusBadRequest,
 			"invalid_appearance":     http.StatusBadRequest,
+			"invalid_home":           http.StatusBadRequest,
+			"invalid_wallet_spend":   http.StatusBadRequest,
+			"insufficient_funds":     http.StatusConflict,
+			"wallet_conflict":        http.StatusConflict,
 			"chat_presence_required": http.StatusForbidden,
 			"rate_limited":           http.StatusTooManyRequests,
 			"payload_too_large":      http.StatusRequestEntityTooLarge,
@@ -215,6 +223,17 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 			a.HairStyle, a.HairColor, a.SkinTone, a.ShoeColor, a.BodyType)
 	}
 	if err == nil {
+		_, err = tx.Exec(r.Context(), `INSERT INTO player_homes(user_id,district) VALUES($1,$2)`, id, input.HomeDistrict)
+	}
+	if err == nil {
+		_, err = tx.Exec(r.Context(), `INSERT INTO wallets(user_id) VALUES($1)`, id)
+	}
+	if err == nil {
+		_, err = tx.Exec(r.Context(), `INSERT INTO wallet_ledger
+			(user_id,transaction_id,kind,amount_cents,balance_after_cents,purpose,description)
+			VALUES($1,$1,'opening',30000,30000,'opening','Welcome game credits')`, id)
+	}
+	if err == nil {
 		_, err = tx.Exec(r.Context(), `INSERT INTO sessions(user_id,token_hash,expires_at)
 			VALUES($1,$2,$3)`, id, tokenHash(token), s.now().Add(7*24*time.Hour))
 	}
@@ -253,7 +272,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	var id, passwordHash string
 	err := s.db.QueryRow(r.Context(), `SELECT u.id::text,p.password_hash FROM users u
 		JOIN password_credentials p ON p.user_id=u.id
-		WHERE (u.handle=$1 OR lower(u.email)=$1) AND u.account_status='active'`, input.Identity).Scan(&id, &passwordHash)
+		WHERE (lower(u.handle)=$1 OR lower(u.email)=$1) AND u.account_status='active'`, input.Identity).Scan(&id, &passwordHash)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		fail(w, err)
 		return

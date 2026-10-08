@@ -271,12 +271,48 @@ func TestAuthPostgresLoopbackIntegration(t *testing.T) {
 	}
 
 	const password = "roam-integration-password"
-	input := registerInput{Handle: "  ROAM_VISITOR  ", Email: "ROAM.VISITOR@EXAMPLE.TEST", Password: password, UserType: "tourist", AdultConfirmed: true}
+	input := registerInput{Handle: "  ROAM_VISITOR  ", Email: "ROAM.VISITOR@EXAMPLE.TEST", Password: password, UserType: "tourist", HomeDistrict: "Baixa", AdultConfirmed: true}
 	registered := request(http.MethodPost, "/v1/auth/register", input, nil)
 	status(registered, http.StatusCreated, "")
 	user, registrationCookie := userFrom(registered), cookieFrom(registered)
-	if user.Handle != "roam_visitor" || user.Email != "roam.visitor@example.test" || user.PreferredLocale != "en" || user.AccountStatus != "active" || user.AdultConfirmedAt == nil || !hasRole(user, "player") || hasRole(user, "admin") {
+	if user.Handle != "ROAM_VISITOR" || user.Email != "roam.visitor@example.test" || user.PreferredLocale != "en" || user.AccountStatus != "active" || user.AdultConfirmedAt == nil || !hasRole(user, "player") || hasRole(user, "admin") {
 		t.Fatal("registration normalization, English default, adult confirmation or player role was not persisted")
+	}
+	home := request(http.MethodGet, "/v1/player/home", nil, registrationCookie)
+	status(home, http.StatusOK, "")
+	var savedHome playerHome
+	if json.Unmarshal(home.Body.Bytes(), &savedHome) != nil || savedHome.CityID != "lisbon" || savedHome.District != "Baixa" {
+		t.Fatal("registration did not persist the selected home")
+	}
+	wallet := request(http.MethodGet, "/v1/player/wallet", nil, registrationCookie)
+	status(wallet, http.StatusOK, "")
+	var initialWallet walletSnapshot
+	if json.Unmarshal(wallet.Body.Bytes(), &initialWallet) != nil || initialWallet.Currency != "EUR" || initialWallet.BalanceCents != 30000 || len(initialWallet.Entries) != 1 || initialWallet.Entries[0].AmountCents != 30000 {
+		t.Fatal("registration did not create a €300 wallet and opening ledger entry")
+	}
+	spend := walletSpendInput{TransactionID: "30202de8-c29c-435c-b224-fd958398b389", AmountCents: 300, Purpose: "travel", Description: "Bus to Baixa"}
+	spent := request(http.MethodPost, "/v1/player/wallet/spend", spend, registrationCookie)
+	status(spent, http.StatusOK, "")
+	var afterSpend walletSnapshot
+	if json.Unmarshal(spent.Body.Bytes(), &afterSpend) != nil || afterSpend.BalanceCents != 29700 || len(afterSpend.Entries) != 2 || afterSpend.Entries[0].AmountCents != -300 || afterSpend.Entries[0].BalanceAfterCents != 29700 {
+		t.Fatal("wallet spend was not recorded with its resulting balance")
+	}
+	status(request(http.MethodPost, "/v1/player/wallet/spend", spend, registrationCookie), http.StatusOK, "")
+	spend.Description = "Changed purpose"
+	status(request(http.MethodPost, "/v1/player/wallet/spend", spend, registrationCookie), http.StatusConflict, "wallet_conflict")
+	spend.TransactionID = "13f96d93-3ae4-4643-8fac-ce73a0c1e61f"
+	spend.Description = "Too expensive"
+	spend.AmountCents = 30000
+	status(request(http.MethodPost, "/v1/player/wallet/spend", spend, registrationCookie), http.StatusConflict, "insufficient_funds")
+	wallet = request(http.MethodGet, "/v1/player/wallet", nil, registrationCookie)
+	if json.Unmarshal(wallet.Body.Bytes(), &afterSpend) != nil || afterSpend.BalanceCents != 29700 || len(afterSpend.Entries) != 2 {
+		t.Fatal("duplicate or rejected spending changed the wallet")
+	}
+	status(request(http.MethodPatch, "/v1/player/home", map[string]string{"district": "Sintra"}, registrationCookie), http.StatusBadRequest, "invalid_home")
+	status(request(http.MethodPatch, "/v1/player/home", map[string]string{"district": "Alfama"}, registrationCookie), http.StatusOK, "")
+	home = request(http.MethodGet, "/v1/player/home", nil, registrationCookie)
+	if json.Unmarshal(home.Body.Bytes(), &savedHome) != nil || savedHome.District != "Alfama" {
+		t.Fatal("home district change was not persisted")
 	}
 	var storedPassword, storedToken string
 	if err = pool.QueryRow(ctx, `SELECT p.password_hash,s.token_hash FROM password_credentials p

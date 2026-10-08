@@ -38,7 +38,7 @@ func main() {
 	}
 	if handle := strings.ToLower(strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_HANDLE"))); handle != "" {
 		if _, err = db.Exec(ctx, `INSERT INTO user_roles(user_id,role)
-			SELECT id,'admin' FROM users WHERE handle=$1
+			SELECT id,'admin' FROM users WHERE lower(handle)=$1
 			ON CONFLICT DO NOTHING`, handle); err != nil {
 			slog.Error("admin bootstrap failed", "error", err)
 			os.Exit(1)

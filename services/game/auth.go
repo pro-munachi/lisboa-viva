@@ -10,17 +10,16 @@ import (
 	"encoding/json"
 	"errors"
 	"net/mail"
-	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const sessionCookie = "lv_session"
-
-var handlePattern = regexp.MustCompile(`^[a-z0-9_]{3,24}$`)
 
 type characterAppearance struct {
 	BodyType    string `json:"bodyType"`
@@ -89,6 +88,7 @@ type registerInput struct {
 	Email          string               `json:"email"`
 	Password       string               `json:"password"`
 	UserType       string               `json:"userType"`
+	HomeDistrict   string               `json:"homeDistrict"`
 	AdultConfirmed bool                 `json:"adultConfirmed"`
 	Appearance     *characterAppearance `json:"appearance"`
 }
@@ -104,9 +104,9 @@ type profileInput struct {
 }
 
 func normalizeRegistration(input registerInput) (registerInput, error) {
-	input.Handle = strings.ToLower(strings.TrimSpace(input.Handle))
+	input.Handle = strings.TrimSpace(input.Handle)
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
-	if !handlePattern.MatchString(input.Handle) || !validEmail(input.Email) {
+	if !validHandle(input.Handle) || !validEmail(input.Email) {
 		return input, apiError("invalid_input")
 	}
 	if len(input.Password) < 10 || len(input.Password) > 72 {
@@ -114,6 +114,12 @@ func normalizeRegistration(input registerInput) (registerInput, error) {
 	}
 	if input.UserType != "tourist" && input.UserType != "local" {
 		return input, apiError("invalid_user_type")
+	}
+	if input.HomeDistrict == "" {
+		input.HomeDistrict = "Graça"
+	}
+	if !validHomeDistrict(input.HomeDistrict) {
+		return input, apiError("invalid_home")
 	}
 	if !input.AdultConfirmed {
 		return input, apiError("adult_confirmation_required")
@@ -128,6 +134,19 @@ func normalizeRegistration(input registerInput) (registerInput, error) {
 	}
 	input.Appearance = &appearance
 	return input, nil
+}
+
+func validHandle(value string) bool {
+	count := utf8.RuneCountInString(value)
+	if count < 2 || count > 40 || !utf8.ValidString(value) || strings.ContainsRune(value, '@') || strings.TrimSpace(value) != value {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeAppearance(input characterAppearance) (characterAppearance, error) {

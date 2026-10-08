@@ -333,7 +333,7 @@ export function previewJourney(t: Trip, action: JourneyAction): JourneyPreview {
     preview.energy = route.energy;
     preview.outcome = route.departure
       ? "You board the imagined departure flight. Your simulated Lisbon chapter is complete; no real flight has been booked."
-      : `You arrive in ${places[route.toPlace].district}. The journey and its duration are simulated.`;
+      : `You arrive in ${route.toPlace === "home" ? t.setup.base : places[route.toPlace].district}. The journey and its duration are simulated.`;
     if (current.hub !== route.from)
       return fail("Your ticket belongs to another departure hub.");
     if (route.requiresCard && !current.card)

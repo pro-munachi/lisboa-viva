@@ -114,6 +114,26 @@ test("boarding resolves the previous ticket's mode after the engine clears it, p
   );
 });
 
+test("airport Uber and taxi can be booked without a transport card and reach the saved base", () => {
+  for (const [routeId, fare] of [
+    ["airport-uber", 18],
+    ["airport-taxi", 20],
+  ] as const) {
+    const arrival = start("airport");
+    assert.equal(arrival.journey.card, false);
+    const booked = act(arrival, { action: "book", routeId }).trip;
+    assert.equal(booked.journey.ticket?.routeId, routeId);
+    assert.equal(booked.spent, fare);
+    const boarded = act(booked, { action: "board" });
+    assert.equal(boarded.trip.place, "home");
+    assert.equal(boarded.trip.journey.phase, "city");
+    assert.equal(boarded.trip.spent, fare);
+    const sequence = commandTravel(booked, boarded.trip, boarded.command)!;
+    assert.equal(sequence.mode, "taxi");
+    assert.deepEqual(sequence.to, focusFor("home", "Alfama"));
+  }
+});
+
 test("rail and bus boarding preserve their authored routes and real destination geography", () => {
   for (const [arrival, routeId, mode, place] of [
     ["station", "rossio-sintra", "train", "sintra"],

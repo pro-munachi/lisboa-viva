@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import {
   ArrowRight,
   Bus,
+  CarFront,
   Check,
   Compass,
   CreditCard,
@@ -34,7 +35,7 @@ import styles from "./JourneyPanel.module.css";
 
 export type JourneyPanelProps = {
   trip: Trip;
-  onCommand: (action: JourneyAction) => boolean;
+  onCommand: (action: JourneyAction) => Promise<boolean>;
   onEnterHub: (hub: HubId) => void;
 };
 
@@ -45,6 +46,7 @@ const modeIcons = {
   bus: Bus,
   walk: Footprints,
   flight: Plane,
+  taxi: CarFront,
 };
 
 function EncounterPortrait({ person }: { person: JourneyPerson }) {
@@ -177,7 +179,7 @@ export default function JourneyPanel({
         </div>
         <p>
           {journey.phase === "arriving"
-            ? "You have arrived. Take a look around, prepare your ticket, then choose how to begin."
+            ? "You have landed. Book a simulated Uber or airport taxi to your base, or explore other ways into Lisbon."
             : "Start at a transport hub, choose a route and board when you are ready."}
         </p>
         {journey.phase === "arriving" && (
@@ -192,10 +194,10 @@ export default function JourneyPanel({
               <span>
                 {booked ? <Check size={12} aria-hidden="true" /> : "2"}
               </span>
-              Prepare a ticket
+              Book a ride
             </li>
             <li data-state={booked ? "current" : "next"}>
-              <span>3</span>Begin your trip
+              <span>3</span>Travel into Lisbon
             </li>
           </ol>
         )}
@@ -233,7 +235,7 @@ export default function JourneyPanel({
               <p>
                 {journey.card
                   ? "Your simulated travel card can be used for routes marked Card required."
-                  : "Prepare a simulated travel card for metro, bus and train routes. Walking routes do not need one."}
+                  : "Prepare a simulated travel card for metro, bus and train routes. Uber, taxi and walking options do not need one."}
               </p>
             </div>
             {journey.card ? (
@@ -273,7 +275,9 @@ export default function JourneyPanel({
                   ? "Board to complete your simulated Lisbon chapter. This is an imagined departure, with no real flight reserved."
                   : booked.mode === "walk"
                     ? `Confirm this walk to continue into ${places[booked.toPlace].district}.`
-                    : `Board to begin this simulated journey to ${places[booked.toPlace].district}.`}
+                    : booked.mode === "taxi"
+                      ? `Start this simulated ride to your base in ${trip.setup.base}. No real vehicle is requested.`
+                      : `Board to begin this simulated journey to ${places[booked.toPlace].district}.`}
               </p>
               <div className={styles.boardRow}>
                 <span>
@@ -291,9 +295,11 @@ export default function JourneyPanel({
                 >
                   {booked.mode === "walk"
                     ? "Continue on foot"
-                    : booked.departure
-                      ? "Board departure"
-                      : `Board ${booked.mode}`}
+                    : booked.mode === "taxi"
+                      ? "Start ride"
+                      : booked.departure
+                        ? "Board departure"
+                        : `Board ${booked.mode}`}
                   <ArrowRight size={16} aria-hidden="true" />
                 </button>
               </div>
@@ -308,7 +314,11 @@ export default function JourneyPanel({
           <section aria-labelledby={`${id}-routes`}>
             <div className={styles.sectionHeading}>
               <h4 id={`${id}-routes`}>
-                {booked ? "Other routes from here" : "Choose your route"}
+                {booked
+                  ? "Other routes from here"
+                  : journey.phase === "arriving"
+                    ? "Choose your airport ride"
+                    : "Choose your route"}
               </h4>
               <span>Book, then board</span>
             </div>
@@ -335,7 +345,9 @@ export default function JourneyPanel({
                         <span>
                           {route.departure
                             ? "Departure"
-                            : places[route.toPlace].district}{" "}
+                            : route.toPlace === "home"
+                              ? trip.setup.base
+                              : places[route.toPlace].district}{" "}
                           <span aria-hidden="true">·</span> {route.minutes} min
                         </span>
                       </div>
@@ -375,6 +387,8 @@ export default function JourneyPanel({
                           </>
                         ) : route.mode === "walk" ? (
                           "Choose walk"
+                        ) : route.mode === "taxi" ? (
+                          "Book ride"
                         ) : (
                           "Book ticket"
                         )}
@@ -434,8 +448,10 @@ export default function JourneyPanel({
                       aria-describedby={
                         preview.reason ? `${id}-${hub.id}-reason` : undefined
                       }
-                      onClick={() => {
-                        if (onCommand({ action: "visit-hub", hub: hub.id }))
+                      onClick={async () => {
+                        if (
+                          await onCommand({ action: "visit-hub", hub: hub.id })
+                        )
                           onEnterHub(hub.id);
                       }}
                     >

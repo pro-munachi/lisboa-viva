@@ -47,6 +47,7 @@ type CityController = {
   setPeers: (peers: MultiplayerPeer[]) => void;
   setAppearance: (appearance: CharacterAppearance) => void;
   overview: () => void;
+  playerView: () => boolean;
   characters: () => void;
   people: () => void;
   setMode: (mode: string) => void;
@@ -65,6 +66,7 @@ export default function World({
   focus,
   shirt,
   appearance = DEFAULT_APPEARANCE,
+  thirdPerson = false,
   hotspots,
   onHotspot,
   interior,
@@ -81,6 +83,7 @@ export default function World({
   focus: WorldFocus;
   shirt: string;
   appearance?: CharacterAppearance;
+  thirdPerson?: boolean;
   hotspots: WorldHotspot[];
   onHotspot: (h: WorldHotspot) => void;
   interior: InteriorVisit | null;
@@ -121,6 +124,7 @@ export default function World({
     focus,
     shirt,
     appearance,
+    thirdPerson,
     peers,
     hotspots,
     interior,
@@ -131,6 +135,7 @@ export default function World({
     focus,
     shirt,
     appearance,
+    thirdPerson,
     peers,
     hotspots,
     interior,
@@ -138,7 +143,7 @@ export default function World({
     travelSequence,
   };
   const [status, setStatus] = useState("Loading Lisbon’s streets…");
-  const [gesture, setGesture] = useState("orbit");
+  const [gesture, setGesture] = useState(thirdPerson ? "walk" : "orbit");
   const [motion, setMotion] = useState(true);
   const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
   const controlsRef = useRef<HTMLDivElement>(null);

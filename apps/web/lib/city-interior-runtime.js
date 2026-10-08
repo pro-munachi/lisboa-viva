@@ -9,6 +9,7 @@ import { findRoomRoute } from "./city-room-navigation";
 import { createHotspotBadgeLayer } from "./city-hotspot-badges";
 import { poseSocialGesture, resetSocialGesture } from "./city-social-gestures";
 import { chatPlaceFor } from "./chat-rooms";
+import { validHandle } from "./handle";
 
 const peerUUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,7 +34,7 @@ function publicInteriorPeers(peers) {
       !peerUUID.test(peer.id) ||
       peer.id === "00000000-0000-0000-0000-000000000000" ||
       typeof peer.handle !== "string" ||
-      !/^[a-z0-9_]{3,24}$/.test(peer.handle) ||
+      !validHandle(peer.handle) ||
       !["tourist", "local"].includes(peer.userType) ||
       !Number.isFinite(peer.latitude) ||
       !Number.isFinite(peer.longitude) ||

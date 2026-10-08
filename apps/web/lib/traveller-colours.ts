@@ -15,6 +15,7 @@ export const VALID_TRAVELLER_COLOURS = new Set<string>([
   "#ece7df",
   "#687f73",
   "#b47459",
+  "#c19a4b",
   "#777791",
   "#456a86",
   "#ceab62",

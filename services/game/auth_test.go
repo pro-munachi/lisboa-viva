@@ -13,8 +13,21 @@ func TestNormalizeRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if input.Handle != "visitante_1" || input.Email != "test@example.com" {
+	if input.Handle != "Visitante_1" || input.Email != "test@example.com" {
 		t.Fatalf("unexpected normalization: %#v", input)
+	}
+}
+
+func TestFreeTextHandleValidation(t *testing.T) {
+	for _, handle := range []string{"Inês de Lisboa", "No underscore", "Lee!", "山田 太郎"} {
+		if !validHandle(handle) {
+			t.Fatalf("expected printable username %q to be allowed", handle)
+		}
+	}
+	for _, handle := range []string{"", "a", " a", "a ", "a@example.com", "line\nbreak", "zero\u200dwidth"} {
+		if validHandle(handle) {
+			t.Fatalf("expected username %q to be rejected", handle)
+		}
 	}
 }
 
@@ -22,6 +35,23 @@ func TestRegistrationRejectsUnknownUserType(t *testing.T) {
 	_, err := normalizeRegistration(registerInput{Handle: "pessoa", Email: "pessoa@example.com", Password: "uma-senha-segura", UserType: "visitor", AdultConfirmed: true})
 	if err == nil || err.Error() != "invalid_user_type" {
 		t.Fatalf("expected invalid_user_type, got %v", err)
+	}
+}
+
+func TestRegistrationHomeDistrict(t *testing.T) {
+	base := registerInput{Handle: "resident", Email: "resident@example.com", Password: "secure-password", UserType: "local", AdultConfirmed: true}
+	input, err := normalizeRegistration(base)
+	if err != nil || input.HomeDistrict != "Graça" {
+		t.Fatalf("expected default home in Graça, got %q, %v", input.HomeDistrict, err)
+	}
+	base.HomeDistrict = "Alfama"
+	input, err = normalizeRegistration(base)
+	if err != nil || input.HomeDistrict != "Alfama" {
+		t.Fatalf("expected selected home in Alfama, got %q, %v", input.HomeDistrict, err)
+	}
+	base.HomeDistrict = "Outside Lisbon"
+	if _, err = normalizeRegistration(base); err == nil || err.Error() != "invalid_home" {
+		t.Fatalf("expected invalid_home, got %v", err)
 	}
 }
 

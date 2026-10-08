@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ArrowRight, Compass, Home, MapPin } from "lucide-react";
-import { authError } from "../lib/auth";
+import { authError, type AuthUser } from "../lib/auth";
 import AppearanceCustomizer from "./AppearanceCustomizer";
 import { DEFAULT_APPEARANCE } from "../lib/appearance";
 
@@ -15,6 +15,9 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [userType, setUserType] = useState<"tourist" | "local">("tourist");
+  const [homeDistrict, setHomeDistrict] = useState<
+    "Graça" | "Baixa" | "Alfama"
+  >("Graça");
   const [appearance, setAppearance] = useState(DEFAULT_APPEARANCE);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -33,6 +36,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
             email: data.get("email"),
             password: data.get("password"),
             userType,
+            homeDistrict,
             adultConfirmed: data.get("adultConfirmed") === "on",
             appearance,
           };
@@ -53,6 +57,12 @@ export default function AuthForm({ mode }: { mode: Mode }) {
               : "We could not continue."),
         );
         return;
+      }
+      if (registering) {
+        const created = (await response.json()) as AuthUser;
+        try {
+          sessionStorage.setItem(`roam.signup-intro.${created.id}`, userType);
+        } catch {}
       }
       router.replace("/play");
       router.refresh();
@@ -116,12 +126,15 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                     <input
                       name="handle"
                       autoComplete="username"
-                      minLength={3}
-                      maxLength={24}
-                      pattern="[a-z0-9_]+"
-                      placeholder="e.g. ines_in_lisbon"
+                      minLength={2}
+                      maxLength={40}
+                      placeholder="e.g. Inês from Lisbon"
                       required
                     />
+                    <small>
+                      Use 2–40 characters. Spaces and punctuation are welcome;
+                      @ is reserved for mentions.
+                    </small>
                   </label>
                   <label>
                     Email
@@ -155,6 +168,27 @@ export default function AuthForm({ mode }: { mode: Mode }) {
                     <span>Lisbon is part of my daily life.</span>
                   </button>
                 </fieldset>
+                {userType === "local" && (
+                  <label>
+                    Your home neighbourhood
+                    <select
+                      value={homeDistrict}
+                      onChange={(event) =>
+                        setHomeDistrict(
+                          event.target.value as typeof homeDistrict,
+                        )
+                      }
+                    >
+                      <option value="Graça">Graça</option>
+                      <option value="Baixa">Baixa</option>
+                      <option value="Alfama">Alfama</option>
+                    </select>
+                    <small>
+                      Saved to your account so you can return here when you sign
+                      in.
+                    </small>
+                  </label>
+                )}
                 <AppearanceCustomizer
                   value={appearance}
                   onChange={setAppearance}

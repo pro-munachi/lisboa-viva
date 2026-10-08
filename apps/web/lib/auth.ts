@@ -83,6 +83,7 @@ export const authError: Record<string, string> = {
   invalid_password: "Use a password between 10 and 72 characters.",
   invalid_user_type: "Choose tourist or local.",
   invalid_appearance: "Choose one of the available appearance options.",
+  invalid_home: "Choose a supported Lisbon home neighbourhood.",
   rate_limited: "Too many attempts. Try again in one minute.",
   server_error: "The account service is temporarily unavailable.",
 };
