@@ -30,7 +30,9 @@ export function createCityAtmosphere(renderer, scene) {
       sunGlow: { value: new THREE.Color("#24190b") },
     },
     vertexShader: `varying vec3 direction;
-      void main(){direction=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+      // The sky belongs at far depth regardless of the close-view clip range.
+      // This lets street cameras use a precise depth buffer without losing sky.
+      void main(){direction=normalize(position);vec4 clip=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=clip.xyww;}`,
     fragmentShader: `uniform vec3 top;uniform vec3 horizon;uniform vec3 sunDirection;uniform vec3 sunGlow;uniform float night;varying vec3 direction;
       void main(){vec3 d=normalize(direction);float gradient=pow(max(d.y,0.),.48);
         vec3 color=mix(horizon,top,gradient);float glow=pow(max(dot(d,sunDirection),0.),18.);
@@ -53,7 +55,7 @@ export function createCityAtmosphere(renderer, scene) {
   scene.add(sky);
 
   const pavingTexture = textureCanvas(256, (ctx, size) => {
-    ctx.fillStyle = "#d8d4c4";
+    ctx.fillStyle = "#d7cdbb";
     ctx.fillRect(0, 0, size, size);
     const step = 16;
     for (let y = 0; y < size; y += step)
@@ -64,13 +66,13 @@ export function createCityAtmosphere(renderer, scene) {
         const shade = (x * 17 + y * 31) % 7;
         ctx.fillStyle =
           band > 0.73
-            ? ["#827d70", "#777367", "#8c877b"][shade % 3]
-            : ["#e5dfce", "#d6d1c0", "#e0daca", "#ccc8b9"][shade % 4];
+            ? ["#625e55", "#514f49", "#777166"][shade % 3]
+            : ["#f2e9d3", "#dfd8c7", "#eae1cc", "#d5cebd"][shade % 4];
         ctx.fillRect(x + 1, y + 1, step - 2, step - 2);
       }
   });
   const asphaltTexture = textureCanvas(128, (ctx, size) => {
-    ctx.fillStyle = "#9caaa9";
+    ctx.fillStyle = "#919998";
     ctx.fillRect(0, 0, size, size);
     for (let i = 0; i < 1200; i++) {
       ctx.fillStyle = i % 2 ? "rgba(45,58,59,.10)" : "rgba(255,255,240,.10)";
@@ -83,12 +85,12 @@ export function createCityAtmosphere(renderer, scene) {
     }
   });
   const paving = new THREE.MeshStandardMaterial({
-    color: "#f4edda",
+    color: "#fff5df",
     map: pavingTexture,
     roughness: 0.98,
   });
   const asphalt = new THREE.MeshStandardMaterial({
-    color: "#9aabae",
+    color: "#687581",
     map: asphaltTexture,
     roughness: 0.93,
   });
@@ -102,7 +104,7 @@ export function createCityAtmosphere(renderer, scene) {
     roughness: 0.45,
   });
   const lane = new THREE.MeshStandardMaterial({
-    color: "#e1dac4",
+    color: "#fff4d8",
     roughness: 1,
   });
   const path = new THREE.MeshStandardMaterial({

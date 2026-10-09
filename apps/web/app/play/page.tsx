@@ -144,6 +144,8 @@ import {
   spendWallet,
   type WalletSnapshot,
 } from "../../lib/wallet-client";
+import type { ScenerySnapshot } from "../../lib/scenery-client";
+import { sceneryFineSummary } from "../../lib/scenery-actions";
 import {
   areaTransport,
   distanceMetres,
@@ -464,6 +466,27 @@ function RoamExperience({ user }: { user: AuthUser }) {
   const pendingWalletAttempt = useRef<{ key: string; id: string } | null>(null);
   const commandBusy = useRef(false);
   const [walletError, setWalletError] = useState(false);
+  const [sceneryState, setSceneryState] = useState<ScenerySnapshot | null>(
+    null,
+  );
+  const [sceneryWalletRequest, setSceneryWalletRequest] = useState(0);
+  const receiveGameWallet = useCallback((snapshot: WalletSnapshot) => {
+    // A fine and an already-started journey can finish in either network order.
+    // Keep the receipt with the newest server ledger row, not the last response.
+    const incoming = snapshot.entries[0]?.id || 0;
+    const existing = walletRef.current?.entries[0]?.id || 0;
+    if (incoming >= existing) {
+      walletRef.current = snapshot;
+      setWallet(snapshot);
+    }
+    setWalletError(false);
+  }, []);
+  function openCityWallet() {
+    setPhoneOpen(false);
+    setPanel(null);
+    setSceneryWalletRequest((revision) => revision + 1);
+  }
+
   const [homeError, setHomeError] = useState(false);
   const [archive, setArchive] = useState<Trip[]>([]);
   const [setup, setSetup] = useState<Setup>({
@@ -485,9 +508,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     void loadWallet()
       .then((snapshot) => {
         if (!active) return;
-        walletRef.current = snapshot;
-        setWallet(snapshot);
-        setWalletError(false);
+        receiveGameWallet(snapshot);
       })
       .catch(() => {
         if (active) setWalletError(true);
@@ -663,7 +684,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
     );
     if (metres <= WALKABLE_METRES) {
       if (pendingWalletAttempt.current) {
-        notify("Retry your last payment choice before starting another journey.");
+        notify(
+          "Retry your last payment choice before starting another journey.",
+        );
         return;
       }
       void finishAreaEntry(entry);
@@ -1031,9 +1054,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
         purpose,
         description: [...description].slice(0, 100).join(""),
       });
-      walletRef.current = snapshot;
-      setWallet(snapshot);
-      setWalletError(false);
+      receiveGameWallet(snapshot);
       pendingWalletAttempt.current = null;
       return true;
     } catch (error) {
@@ -1636,6 +1657,22 @@ function RoamExperience({ user }: { user: AuthUser }) {
             wallet={activityWallet}
             onChange={setActivityWallet}
           />
+          <section aria-label="City rewards and game euro wallet">
+            <h3>
+              💶 {wallet ? euro(wallet.balanceCents / 100) : "Your game euros"}
+            </h3>
+            <p>
+              {sceneryState
+                ? `${sceneryState.totalPoints} city XP`
+                : "Your city moments"}{" "}
+              · {sceneryFineSummary(sceneryState)}
+            </p>
+            <button className="setting" type="button" onClick={openCityWallet}>
+              <span aria-hidden="true">🌿</span>
+              <span>City XP & simulated fines</span>
+              <ChevronRight size={16} />
+            </button>
+          </section>
           <h3>
             {trip ? euro(trip.setup.budget - trip.spent) : "Your city budget"}
           </h3>
@@ -1766,6 +1803,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
             activityRoom && interior?.id === activityRoom.venueId,
           )}
           onLocationReady={locationReady}
+          onSceneryWallet={receiveGameWallet}
+          onSceneryState={setSceneryState}
+          sceneryWalletRequest={sceneryWalletRequest}
+          walletBalanceCents={wallet?.balanceCents}
         />
         {focusingLocation && !travelSequence && (
           <p className="location-focus-notice" role="status">
@@ -3057,6 +3098,19 @@ function RoamExperience({ user }: { user: AuthUser }) {
               </p>
             )}
           </div>
+          <button className="setting" type="button" onClick={openCityWallet}>
+            <span aria-hidden="true">🌿</span>
+            <span>
+              City XP & simulated fines
+              <small>
+                {sceneryState
+                  ? `${sceneryState.totalPoints} XP`
+                  : "Little discoveries"}{" "}
+                · {sceneryFineSummary(sceneryState, true)}
+              </small>
+            </span>
+            <ChevronRight size={16} />
+          </button>
           {wallet && wallet.entries.length > 0 && (
             <section aria-label="Recent wallet transactions">
               <h3>Recent activity</h3>

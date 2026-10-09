@@ -6,6 +6,7 @@ import {
   locationCameraView,
   locationTreeObstacles,
 } from "../lib/city-location-focus";
+import { cityActorSpaceIsClear } from "../lib/city-scene.js";
 
 const THREE = require("three");
 const footprint = [
@@ -235,14 +236,24 @@ function sceneHarness() {
     pendingVenue: null,
     pendingTeleport: false,
     followPlayer: false,
+    mode: "orbit",
     lastPlayerPosition: null,
     playerTarget: player.position.clone(),
+    sceneryCancellations: 0,
+    cancelScenery() {
+      env.sceneryCancellations++;
+    },
+    walkRoute: [{ x: 20, z: 20 }],
+    walkKeys: new Set(["w"]),
+    followState: { initialized: true },
     characterGallery: null,
     manifest: {},
     venueMeshes: [],
     chunkCache: new Map(),
     chunkGroups: new Map(),
     roadPaths: [],
+    dynamicObstacles: [],
+    cityActorSpaceIsClear,
     coastline: null,
     options: { peers: [] },
     sun: {
@@ -281,6 +292,10 @@ function sceneHarness() {
 test("scene selection waits for loaded geography and the final shot; a stale load cannot open a replacement location", async () => {
   const { env, api } = sceneHarness();
   const old = api.setFocus({ id: "old", selectionId: "one", lng: 0, lat: 0 });
+  assert.equal(env.sceneryCancellations, 1);
+  assert.equal(env.walkRoute.length, 0);
+  assert.equal(env.walkKeys.size, 0);
+  assert.equal(env.followState.initialized, false);
   const oldTicket = env.generation;
   let opened = false;
   const latest = api
@@ -304,6 +319,32 @@ test("scene selection waits for loaded geography and the final shot; a stale loa
   assert.equal(env.locationFocus.ring.visible, true);
   await api.setFocus({ peerId: "friend", lng: 1, lat: 2 });
   assert.equal(env.locationFocus.ring.visible, false);
+  env.locationFocus.dispose();
+});
+
+test("selecting Walk before initial geography finishes keeps follow framing, while peer shots retain their own camera", async () => {
+  const { env, api } = sceneHarness();
+  env.mode = "walk";
+  env.followPlayer = true;
+  let framed = 0;
+  env.loadChunks = async () => {
+    // The real population loader uses this flag to frame a newly spawned avatar.
+    if (env.followPlayer) framed++;
+  };
+  await api.setFocus({ lng: -9.13, lat: 38.7166, name: "Graça" });
+  assert.equal(env.followPlayer, true);
+  assert.equal(
+    framed,
+    1,
+    "the asynchronous ready focus must honor Walk selected during loading",
+  );
+  await api.setFocus({ peerId: "friend", lng: -9.13, lat: 38.7166 });
+  assert.equal(
+    env.followPlayer,
+    false,
+    "peer framing must not be replaced with an avatar follow shot",
+  );
+  assert.equal(framed, 1);
   env.locationFocus.dispose();
 });
 

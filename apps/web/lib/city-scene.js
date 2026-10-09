@@ -34,7 +34,34 @@ import {
 import { drapedPolygonGeometry } from "./city-surfaces";
 import { createVenueDecorations } from "./city-venues";
 import { createBeachLife, updateBeachLife } from "./city-beach-life";
-import { chooseLocalTraffic } from "./city-traffic";
+import {
+  createTrafficSimulation,
+  advanceTraffic,
+  sampleTrafficVehicle,
+} from "./city-traffic";
+import { createCityVehicle } from "./city-vehicles";
+import {
+  createCityFixtures,
+  updateCityFixtures,
+  sceneryFromIntersection,
+} from "./city-fixtures";
+import {
+  createCityLayerMaterial,
+  updateCityLayerBounds,
+  projectedCityBounds,
+  safeRoadRibbonGeometry,
+  updateCityCameraClip,
+  uniqueCityBuildingFootprints,
+} from "./city-rendering";
+import {
+  createNavigationWorld,
+  navigationPointIsClear,
+  findSafeWalkingPoint,
+  planWalkingPath,
+  moveWithCollisions,
+  updateFollowCamera,
+  cameraCollisionPosition,
+} from "./city-navigation";
 import { createScenicNpcLod, updateScenicNpcLod } from "./city-npc-lod";
 import { createInteriorRuntime } from "./city-interior-runtime";
 import { interiorLightingForMinute } from "./city-interiors";
@@ -48,6 +75,7 @@ import {
   applyLocalDemographicVisuals,
   poseLocalDemographic,
 } from "./npc-demographics";
+import { sceneryActions } from "./scenery-actions";
 
 async function geographyFile(url, signal) {
   const r = await fetch(url, { signal });
@@ -57,6 +85,173 @@ async function geographyFile(url, signal) {
       r.body.pipeThrough(new DecompressionStream("gzip")),
     ).json();
   return r.json();
+}
+
+/** A source road/surface belongs to one geographic chunk. Visibility ownership
+ * is by source ID, so long roads and parks retain their complete footprint.
+ * @param {any[]} chunks
+ */
+export function detailedCityLayerIds(chunks) {
+  return {
+    roads: new Set(
+      chunks.flatMap((chunk) => (chunk.roads || []).map((road) => road.id)),
+    ),
+    surfaces: new Set(
+      chunks.flatMap((chunk) =>
+        (chunk.surfaces || []).map((surface) => surface.id),
+      ),
+    ),
+  };
+}
+
+/** Footways and tracks can share a mapped roadway's footprint but cannot share
+ * its depth. Sidewalks contain edge strips rather than a slab through traffic.
+ */
+export function cityRoadSurfaceLayers(road, detailed = true) {
+  const pedestrian = [
+    "footway",
+    "pedestrian",
+    "steps",
+    "path",
+    "cycleway",
+  ].includes(road.kind);
+  const track = ["tram", "rail"].includes(road.kind);
+  const layers = [
+    {
+      kind: "road",
+      width: road.width,
+      side: 0,
+      lift: pedestrian ? 0.15 : track ? 0.18 : 0.23,
+    },
+  ];
+  if (detailed && !pedestrian && !track && road.width >= 4) {
+    for (const side of [-1, 1])
+      layers.push({
+        kind: "paving",
+        width: 1,
+        side: side * (road.width / 2 + 0.5),
+        lift: 0.16,
+      });
+  }
+  return layers;
+}
+
+/** @param {any} point @param {any[]} actors */
+export function cityActorSpaceIsClear(point, actors) {
+  return actors.every((actor) => {
+    if (
+      !(actor.radius > 0) ||
+      (Number.isFinite(point.y) &&
+        Number.isFinite(actor.y) &&
+        Math.abs(point.y - actor.y) > 2.2)
+    )
+      return true;
+    return (
+      Math.hypot(point.x - actor.x, point.z - actor.z) >=
+      actor.radius + 0.42 + 0.25
+    );
+  });
+}
+
+/** Arrival is a placement, not a walking sweep. Find free shoulder space before
+ * making the player visible; NPC yielding cannot repair an already overlapping
+ * spawn. The search remains local and does not move the mapped destination.
+ * @param {any} world @param {any} point @param {any[]} actors
+ */
+export function clearCityPlayerSpawn(world, point, actors) {
+  if (!world || !Number.isFinite(point?.x) || !Number.isFinite(point?.z))
+    return null;
+  const safe = findSafeWalkingPoint(world, point, { searchRadius: 12 });
+  const clear = (p) =>
+    navigationPointIsClear(world, p) &&
+    cityActorSpaceIsClear({ ...p, y: world._elevationAt?.(p) }, actors);
+  if (safe && clear(safe)) return safe;
+  for (let span = 0.25; span <= 12; span += 0.25)
+    for (let i = 0; i < 24; i++) {
+      const angle = (i * Math.PI) / 12;
+      const p = {
+        x: point.x + Math.cos(angle) * span,
+        z: point.z + Math.sin(angle) * span,
+      };
+      if (clear(p)) return p;
+    }
+  return null;
+}
+
+/** @param {any} world @param {{x:number,z:number}} start @param {any} object */
+export function planSceneryApproach(world, start, object) {
+  if (
+    !world ||
+    ![object?.x, object?.z, start?.x, start?.z].every(Number.isFinite)
+  )
+    return null;
+  if (Math.hypot(object.x - start.x, object.z - start.z) > 120) return null;
+  const gap = Math.max(0.8, Number(object.radius) || 0) + 0.72;
+  const facing = Number(object.angle) || 0;
+  const preferred = [
+    facing,
+    facing + Math.PI / 2,
+    facing - Math.PI / 2,
+    facing + Math.PI,
+  ];
+  for (const angle of preferred) {
+    const goal = {
+      x: object.x + Math.sin(angle) * gap,
+      z: object.z + Math.cos(angle) * gap,
+    };
+    if (!navigationPointIsClear(world, goal)) continue;
+    const route = planWalkingPath(world, start, goal, { maxNodes: 16000 });
+    if (route.length)
+      return {
+        goal,
+        route,
+        angle: Math.atan2(object.x - goal.x, object.z - goal.z),
+      };
+  }
+  return null;
+}
+
+/** Choose an open orbit direction at street level before settling for a tighter
+ * camera. This keeps the avatar visible rather than staring into a façade.
+ * @param {any} world @param {any} player
+ */
+export function exteriorPlayerCamera(world, player) {
+  const target = {
+    x: player.position.x,
+    y: player.position.y + 1.15,
+    z: player.position.z,
+  };
+  let best = null,
+    score = -Infinity;
+  for (let i = 0; i < 16; i++) {
+    const angle =
+      player.rotation.y +
+      Math.PI +
+      ((i % 2 ? 1 : -1) * Math.ceil(i / 2) * Math.PI) / 8;
+    const desired = {
+      x: target.x + Math.sin(angle) * 11,
+      y: player.position.y + 7.2,
+      z: target.z + Math.cos(angle) * 11,
+    };
+    const safe = cameraCollisionPosition(world, target, desired);
+    const reach = Math.hypot(
+      safe.x - target.x,
+      safe.y - target.y,
+      safe.z - target.z,
+    );
+    if (reach - i * 0.005 > score) {
+      best = safe;
+      score = reach - i * 0.005;
+    }
+    if (!safe.blocked) return { target, camera: safe };
+  }
+  return {
+    target,
+    camera:
+      score > 4
+        ? best
+        : { x: target.x + 0.1, y: target.y + 12, z: target.z + 0.1 },
+  };
 }
 export function createCity(host, options) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -125,6 +320,12 @@ export function createCity(host, options) {
     peerActors = [],
     agents = [],
     vehicles = [],
+    traffic = null,
+    tramTraffic = null,
+    navigation = null,
+    walkRoute = [],
+    sceneryTask = null,
+    coarseDetailsActive = null,
     lastTime = 0,
     lastChunkUpdate = 0,
     loadInProgress = false,
@@ -139,9 +340,20 @@ export function createCity(host, options) {
   const chunkGroups = new Map(),
     chunkCache = new Map(),
     roadPaths = [],
+    overviewPaths = [],
     venueMeshes = [],
     personMeshes = [],
-    peerMeshes = [];
+    peerMeshes = [],
+    sceneryMeshes = [],
+    coarseLayers = [],
+    overviewMaterials = [],
+    collisionActors = [],
+    dynamicObstacles = [];
+  const sceneryObjects = new Map();
+  const followState = { initialized: false };
+  const playerStep = {},
+    cameraStep = {};
+  const walkKeys = new Set();
   let selectedHotspotId = null;
   let pendingLocation = null;
   const badgeItems = [];
@@ -293,6 +505,8 @@ export function createCity(host, options) {
       ].every(Number.isFinite)
     )
       return false;
+    cancelScenery();
+    walkRoute = [];
     cancelTravel();
     setFocus(sequence.to);
     clearLocationFocus();
@@ -450,6 +664,53 @@ export function createCity(host, options) {
       yOffset,
     );
   }
+  function installCoarseOwnership(mesh, entries, kind) {
+    const records = [];
+    let start = 0;
+    for (const { geometry, id } of entries) {
+      const count = geometry.attributes.position.count;
+      records.push({ id, start, count });
+      start += count;
+    }
+    const indices = new Uint32Array(start);
+    for (let i = 0; i < start; i++) indices[i] = i;
+    mesh.geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    mesh.userData.coarseOwnership = { records, kind };
+    coarseLayers.push(mesh);
+  }
+  function refreshRoadPaths() {
+    const canonical = new Map(overviewPaths.map((line) => [line.id, line]));
+    for (const group of chunkGroups.values())
+      for (const line of group.userData.roadPaths || [])
+        canonical.set(line.id, line);
+    roadPaths.length = 0;
+    roadPaths.push(...canonical.values());
+  }
+  function refreshCoarseOwnership() {
+    coarseDetailsActive = camera.position.distanceTo(controls.target) < 6000;
+    const chunks = coarseDetailsActive
+      ? [...chunkGroups.keys()].map((id) => chunkCache.get(id)).filter(Boolean)
+      : [];
+    const owners = detailedCityLayerIds(chunks);
+    for (const mesh of coarseLayers) {
+      const { records, kind } = mesh.userData.coarseOwnership;
+      const attribute = mesh.geometry.index;
+      let used = 0;
+      for (const record of records) {
+        if (owners[kind].has(record.id)) continue;
+        for (let i = record.start; i < record.start + record.count; i++)
+          attribute.array[used++] = i;
+      }
+      attribute.needsUpdate = true;
+      mesh.geometry.setDrawRange(0, used);
+    }
+    const bounds = chunks.map((chunk) =>
+      projectedCityBounds(chunk.bounds, projectGeo),
+    );
+    overviewMaterials.forEach((material) =>
+      updateCityLayerBounds(material, bounds),
+    );
+  }
   function surfaces(list = manifest.surfaces, parent = city) {
     const buckets = { water: [], park: [], wood: [], sand: [] };
     for (const s of list) {
@@ -463,12 +724,11 @@ export function createCity(host, options) {
               Math.max(0, Math.min(...s.ring.map(geoY))) + 0.08,
             )
           : polygonGeometry(s.ring, 0.1);
-      buckets[s.kind]?.push(g);
+      buckets[s.kind]?.push({ geometry: g, id: s.id });
     }
     for (const [kind, gs] of Object.entries(buckets)) {
       if (!gs.length) continue;
-      const merged = mergeGeometries(gs);
-      gs.forEach((g) => g.dispose());
+      const merged = mergeGeometries(gs.map((entry) => entry.geometry));
       const mesh = new THREE.Mesh(
         merged,
         kind === "water"
@@ -476,6 +736,8 @@ export function createCity(host, options) {
           : mat({ park: "#91b974", wood: "#6d9965", sand: "#e0d1ab" }[kind]),
       );
       mesh.receiveShadow = kind !== "water";
+      if (parent === city) installCoarseOwnership(mesh, gs, "surfaces");
+      gs.forEach((entry) => entry.geometry.dispose());
       parent.add(mesh);
     }
   }
@@ -529,7 +791,7 @@ export function createCity(host, options) {
   }
   function roads(list = manifest.roads, parent = city, owner = "overview") {
     const buckets = new Map();
-    const add = (material, vertices) => {
+    const add = (material, vertices, id) => {
       if (!vertices.length) return;
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute(
@@ -542,7 +804,15 @@ export function createCity(host, options) {
       geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
       geometry.computeVertexNormals();
       if (!buckets.has(material)) buckets.set(material, []);
-      buckets.get(material).push(geometry);
+      buckets.get(material).push({ geometry, id });
+    };
+    const addGeometry = (material, geometry, id) => {
+      if (!geometry.attributes.position?.count) {
+        geometry.dispose();
+        return;
+      }
+      if (!buckets.has(material)) buckets.set(material, []);
+      buckets.get(material).push({ geometry, id });
     };
     const ribbon = (a, b, width, side, lift, vertices) => {
       const dx = b.x - a.x,
@@ -563,31 +833,29 @@ export function createCity(host, options) {
       if (road.points.length < 2) continue;
       const points = densePoints(road.points),
         ps = points.map(point3);
-      const vertices = [],
-        paving = [],
-        rails = [],
+      const rails = [],
         lanes = [];
-      const driving = ![
-        "rail",
-        "tram",
-        "footway",
-        "pedestrian",
-        "steps",
-        "path",
-        "cycleway",
-      ].includes(road.kind);
       const detailed = owner !== "overview";
+      const context = { projectGeo, unprojectGeo, geoY, terrain };
+      for (const layer of cityRoadSurfaceLayers(road, detailed))
+        addGeometry(
+          layer.kind === "paving"
+            ? atmosphere.paving
+            : atmosphere.roadMaterial(road.kind),
+          safeRoadRibbonGeometry(points, layer.width, context, {
+            side: layer.side,
+            lift: layer.lift,
+          }),
+          road.id,
+        );
       let travelled = 0;
       for (let i = 1; i < ps.length; i++) {
         const a = ps[i - 1],
           b = ps[i],
           length = a.distanceTo(b);
-        ribbon(a, b, road.width, 0, 0.19, vertices);
-        if (detailed && driving && road.width >= 4)
-          ribbon(a, b, road.width + 2, 0, 0.14, paving);
         if (["tram", "rail"].includes(road.kind)) {
-          ribbon(a, b, 0.12, -0.7, 0.225, rails);
-          ribbon(a, b, 0.12, 0.7, 0.225, rails);
+          ribbon(a, b, 0.12, -0.7, 0.265, rails);
+          ribbon(a, b, 0.12, 0.7, 0.265, rails);
         }
         if (
           detailed &&
@@ -600,21 +868,23 @@ export function createCity(host, options) {
               a.clone().lerp(b, Math.min(1, (d + 2.8) / length)),
               0.13,
               0,
-              0.225,
+              0.26,
               lanes,
             );
           }
         }
         travelled += length;
       }
-      add(atmosphere.roadMaterial(road.kind), vertices);
-      add(atmosphere.paving, paving);
-      add(atmosphere.steel, rails);
-      add(atmosphere.lane, lanes);
+      add(atmosphere.steel, rails, road.id);
+      add(atmosphere.lane, lanes, road.id);
       const line = path(points);
-      if (line.length > 20)
-        roadPaths.push({
+      if (line.length > 1) {
+        const record = {
           ...line,
+          ...road,
+          ps: line.ps,
+          lengths: line.lengths,
+          length: line.length,
           kind: road.kind,
           width: road.width,
           id: road.id,
@@ -622,15 +892,23 @@ export function createCity(host, options) {
           foot: road.foot,
           sidewalk: road.sidewalk,
           bridge: road.bridge,
-        });
+        };
+        if (owner === "overview") overviewPaths.push(record);
+        else {
+          parent.userData.roadPaths ??= [];
+          parent.userData.roadPaths.push(record);
+        }
+      }
     }
-    for (const [material, geometries] of buckets) {
-      const merged = mergeGeometries(geometries);
-      geometries.forEach((geometry) => geometry.dispose());
+    for (const [material, entries] of buckets) {
+      const merged = mergeGeometries(entries.map((entry) => entry.geometry));
       const mesh = new THREE.Mesh(merged, material);
+      if (owner === "overview") installCoarseOwnership(mesh, entries, "roads");
+      entries.forEach((entry) => entry.geometry.dispose());
       mesh.receiveShadow = true;
       parent.add(mesh);
     }
+    if (owner === "overview") refreshRoadPaths();
   }
   function boundsDistance(bounds, p) {
     const q = projectGeo([
@@ -718,6 +996,9 @@ export function createCity(host, options) {
           }
           venueCentre = centre.clone();
         }
+        refreshRoadPaths();
+        refreshCoarseOwnership();
+        refreshSceneryAndNavigation();
         venueMeshes.length = 0;
         for (const group of chunkGroups.values())
           group.traverse((mesh) => {
@@ -785,7 +1066,7 @@ export function createCity(host, options) {
       groups.flat().forEach((g) => g.dispose());
       roofs.flat().forEach((g) => g.dispose());
     };
-    for (const building of chunk.buildings) {
+    for (const building of uniqueCityBuildingFootprints(chunk.buildings)) {
       if (destroyed || ticket !== generation) {
         cleanup();
         return;
@@ -866,13 +1147,29 @@ export function createCity(host, options) {
     });
     setLandscapeNight(dressing, exteriorLighting.night);
     dressing.userData.streetDetail = dressing.userData.landscapeDetail = true;
-    group.add(storefronts, life, beach, dressing);
+    const fixtures = createCityFixtures(chunk, {
+      projectGeo,
+      unprojectGeo,
+      geoY,
+      terrain,
+      focusPoint,
+      waterAt: (point) =>
+        Boolean(coastline?.waterAt(unprojectGeo(point.x, point.z))),
+      reservations: [
+        ...reservations,
+        ...(dressing.userData.sceneryItems || []),
+      ],
+      maxObjects: host.clientWidth < 640 ? 16 : 24,
+      maxJunctions: host.clientWidth < 640 ? 4 : 6,
+    });
+    fixtures.userData.streetDetail = fixtures.userData.landscapeDetail = true;
+    group.add(storefronts, life, beach, dressing, fixtures);
   }
   function addNearBuildingDetails(chunk, group) {
     // Ornament follows the camera, including within an already loaded chunk.
     // Keep it bounded independently of the full geographic building mesh.
     const centreOfView = chunkFocusTarget();
-    const nearest = chunk.buildings
+    const nearest = uniqueCityBuildingFootprints(chunk.buildings)
       .filter(
         (building) =>
           building.ring?.length >= 3 && !isLandmarkBuilding(building),
@@ -904,6 +1201,314 @@ export function createCity(host, options) {
     details.userData.architectureDetail = true;
     details.castShadow = details.receiveShadow = true;
     group.add(details);
+  }
+  function refreshSceneryAndNavigation() {
+    sceneryObjects.clear();
+    sceneryMeshes.length = 0;
+    const reservations = [],
+      trees = [];
+    for (const group of chunkGroups.values()) {
+      for (const child of group.children) {
+        reservations.push(
+          ...(child.userData.streetLife?.reservations || []),
+          ...(child.userData.beachLife?.reservations || []),
+        );
+        for (const object of child.userData.sceneryItems || []) {
+          sceneryObjects.set(object.id, object);
+          if (object.radius > 0)
+            (object.kind === "tree" ? trees : reservations).push(object);
+        }
+      }
+      group.traverse((mesh) => {
+        if (
+          mesh.isMesh &&
+          (mesh.userData.scenery ||
+            mesh.userData.sceneryInstances ||
+            mesh.userData.sceneryFaceRanges)
+        )
+          sceneryMeshes.push(mesh);
+      });
+    }
+    navigation = createNavigationWorld({
+      target: player?.position || chunkFocusTarget(),
+      radius: 420,
+      buildings: uniqueCityBuildingFootprints(
+        [...chunkCache.values()].flatMap((chunk) => chunk.buildings || []),
+      ),
+      projectGeo,
+      paths: roadPaths,
+      reservations,
+      trees,
+      waterAt: (point, line) =>
+        !line?.bridge &&
+        Boolean(coastline?.waterAt(unprojectGeo(point.x, point.z))),
+      elevationAt: (point) => geoY(unprojectGeo(point.x, point.z)),
+    });
+    if (sceneryTask) {
+      const object = sceneryObjects.get(sceneryTask.object.id);
+      if (!object) cancelScenery();
+      else sceneryTask.object = object;
+    }
+  }
+  function rebuildTrafficFixtures() {
+    for (const [id, group] of chunkGroups) {
+      const chunk = chunkCache.get(id);
+      if (!chunk) continue;
+      for (const child of [...group.children])
+        if (child.userData.fixtures) disposeGroup(child);
+      const reserved = group.children.flatMap((child) => [
+        ...(child.userData.streetLife?.reservations || []),
+        ...(child.userData.beachLife?.reservations || []),
+        ...(child.userData.sceneryItems || []),
+      ]);
+      const fixtures = createCityFixtures(chunk, {
+        projectGeo,
+        unprojectGeo,
+        geoY,
+        terrain,
+        focusPoint: unprojectGeo(populationCentre.x, populationCentre.z),
+        waterAt: (point) =>
+          Boolean(coastline?.waterAt(unprojectGeo(point.x, point.z))),
+        reservations: reserved,
+        junctions: traffic?.junctions || [],
+        maxObjects: host.clientWidth < 640 ? 16 : 24,
+        maxJunctions: host.clientWidth < 640 ? 4 : 6,
+      });
+      fixtures.userData.streetDetail = fixtures.userData.landscapeDetail = true;
+      group.add(fixtures);
+    }
+    refreshSceneryAndNavigation();
+  }
+  function refreshCollisionActors() {
+    collisionActors.length = dynamicObstacles.length = 0;
+    const add = (actor, id, radius, offset = 0) => {
+      const obstacle = { id, x: 0, y: 0, z: 0, radius };
+      collisionActors.push({ actor, obstacle, offset, radius });
+      dynamicObstacles.push(obstacle);
+    };
+    for (const actor of agents) add(actor.group, actor.id, 0.36);
+    peerActors.forEach((actor, index) =>
+      add(actor, `peer:${actor.userData.peerId || index}`, 0.42),
+    );
+    for (const actor of vehicles) {
+      const radius = actor.vehicleWidth / 2 + 0.12;
+      const span = Math.max(0, actor.vehicleLength / 2 - radius);
+      add(actor.group, actor.id, radius, 0);
+      add(actor.group, actor.id, radius, span);
+      add(actor.group, actor.id, radius, -span);
+    }
+    for (const group of chunkGroups.values())
+      for (const child of group.children)
+        for (const actor of child.userData.beachLife?.actors || [])
+          add(
+            actor.character || {
+              position: actor,
+              rotation: { y: 0 },
+              visible: true,
+            },
+            `beach:${actor.id || actor.x + ":" + actor.z}`,
+            0.38,
+          );
+    updateCollisionActors();
+  }
+  function updateCollisionActors() {
+    dynamicObstacles.length = 0;
+    for (const { actor, obstacle, offset, radius } of collisionActors) {
+      const position = actor.position;
+      obstacle.x = position.x + Math.sin(actor.rotation.y) * offset;
+      obstacle.y = position.y;
+      obstacle.z = position.z + Math.cos(actor.rotation.y) * offset;
+      obstacle.radius = actor.visible === false ? 0 : radius;
+      if (obstacle.radius > 0) dynamicObstacles.push(obstacle);
+    }
+  }
+  function resetPlayerPose() {
+    const rig = player?.userData.rig;
+    if (!rig) return;
+    rig.hips.position.y = player.userData.restHipY;
+    rig.hips.rotation.z = 0;
+    for (const name of [
+      "leftLeg",
+      "rightLeg",
+      "leftKnee",
+      "rightKnee",
+      "leftArm",
+      "rightArm",
+      "leftElbow",
+      "rightElbow",
+      "torso",
+      "head",
+    ])
+      rig[name].rotation.set(0, 0, 0);
+  }
+  function cancelScenery() {
+    if (!sceneryTask) return;
+    const task = sceneryTask;
+    sceneryTask = null;
+    walkRoute = [];
+    if (player) {
+      if (task.mounted)
+        player.position.set(
+          task.goal.x,
+          geoY(unprojectGeo(task.goal.x, task.goal.z)) + 0.2,
+          task.goal.z,
+        );
+      playerTarget = player.position.clone();
+      resetPlayerPose();
+    }
+    task.resolve(false);
+  }
+  function startWalking(goal) {
+    if (!player || !navigation) return false;
+    const safe = findSafeWalkingPoint(navigation, goal, { searchRadius: 5 });
+    if (!safe) return false;
+    const route = planWalkingPath(navigation, player.position, safe, {
+      maxNodes: 18000,
+    });
+    if (!route.length) return false;
+    walkRoute = route;
+    playerTarget = new THREE.Vector3(
+      safe.x,
+      geoY(unprojectGeo(safe.x, safe.z)) + 0.2,
+      safe.z,
+    );
+    followPlayer = true;
+    followState.initialized = false;
+    controls.minDistance = 1.6;
+    if (camera.position.distanceTo(controls.target) > 90) framePlayer();
+    return true;
+  }
+  /** @returns {any[]} */
+  function nearbyScenery() {
+    if (!player || indoor.active || travel.active || characterGallery)
+      return [];
+    return [...sceneryObjects.values()]
+      .filter(
+        (object) =>
+          Math.hypot(
+            object.x - player.position.x,
+            object.z - player.position.z,
+          ) < 80,
+      )
+      .sort(
+        (a, b) =>
+          Math.hypot(a.x - player.position.x, a.z - player.position.z) -
+          Math.hypot(b.x - player.position.x, b.z - player.position.z),
+      )
+      .slice(0, 24);
+  }
+  /** @returns {Promise<boolean>} */
+  function performScenery(object, action) {
+    cancelScenery();
+    const canonical = sceneryObjects.get(object?.id);
+    if (
+      destroyed ||
+      !player ||
+      indoor.active ||
+      travel.active ||
+      characterGallery ||
+      !canonical ||
+      !sceneryActions(canonical).some((item) => item.id === action)
+    )
+      return Promise.resolve(false);
+    const approach = planSceneryApproach(
+      navigation,
+      player.position,
+      canonical,
+    );
+    if (!approach) return Promise.resolve(false);
+    clearLocationFocus();
+    followPlayer = true;
+    followState.initialized = false;
+    controls.minDistance = 1.6;
+    if (camera.position.distanceTo(controls.target) > 90) framePlayer();
+    walkRoute = approach.route;
+    playerTarget = new THREE.Vector3(
+      approach.goal.x,
+      geoY(unprojectGeo(approach.goal.x, approach.goal.z)) + 0.2,
+      approach.goal.z,
+    );
+    return new Promise((resolve) => {
+      sceneryTask = {
+        object: canonical,
+        action,
+        goal: approach.goal,
+        angle: approach.angle,
+        phase: "walking",
+        elapsed: 0,
+        activeTime: 0,
+        resolve,
+        mounted: false,
+      };
+    });
+  }
+  function updateSceneryTask(dt, time) {
+    const task = sceneryTask;
+    if (!task || !player) return;
+    task.elapsed += dt;
+    if (task.elapsed > 60) {
+      cancelScenery();
+      return;
+    }
+    if (task.phase === "walking") {
+      if (
+        walkRoute.length ||
+        Math.hypot(
+          player.position.x - task.goal.x,
+          player.position.z - task.goal.z,
+        ) > 0.25
+      )
+        return;
+      task.phase = "active";
+      player.rotation.y = task.angle;
+    }
+    task.activeTime += dt;
+    if (task.action === "sit" && task.object.kind === "bench") {
+      const alpha = reduce ? 1 : Math.min(1, task.activeTime / 0.35);
+      player.position.x = task.goal.x + (task.object.x - task.goal.x) * alpha;
+      player.position.z = task.goal.z + (task.object.z - task.goal.z) * alpha;
+      player.rotation.y = task.object.angle || 0;
+      task.mounted = true;
+    }
+    const rig = player.userData.rig;
+    if (motion && !reduce && rig) {
+      if (task.action === "sit") {
+        rig.hips.position.y = player.userData.restHipY - 0.35;
+        rig.leftLeg.rotation.x = rig.rightLeg.rotation.x = -1.42;
+        rig.leftKnee.rotation.x = rig.rightKnee.rotation.x = 1.42;
+        rig.leftArm.rotation.x = rig.rightArm.rotation.x = -0.3;
+        rig.leftElbow.rotation.x = rig.rightElbow.rotation.x = -0.8;
+      } else if (["climb", "pick-fruit"].includes(task.action)) {
+        rig.leftArm.rotation.x = -2.3;
+        rig.rightArm.rotation.x = -1.85;
+        rig.leftElbow.rotation.x = -0.25;
+      } else if (task.action === "drink") {
+        rig.rightArm.rotation.x = -0.75;
+        rig.rightElbow.rotation.x = -1.8;
+        rig.head.rotation.x = 0.12;
+      } else if (["recycle", "pick-flower"].includes(task.action)) {
+        rig.torso.rotation.x = 0.38;
+        rig.rightArm.rotation.x = -0.6;
+        rig.rightElbow.rotation.x = -0.55;
+      } else if (task.action === "cross-safely")
+        rig.head.rotation.y = Math.sin(task.activeTime * 3) * 0.55;
+      else {
+        rig.rightArm.rotation.x = -0.4;
+        rig.rightElbow.rotation.x = -0.9;
+        rig.head.rotation.y = Math.sin(time) * 0.13;
+      }
+    }
+    if (task.activeTime < (reduce ? 0.5 : 1.8)) return;
+    if (task.mounted)
+      player.position.set(
+        task.goal.x,
+        geoY(unprojectGeo(task.goal.x, task.goal.z)) + 0.2,
+        task.goal.z,
+      );
+    resetPlayerPose();
+    playerTarget = player.position.clone();
+    sceneryTask = null;
+    task.resolve(true);
   }
   function canvasLabel(text, color = "#292942") {
     const cvs = document.createElement("canvas");
@@ -951,6 +1556,7 @@ export function createCity(host, options) {
         peerActors = [];
       }
       peerPopulation.visible = false;
+      refreshCollisionActors();
       return;
     }
     const shirts = ["#bd7557", "#4f7370", "#77748c", "#c19a4b", "#52735b"];
@@ -1032,13 +1638,31 @@ export function createCity(host, options) {
         peerRecords.set(peer.id, record);
       }
       const character = record.character;
+      character.userData.peerId = peer.id;
       const target = point3([peer.longitude, peer.latitude]);
       const nearest = nearestPath(target, true);
-      character.position.copy(
-        nearest
-          ? sample(nearest.line, nearest.d + 2.5 + index * 1.7, 1.2).v
-          : target,
-      );
+      const proposed = nearest
+        ? sample(
+            nearest.line,
+            nearest.d + 2.5 + index * 1.7,
+            ["footway", "pedestrian", "path", "steps"].includes(
+              nearest.line.kind,
+            )
+              ? 0
+              : nearest.line.width / 2 + 0.75,
+          ).v
+        : target;
+      const safe = navigation
+        ? clearCityPlayerSpawn(
+            navigation,
+            proposed,
+            dynamicObstacles.filter(
+              (obstacle) => obstacle.id !== `peer:${peer.id}`,
+            ),
+          )
+        : proposed;
+      character.visible = Boolean(safe);
+      if (safe) character.position.set(safe.x, target.y, safe.z);
       character.position.y =
         geoY(unprojectGeo(character.position.x, character.position.z)) + 0.2;
       character.rotation.y = ((seed % 8) * Math.PI) / 4;
@@ -1059,6 +1683,7 @@ export function createCity(host, options) {
         controls.update();
       }
     });
+    refreshCollisionActors();
   }
   function refreshMarkers() {
     const hotspots = options.hotspots || [];
@@ -1169,58 +1794,14 @@ export function createCity(host, options) {
     }
     return best && best.distance <= 120 ? best : null;
   }
-  function car(color, tram = false) {
-    const g = new THREE.Group();
-    const box = (w, h, d, c, x, y, z) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c));
-      m.position.set(x, y, z);
-      m.castShadow = true;
-      g.add(m);
-      return m;
-    };
-    box(
-      tram ? 2.2 : 1.75,
-      tram ? 2.3 : 0.65,
-      tram ? 8 : 4.2,
-      color,
-      0,
-      tram ? 1.45 : 0.8,
-      0,
-    );
-    box(
-      tram ? 2 : 1.48,
-      tram ? 1 : 0.7,
-      tram ? 6 : 2.3,
-      "#68818c",
-      0,
-      tram ? 2.05 : 1.42,
-      -0.12,
-    );
-    box(
-      tram ? 2.3 : 1.6,
-      0.12,
-      tram ? 8.15 : 2.6,
-      color,
-      0,
-      tram ? 2.68 : 1.81,
-      -0.12,
-    );
-    for (const x of [-0.84, 0.84])
-      for (const z of [-1.3, 1.3]) {
-        const m = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.31, 0.31, 0.18, 10),
-          mat("#38424a"),
-        );
-        m.rotation.z = Math.PI / 2;
-        m.position.set(x, 0.36, z);
-        g.add(m);
-      }
-    box(1.4, 0.17, 0.06, "#fff3c4", 0, 0.78, 2.13);
-    return g;
-  }
   function populate(teleport = false) {
     const savedPlayer = player,
       savedTarget = playerTarget?.clone();
+    if (teleport) {
+      cancelScenery();
+      walkRoute = [];
+      player = null;
+    }
     if (savedPlayer) savedPlayer.removeFromParent();
     disposeGroup(population);
     scene.add(population);
@@ -1229,10 +1810,19 @@ export function createCity(host, options) {
     const target = teleport
       ? point3([focus.lng, focus.lat])
       : chunkFocusTarget().clone();
-    const close = roadPaths.filter((p) =>
-      p.ps.some((v) => Math.hypot(v.x - target.x, v.z - target.z) < 650),
-    );
     populationCentre = target.clone();
+    const elapsed = traffic?.elapsed || 0;
+    traffic = createTrafficSimulation(roadPaths, target, {
+      max: host.clientWidth < 640 ? 18 : 26,
+      radius: 220,
+    });
+    tramTraffic = createTrafficSimulation(roadPaths, target, {
+      max: 3,
+      radius: 270,
+      tracksOnly: true,
+    });
+    traffic.elapsed = tramTraffic.elapsed = elapsed;
+    rebuildTrafficFixtures();
     personMeshes.length = 0;
     const profiles = createLocalWalkerProfiles({
       paths: roadPaths,
@@ -1245,18 +1835,32 @@ export function createCity(host, options) {
         ...(manifest?.surfaces || []),
         ...[...chunkCache.values()].flatMap((chunk) => chunk.surfaces || []),
       ],
-      reservations: [...chunkGroups.values()].flatMap((chunk) =>
-        chunk.children.flatMap((child) => [
-          ...(child.userData.streetLife?.reservations || []),
-          ...(child.userData.beachLife?.reservations || []),
-          ...(child.userData.landscape?.parkDetails?.benches || []).map(
-            (point) => ({ ...point, radius: 1.25 }),
-          ),
-          ...(child.userData.landscape?.parkDetails?.flowerBeds || []).map(
-            (point) => ({ ...point, radius: 1.05 }),
-          ),
-        ]),
-      ),
+      reservations: [
+        ...(!teleport && savedPlayer
+          ? [
+              {
+                x: savedPlayer.position.x,
+                z: savedPlayer.position.z,
+                radius: 1.2,
+              },
+            ]
+          : []),
+        ...[...chunkGroups.values()].flatMap((chunk) =>
+          chunk.children.flatMap((child) => [
+            ...(child.userData.streetLife?.reservations || []),
+            ...(child.userData.beachLife?.reservations || []),
+            ...(child.userData.landscape?.parkDetails?.benches || []).map(
+              (point) => ({ ...point, radius: 1.25 }),
+            ),
+            ...(child.userData.landscape?.parkDetails?.flowerBeds || []).map(
+              (point) => ({ ...point, radius: 1.05 }),
+            ),
+            ...(child.userData.sceneryItems || []).filter(
+              (object) => object.radius > 0,
+            ),
+          ]),
+        ),
+      ],
       waterAt: (point, line) =>
         !line.bridge &&
         Boolean(coastline?.waterAt(unprojectGeo(point.x, point.z))),
@@ -1284,30 +1888,27 @@ export function createCity(host, options) {
       population.add(group);
       agents.push({ ...profile, group, samplePoint: {} });
     }
-    for (const [i, route] of chooseLocalTraffic(roadPaths, target, {
-      max: host.clientWidth < 640 ? 18 : 26,
-    }).entries()) {
-      const group = car(
-          ["#e9e7d9", "#e4bd5b", "#729f9c", "#b85f50", "#486379", "#e4ebec"][
-            i % 6
-          ],
-        ),
-        initial = sample(route.line, route.d, route.side);
-      group.position.copy(initial.v);
-      group.rotation.y = initial.angle;
-      population.add(group);
-      vehicles.push({ group, ...route });
-    }
-    const trams = close.filter((p) => p.kind === "tram");
-    for (let i = 0; i < 3 && trams.length; i++) {
-      const line = trams[i % trams.length],
-        group = car("#d4aa48", true),
-        d = (line.length * i) / 3,
-        initial = sample(line, d);
-      group.position.copy(initial.v);
-      group.rotation.y = initial.angle;
-      population.add(group);
-      vehicles.push({ group, line, d, side: 0, speed: 5 });
+    for (const [index, actor] of [
+      ...traffic.vehicles,
+      ...tramTraffic.vehicles,
+    ].entries()) {
+      actor.group = createCityVehicle({
+        kind: actor.kind,
+        color: [
+          "#e9e7d9",
+          "#e4bd5b",
+          "#729f9c",
+          "#b85f50",
+          "#486379",
+          "#e4ebec",
+        ][index % 6],
+        operator: "carris",
+      });
+      const initial = sampleTrafficVehicle(actor, actor.sample);
+      actor.group.position.set(initial.x, initial.y + 0.2, initial.z);
+      actor.group.rotation.y = initial.angle;
+      population.add(actor.group);
+      vehicles.push(actor);
     }
     for (const chunk of chunkGroups.values())
       for (const child of chunk.children)
@@ -1318,7 +1919,8 @@ export function createCity(host, options) {
     if (savedPlayer && !teleport) {
       player = savedPlayer;
       population.add(player);
-      playerTarget = savedTarget;
+      playerTarget = savedTarget || player.position.clone();
+      refreshCollisionActors();
       return;
     }
     if (savedPlayer) disposeGroup(savedPlayer);
@@ -1349,16 +1951,23 @@ export function createCity(host, options) {
     const startingRoad = nearest
       ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 0.5)
       : null;
-    player.position.copy(
-      safe
-        ? new THREE.Vector3(
-            safe.x,
-            geoY(unprojectGeo(safe.x, safe.z)) + 0.2,
-            safe.z,
-          )
-        : startingRoad
-          ? startingRoad.v
-          : target,
+    refreshCollisionActors();
+    const spawn = clearCityPlayerSpawn(
+      navigation,
+      safe || startingRoad?.v || target,
+      dynamicObstacles,
+    );
+    if (!spawn) {
+      disposeGroup(player);
+      player = null;
+      playerTarget = null;
+      refreshCollisionActors();
+      return;
+    }
+    player.position.set(
+      spawn.x,
+      geoY(unprojectGeo(spawn.x, spawn.z)) + 0.2,
+      spawn.z,
     );
     player.rotation.y = safe?.angle ?? startingRoad?.angle ?? 0;
     population.add(player);
@@ -1368,18 +1977,17 @@ export function createCity(host, options) {
     you.scale.set(1.2, 0.27, 1);
     player.add(you);
     setPeers(options.peers || [], teleport);
+    refreshCollisionActors();
     if (followPlayer) framePlayer();
   }
   function framePlayer() {
     if (!player || travel.active || indoor.active) return false;
-    const target = player.position.clone().add(new THREE.Vector3(0, 1.2, 0));
-    const offset = new THREE.Vector3(0, 2.8, -7).applyAxisAngle(
-      new THREE.Vector3(0, 1, 0),
-      player.rotation.y,
-    );
-    controls.target.copy(target);
-    camera.position.copy(player.position).add(offset);
+    const framed = exteriorPlayerCamera(navigation, player);
+    controls.minDistance = 1.6;
+    controls.target.set(framed.target.x, framed.target.y, framed.target.z);
+    camera.position.set(framed.camera.x, framed.camera.y, framed.camera.z);
     controls.update();
+    followState.initialized = false;
     lastPlayerPosition = player.position.clone();
     return true;
   }
@@ -1395,6 +2003,7 @@ export function createCity(host, options) {
   }
   function setAppearance(next) {
     if (destroyed || !next) return;
+    cancelScenery();
     options.appearance = { ...next };
     options.shirt = next.topColor;
     if (player) player = replaceCharacterAppearance(player, next);
@@ -1412,6 +2021,10 @@ export function createCity(host, options) {
   function setFocus(next, street = false) {
     if (destroyed || !next || ![next.lng, next.lat].every(Number.isFinite))
       return Promise.resolve(false);
+    cancelScenery();
+    walkRoute = [];
+    walkKeys.clear();
+    followState.initialized = false;
     clearLocationFocus();
     cancelTravel();
     restoreCity();
@@ -1428,6 +2041,11 @@ export function createCity(host, options) {
       !locationSelection && !street && next.mapVenue ? next.id : null;
     const p = point3([next.lng, next.lat]);
     const distance = street ? 24 : next.range || 160;
+    controls.minDistance = street ? 1.6 : 8;
+    // Geography can finish loading after Walk was selected. Keep that explicit
+    // mode so populate() frames its new avatar when the initial chunks arrive.
+    // Location and peer selections still own their deliberate camera shots.
+    if (!street) followPlayer = mode === "walk" && !next.peerId;
     if (!street) pendingTeleport = true;
     if (street && player && !pendingTeleport) p.copy(player.position);
     if (locationSelection) {
@@ -1474,14 +2092,30 @@ export function createCity(host, options) {
         geoY,
         unprojectGeo,
       });
+      mesh.traverse((part) => {
+        if (!part.isMesh) return;
+        const original = part.material;
+        const owned = createCityLayerMaterial(original, {
+          wholeInstance: true,
+        });
+        overviewMaterials.push(owned);
+        sharedMaterials.add(owned);
+        part.material = owned;
+        original.dispose();
+      });
       scene.add(mesh);
       overviewMesh = mesh;
+      refreshCoarseOwnership();
     } catch {
     } finally {
       overviewLoading = false;
     }
   }
   function overview() {
+    cancelScenery();
+    walkRoute = [];
+    walkKeys.clear();
+    controls.minDistance = 8;
     clearLocationFocus();
     followPlayer = false;
     cancelTravel();
@@ -1521,9 +2155,48 @@ export function createCity(host, options) {
   const ray = new THREE.Raycaster(),
     pointer = new THREE.Vector2();
   let down = null;
+  renderer.domElement.tabIndex = 0;
+  renderer.domElement.setAttribute(
+    "aria-label",
+    "Interactive Lisbon city. In walk mode use arrow keys or WASD to move.",
+  );
   function pointerDown(e) {
+    renderer.domElement.focus({ preventScroll: true });
     down = { x: e.clientX, y: e.clientY };
   }
+  function keyDown(e) {
+    if (mode !== "walk" || indoor.active || travel.active || characterGallery)
+      return;
+    const key = e.key.toLowerCase();
+    if (
+      ![
+        "w",
+        "a",
+        "s",
+        "d",
+        "arrowup",
+        "arrowdown",
+        "arrowleft",
+        "arrowright",
+      ].includes(key)
+    )
+      return;
+    e.preventDefault();
+    if (!walkKeys.size) {
+      cancelScenery();
+      walkRoute = [];
+      clearLocationFocus();
+      followPlayer = true;
+    }
+    walkKeys.add(key);
+  }
+  function keyUp(e) {
+    walkKeys.delete(e.key.toLowerCase());
+  }
+  function clearWalkKeys() {
+    walkKeys.clear();
+  }
+
   function pointerUp(e) {
     if (travel.active) return;
     if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 7) return;
@@ -1541,46 +2214,62 @@ export function createCity(host, options) {
       }
       return false;
     };
-    const hit = ray.intersectObjects(venueMeshes.filter(visible), false)[0];
-    if (hit) {
-      selectHotspot(hit.object.userData.hotspot);
-      return;
-    }
-    const personHit =
-      population.visible &&
-      ray.intersectObjects(personMeshes.filter(visible), false)[0];
-    const peerHit =
-      peerPopulation.visible &&
-      ray.intersectObjects(peerMeshes.filter(visible), false)[0];
-    if (peerHit) {
-      options.onPeer?.(peerHit.object.userData.peer);
-      return;
-    }
-    if (personHit) {
-      options.onPerson?.(personHit.object.userData.person);
-      return;
+    const hits = ray.intersectObjects(
+      [...venueMeshes, ...peerMeshes, ...personMeshes, ...sceneryMeshes].filter(
+        visible,
+      ),
+      false,
+    );
+    const interactive = hits.find(
+      (hit) =>
+        hit.object.userData.hotspot ||
+        hit.object.userData.peer ||
+        hit.object.userData.person ||
+        sceneryFromIntersection(hit),
+    );
+    if (interactive) {
+      const obstruction = ray.intersectObjects(
+        city.children.filter(visible),
+        true,
+      )[0];
+      // Picking through a building does not reveal furniture on the other side.
+      if (!obstruction || obstruction.distance >= interactive.distance - 0.12) {
+        if (interactive.object.userData.hotspot)
+          selectHotspot(interactive.object.userData.hotspot);
+        else if (interactive.object.userData.peer)
+          options.onPeer?.(interactive.object.userData.peer);
+        else if (interactive.object.userData.person)
+          options.onPerson?.(interactive.object.userData.person);
+        else {
+          const object = sceneryFromIntersection(interactive);
+          if (object)
+            options.onScenery?.(sceneryObjects.get(object.id) || object);
+        }
+        return;
+      }
     }
     if (player && mode === "walk") {
       const ground = ray
         .intersectObjects(city.children, false)
-        .find((h) => h.object.userData.ground);
-      if (ground) {
-        const p = unprojectGeo(ground.point.x, ground.point.z);
-        if (
-          containsGeo(manifest.bounds, p) &&
-          player.position.distanceTo(ground.point) < 300
-        ) {
-          const nearest = nearestPath(ground.point, true);
-          playerTarget = nearest
-            ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 1.2).v
-            : ground.point.clone();
-          clearLocationFocus();
-        }
+        .find((hit) => hit.object.userData.ground);
+      if (
+        ground &&
+        containsGeo(
+          manifest.bounds,
+          unprojectGeo(ground.point.x, ground.point.z),
+        ) &&
+        player.position.distanceTo(ground.point) < 300
+      ) {
+        cancelScenery();
+        if (startWalking(ground.point)) clearLocationFocus();
       }
     }
   }
   renderer.domElement.addEventListener("pointerdown", pointerDown);
   renderer.domElement.addEventListener("pointerup", pointerUp);
+  renderer.domElement.addEventListener("keydown", keyDown);
+  renderer.domElement.addEventListener("blur", clearWalkKeys);
+  window.addEventListener("keyup", keyUp);
   function animate(now) {
     if (destroyed) return;
     const dt = Math.min((now - lastTime) / 1000 || 0, 0.05);
@@ -1606,8 +2295,27 @@ export function createCity(host, options) {
       !travel.active &&
       camera.position.distanceTo(controls.target) < 900
     ) {
+      // A companion group waits together if any member approaches the player.
+      // Its existing destination-led route resumes afterwards; no reversal or
+      // per-frame pathfinder is needed to yield on a pavement.
+      const yieldGroups = new Set();
+      for (const actor of agents) {
+        const position = actor.group.position;
+        const dx = Math.sin(actor.group.rotation.y),
+          dz = Math.cos(actor.group.rotation.y);
+        const ahead = (point) => {
+          const x = point.x - position.x,
+            z = point.z - position.z;
+          return x * dx + z * dz > -0.15 && Math.hypot(x, z) < 0.92 + dt * 1.4;
+        };
+        actor.yielding =
+          Boolean(player && ahead(player.position)) ||
+          peerActors.some((peer) => peer.visible && ahead(peer.position));
+        if (actor.yielding && actor.groupId) yieldGroups.add(actor.groupId);
+      }
       for (const a of agents) {
-        advanceLocalWalker(a, dt);
+        const yielding = a.yielding || yieldGroups.has(a.groupId);
+        if (!yielding) advanceLocalWalker(a, dt);
         const p = sampleLocalWalker(a, a.samplePoint);
         a.group.position.set(p.x, geoY(unprojectGeo(p.x, p.z)) + 0.2, p.z);
         a.group.rotation.y = p.angle;
@@ -1615,34 +2323,124 @@ export function createCity(host, options) {
           animateCharacter(
             a.group,
             (now / 1000) * (a.pace || 1),
-            a.moving !== false,
+            !yielding && a.moving !== false,
           );
           poseLocalDemographic(a.group, a, now / 1000);
         }
       }
-      for (const v of vehicles) {
-        v.d += dt * v.speed;
-        const p = sample(v.line, v.d, v.side);
-        v.group.position.copy(p.v);
-        v.group.rotation.y = p.angle;
+      const pedestrians = dynamicObstacles.filter(
+        (obstacle) =>
+          !String(obstacle.id).startsWith("street-vehicle") &&
+          !String(obstacle.id).startsWith("tram"),
+      );
+      if (player)
+        pedestrians.push({
+          x: player.position.x,
+          y: player.position.y,
+          z: player.position.z,
+          radius: 0.42,
+        });
+      advanceTraffic(traffic, dt, {
+        pedestrians,
+        externalVehicles: tramTraffic?.vehicles || [],
+      });
+      advanceTraffic(tramTraffic, dt, {
+        pedestrians,
+        externalVehicles: traffic?.vehicles || [],
+      });
+      for (const actor of vehicles) {
+        const p = sampleTrafficVehicle(actor, actor.sample);
+        actor.group.visible = p.visible;
+        actor.group.position.set(p.x, p.y + 0.2, p.z);
+        actor.group.rotation.y = p.angle;
       }
     }
-    if (player && !indoor.active && !travel.active) {
-      const diff = playerTarget.clone().sub(player.position),
-        distance = diff.length();
-      if (distance > 0.1) {
-        const step = Math.min(distance, dt * 2.5);
-        player.position.add(diff.normalize().multiplyScalar(step));
-        player.position.y =
-          geoY(unprojectGeo(player.position.x, player.position.z)) + 0.2;
-        player.rotation.y = Math.atan2(diff.x, diff.z);
+    updateCollisionActors();
+    if (player && !characterGallery && !indoor.active && !travel.active) {
+      let dx = 0,
+        dz = 0;
+      if (walkKeys.size) {
+        const forward =
+          Number(walkKeys.has("w") || walkKeys.has("arrowup")) -
+          Number(walkKeys.has("s") || walkKeys.has("arrowdown"));
+        const side =
+          Number(walkKeys.has("d") || walkKeys.has("arrowright")) -
+          Number(walkKeys.has("a") || walkKeys.has("arrowleft"));
+        const angle = Math.atan2(
+          controls.target.x - camera.position.x,
+          controls.target.z - camera.position.z,
+        );
+        dx = Math.sin(angle) * forward - Math.cos(angle) * side;
+        dz = Math.cos(angle) * forward + Math.sin(angle) * side;
+      } else if (walkRoute.length && sceneryTask?.phase !== "active") {
+        let next = walkRoute[0];
+        while (
+          next &&
+          Math.hypot(next.x - player.position.x, next.z - player.position.z) <
+            0.12
+        ) {
+          walkRoute.shift();
+          next = walkRoute[0];
+        }
+        if (next) {
+          dx = next.x - player.position.x;
+          dz = next.z - player.position.z;
+        }
       }
-      animateCharacter(player, now / 1000, motion && distance > 0.1);
-      if (followPlayer && lastPlayerPosition) {
-        const shift = player.position.clone().sub(lastPlayerPosition);
-        controls.target.add(shift);
-        camera.position.add(shift);
-        lastPlayerPosition.copy(player.position);
+      const distance = Math.hypot(dx, dz);
+      if (distance > 0.001 && navigation) {
+        const step = Math.min(distance, dt * 2.5);
+        const next = moveWithCollisions(
+          navigation,
+          player.position,
+          { x: (dx / distance) * step, z: (dz / distance) * step },
+          { dynamic: dynamicObstacles, output: playerStep },
+        );
+        player.position.set(
+          next.x,
+          geoY(unprojectGeo(next.x, next.z)) + 0.2,
+          next.z,
+        );
+        if (next.moved) player.rotation.y = Math.atan2(dx, dz);
+      } else playerStep.moved = false;
+      if (walkKeys.size) playerTarget.copy(player.position);
+      animateCharacter(player, now / 1000, motion && playerStep.moved);
+      updateSceneryTask(dt, now / 1000);
+      if (followPlayer)
+        updateFollowCamera(
+          followState,
+          camera.position,
+          controls.target,
+          player.position,
+          dt,
+        );
+      if (
+        navigation &&
+        camera.position.distanceTo(controls.target) < 100 &&
+        !locationFocus.active
+      ) {
+        const safe = cameraCollisionPosition(
+          navigation,
+          controls.target,
+          camera.position,
+          { output: cameraStep },
+        );
+        if (
+          followPlayer &&
+          safe.blocked &&
+          Math.hypot(
+            safe.x - controls.target.x,
+            safe.y - controls.target.y,
+            safe.z - controls.target.z,
+          ) < 3.5
+        ) {
+          // Recover a clear third-person angle when a facade clips the shot,
+          // instead of feeding a collapsed orbit back into damping each frame.
+          framePlayer();
+        } else {
+          safe.y = Math.max(safe.y, geoY(unprojectGeo(safe.x, safe.z)) + 0.7);
+          camera.position.set(safe.x, safe.y, safe.z);
+        }
       }
     }
     if (
@@ -1654,6 +2452,12 @@ export function createCity(host, options) {
         animateCharacter(peer, now / 1000 + index * 0.37, false),
       );
     const range = camera.position.distanceTo(controls.target);
+    updateCityCameraClip(
+      camera,
+      range,
+      indoor.active || Boolean(characterGallery),
+    );
+    if (coarseDetailsActive !== range < 6000) refreshCoarseOwnership();
     population.visible = peerPopulation.visible =
       !characterGallery &&
       !indoor.active &&
@@ -1679,8 +2483,12 @@ export function createCity(host, options) {
           child.visible = range < 1300;
           if (!characterGallery && !indoor.active && !travel.active)
             updateBeachLife(child, dt, now / 1000, motion && child.visible);
-        } else if (child.userData.streetDetail) child.visible = range < 2300;
-        else if (child.userData.architectureDetail) child.visible = range < 900;
+        } else if (child.userData.streetDetail) {
+          child.visible = range < 2300;
+          if (child.userData.fixtures)
+            updateCityFixtures(child, traffic?.elapsed || 0);
+        } else if (child.userData.architectureDetail)
+          child.visible = range < 900;
     }
     if (overviewMesh)
       overviewMesh.visible =
@@ -1739,6 +2547,9 @@ export function createCity(host, options) {
       return false;
     });
   function characters() {
+    cancelScenery();
+    walkRoute = [];
+    walkKeys.clear();
     clearLocationFocus();
     cancelTravel();
     if (!player) return;
@@ -1836,6 +2647,11 @@ export function createCity(host, options) {
       populate(true);
       pendingTeleport = false;
     }
+    if (!player) {
+      pendingLocation = null;
+      request.resolve(false);
+      return;
+    }
     const { next, point } = request;
     const storefront = venueMeshes.find(
       (mesh) =>
@@ -1884,6 +2700,10 @@ export function createCity(host, options) {
         line.ps.some((p) => Math.hypot(p.x - source.x, p.z - source.z) < 400),
     );
     const safeAt = (p) =>
+      cityActorSpaceIsClear(
+        { ...p, y: elevationAt(p) + 0.2 },
+        dynamicObstacles,
+      ) &&
       driving.every((line) =>
         line.ps.slice(1).every((b, i) => {
           const a = line.ps[i],
@@ -2042,6 +2862,10 @@ export function createCity(host, options) {
     controls.update();
   }
   function setInterior(next) {
+    cancelScenery();
+    walkRoute = [];
+    walkKeys.clear();
+    followState.initialized = false;
     if (next) clearLocationFocus();
     cancelTravel();
     options.interior = next;
@@ -2078,6 +2902,8 @@ export function createCity(host, options) {
     setAppearance,
     overview,
     playerView,
+    nearbyScenery,
+    performScenery,
     characters,
     people,
     setInterior,
@@ -2086,6 +2912,12 @@ export function createCity(host, options) {
     playSocialEvent: (event) => indoor.social(event),
     setMode(next) {
       mode = next;
+      if (next === "walk") {
+        followPlayer = true;
+        framePlayer();
+      } else {
+        walkKeys.clear();
+      }
       controls.mouseButtons.LEFT =
         next === "pan" ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
       controls.touches.ONE =
@@ -2112,6 +2944,9 @@ export function createCity(host, options) {
       controls.update();
     },
     dispose() {
+      cancelScenery();
+      walkRoute = [];
+      walkKeys.clear();
       destroyed = true;
       clearLocationFocus();
       abort.abort();
@@ -2126,8 +2961,12 @@ export function createCity(host, options) {
       lampLights.forEach((light) => light.dispose());
       renderer.domElement.removeEventListener("pointerdown", pointerDown);
       renderer.domElement.removeEventListener("pointerup", pointerUp);
+      renderer.domElement.removeEventListener("keydown", keyDown);
+      renderer.domElement.removeEventListener("blur", clearWalkKeys);
+      window.removeEventListener("keyup", keyUp);
       disposeGroup(scene);
       materials.forEach((m) => m.dispose());
+      overviewMaterials.forEach((m) => m.dispose());
       architecture.dispose();
       atmosphere.dispose();
       renderer.dispose();

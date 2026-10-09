@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { createCharacter, animateCharacter } from "./characters.js";
 import { createTravelMaterials } from "./travel-materials.js";
+import { createCityVehicle } from "./city-vehicles.js";
 
 // Small original transit tableaux illustrate a journey; they are not bookings,
 // surveyed terminal interiors, live transport positions or operating timetables.
@@ -1076,65 +1077,22 @@ function railVehicle(kit, mode) {
   return { group, doors, wheels, doorX: -3.4 };
 }
 
-function roadVehicle(kit, mode) {
-  const group = new THREE.Group();
+function roadVehicle(kit, mode, operator = "carris") {
+  const group = createCityVehicle({ kind: mode, operator, articulated: true });
+  // Street models face +Z; transport tableaux travel along +X.
+  group.rotation.y = Math.PI / 2;
   group.name = `${mode}-vehicle`;
-  const bus = mode === "bus",
-    length = bus ? 9 : 4.8,
-    width = bus ? 2.9 : 2;
-  const base = bus ? "#40ad98" : "#f4d17a";
-  kit.box(
+  kit.adopt(group);
+  const doors = group.userData.doors,
+    wheels = group.userData.wheels;
+  return {
     group,
-    base,
-    [0, bus ? 1.2 : 0.92, 0],
-    [length, bus ? 1.45 : 0.9, width],
-  );
-  kit.box(
-    group,
-    "#f3eee1",
-    [bus ? 0 : -0.45, bus ? 2.63 : 1.64, 0],
-    [bus ? length : 2.6, bus ? 1.42 : 1.06, width - 0.08],
-  );
-  kit.box(
-    group,
-    base,
-    [bus ? 0 : -0.45, bus ? 3.36 : 2.21, 0],
-    [bus ? length : 2.65, 0.2, width],
-  );
-  const doors = [],
-    wheels = [];
-  for (const sign of [-1, 1]) {
-    for (const x of bus ? [-3.2, -1.2, 0.8] : [-1.3, 0.15])
-      kit.box(
-        group,
-        "#31566d",
-        [x, bus ? 2.65 : 1.75, sign * (width / 2)],
-        [bus ? 1.5 : 1.1, bus ? 1.12 : 0.65, 0.06],
-        true,
-      );
-    for (const x of bus ? [-3.0, 3.0] : [-1.55, 1.55])
-      wheels.push(wheel(kit, group, x, sign * (width / 2), bus ? 0.6 : 0.45));
-  }
-  const doorX = bus ? 3.1 : 0.15;
-  const door = kit.box(
-    group,
-    bus ? "#274d60" : base,
-    [doorX, bus ? 1.87 : 1.14, -width / 2 - 0.04],
-    [bus ? 1.5 : 1.3, bus ? 2.25 : 1.35, 0.1],
-  );
-  door.userData.closedX = doorX;
-  doors.push(door);
-  kit.box(
-    group,
-    "#31566d",
-    [length / 2 + 0.01, bus ? 2.56 : 1.74, 0],
-    [0.08, bus ? 1.16 : 0.55, width - 0.2],
-    true,
-  );
-  for (const z of [-width * 0.33, width * 0.33])
-    kit.box(group, "#ffe7a7", [length / 2 + 0.03, 1.02, z], [0.09, 0.24, 0.34]);
-  if (!bus) kit.box(group, "#375af0", [-0.4, 2.39, 0], [0.55, 0.22, 0.3]);
-  return { group, doors, wheels, doorX };
+    doors,
+    wheels,
+    doorX: doors[0]?.userData.closedX || 0,
+    boardingSide: mode === "bus" ? 1 : -1,
+    floorHeight: mode === "bus" ? 0.45 : 0.15,
+  };
 }
 
 function bicycle(kit) {
@@ -1389,6 +1347,9 @@ function stageScenery(kit, stage, mode, night) {
     return airportScenery(kit, stage, night);
   }
   const rail = ["metro", "train", "tram"].includes(mode);
+  // Lisbon buses board from their right-side doors. With forward travel +X,
+  // their kerb/platform and boarding camera belong on +Z.
+  const platformSide = mode === "bus" ? 1 : -1;
   kit.box(stage, "#abc3b0", [18, -0.18, 0], [150, 0.28, 34]);
   kit.box(
     stage,
@@ -1396,30 +1357,46 @@ function stageScenery(kit, stage, mode, night) {
     [18, 0.02, 0],
     [145, 0.16, rail ? 4.9 : 7],
   );
-  kit.box(stage, "#e6d7bd", [2, 0.32, -6.4], [62, 0.7, 7.2]);
-  kit.box(stage, "#edc97a", [2, 0.7, -2.96], [62, 0.03, 0.3]);
+  kit.box(stage, "#e6d7bd", [2, 0.32, platformSide * 6.4], [62, 0.7, 7.2]);
+  kit.box(stage, "#edc97a", [2, 0.7, platformSide * 2.96], [62, 0.03, 0.3]);
   if (rail)
     for (const z of [-1.3, 1.3])
       kit.box(stage, "#475969", [18, 0.14, z], [145, 0.16, 0.13]);
   for (const x of [-15, 10, 35]) {
-    kit.box(stage, "#65706e", [x, 2.7, -8.7], [0.16, 5, 0.16]);
-    kit.box(stage, "#fff1bd", [x + 0.7, 5.1, -8.7], [1.5, 0.15, 0.36]);
+    kit.box(stage, "#65706e", [x, 2.7, platformSide * 8.7], [0.16, 5, 0.16]);
+    kit.box(
+      stage,
+      "#fff1bd",
+      [x + 0.7, 5.1, platformSide * 8.7],
+      [1.5, 0.15, 0.36],
+    );
   }
   // Keep the shelter behind the boarding-camera sight lines, rather than
   // placing a broad roof directly between the camera and carriage doors.
-  kit.box(stage, "#375af0", [-20, 4.1, -6.2], [10, 0.28, 6.7]);
+  kit.box(stage, "#375af0", [-20, 4.1, platformSide * 6.2], [10, 0.28, 6.7]);
   for (const x of [-24, -16])
-    kit.box(stage, "#476071", [x, 2.4, -8.7], [0.21, 3.7, 0.21]);
-  kit.box(stage, "#ff987e", [-20, 1.15, -7], [5.5, 0.25, 1.4]);
+    kit.box(stage, "#476071", [x, 2.4, platformSide * 8.7], [0.21, 3.7, 0.21]);
+  kit.box(stage, "#ff987e", [-20, 1.15, platformSide * 7], [5.5, 0.25, 1.4]);
   for (const x of [-22, -18])
-    kit.box(stage, "#475c63", [x, 0.82, -7], [0.16, 0.5, 0.9]);
+    kit.box(stage, "#475c63", [x, 0.82, platformSide * 7], [0.16, 0.5, 0.9]);
   for (const x of [22, 45]) {
-    kit.cylinder(stage, "#887557", [x, 1.5, -12.6], [0.2, 3, 0.2]);
-    kit.sphere(stage, "#709c88", [x, 4.3, -12.6], [2, 2.7, 2]);
+    kit.cylinder(
+      stage,
+      "#887557",
+      [x, 1.5, platformSide * 12.6],
+      [0.2, 3, 0.2],
+    );
+    kit.sphere(stage, "#709c88", [x, 4.3, platformSide * 12.6], [2, 2.7, 2]);
   }
 }
 
-function makeTableau(mode, shirt, appearance, night = 0) {
+function makeTableau(
+  mode,
+  shirt,
+  appearance,
+  night = 0,
+  busOperator = "carris",
+) {
   const kit = createKit(mode === "flight"),
     stage = new THREE.Group();
   stage.name = "roam-travel";
@@ -1430,15 +1407,19 @@ function makeTableau(mode, shirt, appearance, night = 0) {
       : ["metro", "train", "tram"].includes(mode)
         ? railVehicle(kit, mode)
         : ["bus", "taxi"].includes(mode)
-          ? roadVehicle(kit, mode)
+          ? roadVehicle(kit, mode, busOperator)
           : mode === "cycle"
             ? bicycle(kit)
             : null;
   if (vehicle) stage.add(vehicle.group);
   const avatar = mode === "flight" ? null : traveller(kit, shirt, appearance);
   if (avatar) {
-    avatar.group.position.set(vehicle?.doorX || 0, 0.7, -7);
-    avatar.group.rotation.y = 0;
+    avatar.group.position.set(
+      vehicle?.doorX || 0,
+      0.7,
+      (vehicle?.boardingSide || -1) * 7,
+    );
+    avatar.group.rotation.y = vehicle?.boardingSide === 1 ? Math.PI : 0;
     stage.add(avatar.group);
   }
   const fill = new THREE.HemisphereLight(
@@ -1787,6 +1768,7 @@ export function createTravelRuntime({
     } else {
       const boardingEnd = 2.75,
         transitEnd = duration - 2.3;
+      const boardingSide = tableau.vehicle?.boardingSide || -1;
       const riding = clamp(
         (elapsed - boardingEnd) / (transitEnd - boardingEnd),
       );
@@ -1794,11 +1776,21 @@ export function createTravelRuntime({
       if (tableau.vehicle) {
         tableau.vehicle.group.position.x = x;
         for (const wheel of tableau.vehicle.wheels)
-          wheel.rotation.y = riding * -18;
-        for (const door of tableau.vehicle.doors)
-          door.position.x =
-            door.userData.closedX +
-            (reduced ? 0 : 1.4 * (1 - smooth((elapsed - 1.9) / 0.75)));
+          wheel.rotation[wheel.userData.spinAxis || "y"] = reduced
+            ? 0
+            : wheel.userData.radius
+              ? -x / wheel.userData.radius
+              : riding * -18;
+        const open = reduced ? 0 : 1 - smooth((elapsed - 1.9) / 0.75);
+        for (const door of tableau.vehicle.doors) {
+          if (door.userData.hingeAxis)
+            door.rotation[door.userData.hingeAxis] =
+              open * door.userData.openAngle;
+          else
+            door.position[door.userData.slideAxis || "x"] =
+              door.userData.closedX +
+              open * (door.userData.slideDistance || 1.4);
+        }
       }
       if (tableau.avatar) {
         const pedestrian = mode === "walk",
@@ -1808,21 +1800,40 @@ export function createTravelRuntime({
           pedestrian || cyclist || elapsed < boardingEnd;
         tableau.avatar.group.position.set(
           (tableau.vehicle?.doorX || 0) + x,
-          pedestrian ? 0.7 : cyclist && elapsed >= boardingEnd ? 0.45 : 0.7,
+          pedestrian
+            ? 0.7
+            : cyclist && elapsed >= boardingEnd
+              ? 0.45
+              : mix(
+                  0.7,
+                  tableau.vehicle?.floorHeight || 0.7,
+                  smooth((board - 0.55) / 0.35),
+                ),
           pedestrian
             ? -5
             : cyclist && elapsed >= boardingEnd
               ? 0
-              : mix(-7, 0, board),
+              : mix(boardingSide * 7, 0, board),
         );
         tableau.avatar.group.rotation.y =
-          pedestrian || (cyclist && elapsed >= boardingEnd) ? Math.PI / 2 : 0;
+          pedestrian || (cyclist && elapsed >= boardingEnd)
+            ? Math.PI / 2
+            : boardingSide === 1
+              ? Math.PI
+              : 0;
         if (cyclist && elapsed >= boardingEnd)
           tableau.avatar.group.rotation.z = -0.12;
         tableau.avatar.animate(
           reduced ? 0 : elapsed,
           !reduced && (pedestrian || cyclist || elapsed < boardingEnd),
         );
+        if (mode === "taxi" && elapsed < boardingEnd && !reduced) {
+          const crouch = smooth((board - 0.62) / 0.28),
+            rig = tableau.avatar.group.userData.rig;
+          rig.torso.rotation.x = 0.58 * crouch;
+          rig.leftLeg.rotation.x = rig.rightLeg.rotation.x = -0.48 * crouch;
+          rig.leftKnee.rotation.x = rig.rightKnee.rotation.x = 1.08 * crouch;
+        }
         if (cyclist && elapsed >= boardingEnd) {
           const rig = tableau.avatar.group.userData.rig;
           rig.leftLeg.rotation.x = -0.8 + Math.sin(elapsed * 8) * 0.35;
@@ -1833,12 +1844,15 @@ export function createTravelRuntime({
         }
       }
       target = local(x, 1.7, mode === "walk" ? -5 : 0);
-      position = local(x + 20, 11, -29);
+      position = local(x + 20, 11, boardingSide * 29);
       if (elapsed < 3.5 && !["walk", "cycle"].includes(mode)) {
         const wide = smooth((elapsed - 2.2) / 1.3);
-        target.lerp(local(tableau.vehicle?.doorX || 0, 1.5, -3), 1 - wide);
+        target.lerp(
+          local(tableau.vehicle?.doorX || 0, 1.5, boardingSide * 3),
+          1 - wide,
+        );
         position.lerp(
-          local((tableau.vehicle?.doorX || 0) + 7, 4.5, -11),
+          local((tableau.vehicle?.doorX || 0) + 7, 4.5, boardingSide * 11),
           1 - wide,
         );
       }
@@ -1912,6 +1926,7 @@ export function createTravelRuntime({
         sequence.shirt,
         sequence.appearance,
         Number.isFinite(nightValue) ? clamp(nightValue) : 0,
+        sequence.busOperator === "metropolitana" ? "metropolitana" : "carris",
       );
       tableau.stage.position.copy(anchor);
       if (sequence.mode === "flight")

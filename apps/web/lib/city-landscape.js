@@ -681,6 +681,53 @@ export function createLandscape(
 
   const dummy = new THREE.Object3D(),
     color = new THREE.Color();
+  const sceneryItems = new Map();
+  const sceneryFor = (entry, kind) => {
+    const id = `${kind === "tree" && entry.type === "round" ? "fruit-tree:" : ""}${chunk.id}:${kind}:${entry.x.toFixed(2)}:${entry.z.toFixed(2)}`;
+    if (!sceneryItems.has(id)) {
+      const species =
+        kind === "tree"
+          ? entry.type === "palm"
+            ? "Mediterranean fan palm"
+            : entry.type === "cypress"
+              ? "Mediterranean cypress"
+              : "Olive tree"
+          : undefined;
+      sceneryItems.set(id, {
+        id,
+        kind,
+        x: entry.x,
+        z: entry.z,
+        y: geoY(toGeo(entry)) + 0.12,
+        angle: entry.turn || 0,
+        radius:
+          kind === "tree"
+            ? 0.25 * entry.scale
+            : kind === "bench"
+              ? 1.05
+              : kind === "flowers"
+                ? 0.95
+                : 0.28,
+        name:
+          kind === "tree"
+            ? species
+            : kind === "bench"
+              ? "Garden bench"
+              : kind === "flowers"
+                ? "Flower garden"
+                : "Street lantern",
+        ...(species
+          ? {
+              species,
+              speciesSource: "illustrative",
+              fruitBearing: entry.type === "round",
+            }
+          : {}),
+        source: "authored",
+      });
+    }
+    return sceneryItems.get(id);
+  };
   function batch(name, entries, geometry, material, transform, tint) {
     if (!entries.length) {
       geometry.dispose();
@@ -689,6 +736,20 @@ export function createLandscape(
     }
     const mesh = new THREE.InstancedMesh(geometry, material, entries.length);
     mesh.name = name;
+    const kind =
+      entries === trees || entries.some((entry) => trees.includes(entry))
+        ? "tree"
+        : entries === benches
+          ? "bench"
+          : entries === flowerBeds
+            ? "flowers"
+            : entries === lamps
+              ? "lamp"
+              : null;
+    if (kind)
+      mesh.userData.sceneryInstances = entries.map((entry) =>
+        sceneryFor(entry, kind),
+      );
     entries.forEach((entry, i) => {
       const ground = geoY(toGeo(entry)) + 0.12;
       dummy.position.set(entry.x, ground, entry.z);
@@ -985,5 +1046,6 @@ export function createLandscape(
     },
     drawCalls: group.children.length,
   };
+  group.userData.sceneryItems = [...sceneryItems.values()];
   return group;
 }

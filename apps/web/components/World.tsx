@@ -28,6 +28,22 @@ import type { MultiplayerPeer } from "../lib/multiplayer";
 import type { CharacterAppearance } from "../lib/appearance";
 import { DEFAULT_APPEARANCE } from "../lib/appearance";
 import controlStyles from "./WorldControls.module.css";
+import SceneryPopup, { SceneryNotice } from "./SceneryPopup";
+import {
+  SceneryActionGate,
+  definitiveSceneryFailure,
+  mergeSceneryState,
+  type SceneryAction,
+  type SceneryObject,
+} from "../lib/scenery-actions";
+import {
+  loadScenery,
+  performSceneryAction,
+  settleSceneryFine,
+  type SceneryFine,
+  type ScenerySnapshot,
+} from "../lib/scenery-client";
+import type { WalletSnapshot } from "../lib/wallet-client";
 export type SocialSceneEvent = {
   id: string;
   venueId: string;
@@ -50,6 +66,8 @@ type CityController = {
   playerView: () => boolean;
   characters: () => void;
   people: () => void;
+  nearbyScenery: () => SceneryObject[];
+  performScenery: (object: SceneryObject, action: string) => Promise<boolean>;
   setMode: (mode: string) => void;
   setMotion: (value: boolean) => void;
   setTime: (minute: number) => void;
@@ -80,6 +98,10 @@ export default function World({
   socialEvent,
   sharedOuting = false,
   onLocationReady,
+  onSceneryWallet,
+  onSceneryState,
+  sceneryWalletRequest = 0,
+  walletBalanceCents,
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -98,6 +120,10 @@ export default function World({
   socialEvent?: SocialSceneEvent | null;
   sharedOuting?: boolean;
   onLocationReady?: (selectionId: string, framed: boolean) => void;
+  onSceneryWallet?: (wallet: WalletSnapshot) => void;
+  onSceneryState?: (snapshot: ScenerySnapshot) => void;
+  sceneryWalletRequest?: number;
+  walletBalanceCents?: number;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
@@ -107,6 +133,9 @@ export default function World({
   } | null>(null);
   const [sceneVersion, setSceneVersion] = useState(0);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
+  const [scenerySceneStatus, setScenerySceneStatus] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
   const locationCallback = useRef(onLocationReady);
   locationCallback.current = onLocationReady;
   const callback = useRef(onHotspot);
@@ -172,6 +201,227 @@ export default function World({
   >("idle");
   const [completed, setCompleted] = useState<string[]>([]);
   const [roomError, setRoomError] = useState("");
+  const [sceneryOpen, setSceneryOpen] = useState(false);
+  const [sceneryObject, setSceneryObject] = useState<SceneryObject | null>(
+    null,
+  );
+  const [sceneryItems, setSceneryItems] = useState<SceneryObject[]>([]);
+  const [sceneryWalletOpen, setSceneryWalletOpen] = useState(false);
+  const [sceneryState, setSceneryState] = useState<ScenerySnapshot | null>(
+    null,
+  );
+  const sceneryStateRef = useRef<ScenerySnapshot | null>(null);
+  const [sceneryLoading, setSceneryLoading] = useState(false);
+  const [sceneryError, setSceneryError] = useState("");
+  const [sceneryBusy, setSceneryBusy] = useState(false);
+  const [sceneryNotice, setSceneryNotice] = useState("");
+  const [sceneryRetry, setSceneryRetry] = useState(false);
+  const [sceneryNoticeWallet, setSceneryNoticeWallet] = useState(false);
+  const sceneryGate = useRef(new SceneryActionGate());
+  const sceneryRetryAction = useRef<{
+    object: SceneryObject;
+    action: SceneryAction;
+  } | null>(null);
+  const sceneryRetryFine = useRef<SceneryFine | null>(null);
+  const sceneryActive = useRef(true);
+  const sceneryWalletCallback = useRef(onSceneryWallet);
+  sceneryWalletCallback.current = onSceneryWallet;
+  const sceneryStateCallback = useRef(onSceneryState);
+  sceneryStateCallback.current = onSceneryState;
+
+  function receiveScenery(snapshot: ScenerySnapshot) {
+    if (!sceneryActive.current) return;
+    const next = mergeSceneryState(sceneryStateRef.current, snapshot);
+    sceneryStateRef.current = next;
+    setSceneryState(next);
+    sceneryStateCallback.current?.(next);
+  }
+  async function refreshScenery() {
+    setSceneryLoading(true);
+    setSceneryError("");
+    try {
+      receiveScenery(await loadScenery());
+    } catch {
+      if (sceneryActive.current)
+        setSceneryError(
+          "Your city moments could not load. Refresh to try again.",
+        );
+    } finally {
+      if (sceneryActive.current) setSceneryLoading(false);
+    }
+  }
+  useEffect(() => {
+    sceneryActive.current = true;
+    void refreshScenery();
+    return () => {
+      sceneryActive.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!sceneryNotice || sceneryBusy || sceneryRetry) return;
+    const timer = setTimeout(() => setSceneryNotice(""), 8000);
+    return () => clearTimeout(timer);
+  }, [sceneryNotice, sceneryBusy, sceneryRetry]);
+  useEffect(() => {
+    setSceneryOpen(false);
+  }, [focus, travelSequence?.id, interior?.id, googleVisible]);
+  useEffect(() => {
+    if (!sceneryWalletRequest) return;
+    openSceneryWallet();
+  }, [sceneryWalletRequest]);
+  function openSceneryWallet() {
+    setSceneryWalletOpen(true);
+    setSceneryOpen(true);
+    setViewOptionsOpen(false);
+    setPerson(null);
+    setPeer(null);
+    void refreshScenery();
+  }
+  async function doSceneryAction(object: SceneryObject, action: SceneryAction) {
+    setSceneryOpen(false);
+    const attempt = sceneryGate.current.start(object.id, action.id, () =>
+      crypto.randomUUID(),
+    );
+    if (!attempt) {
+      if (!sceneryGate.current.busy) {
+        setSceneryNotice(
+          "Finish saving your previous city moment before choosing another.",
+        );
+        setSceneryRetry(true);
+      }
+      return;
+    }
+    sceneryRetryAction.current = { object, action };
+    sceneryRetryFine.current = null;
+    setSceneryBusy(true);
+    setSceneryRetry(false);
+    setSceneryNoticeWallet(false);
+    setSceneryOpen(false);
+    setViewOptionsOpen(false);
+    setPerson(null);
+    setPeer(null);
+    setGallery(false);
+    setSceneryNotice(
+      attempt.arrived
+        ? "Saving your city moment…"
+        : `Walking over to ${object.name}…`,
+    );
+    let sent = false;
+    try {
+      if (!attempt.arrived) {
+        const reached = await controller.current?.performScenery(
+          object,
+          action.id,
+        );
+        if (!reached || !sceneryActive.current) {
+          sceneryGate.current.finish(attempt.requestId);
+          sceneryRetryAction.current = null;
+          if (sceneryActive.current)
+            setSceneryNotice(
+              "That spot is not reachable right now. Try a closer object or a different path.",
+            );
+          return;
+        }
+        sceneryGate.current.arrive(attempt.requestId);
+      }
+      sent = true;
+      const result = await performSceneryAction({
+        requestId: attempt.requestId,
+        objectId: object.id,
+        kind: object.kind,
+        actionId: action.id,
+      });
+      sceneryGate.current.finish(attempt.requestId);
+      sceneryRetryAction.current = null;
+      if (!sceneryActive.current) return;
+      receiveScenery({
+        totalPoints: result.totalPoints,
+        fines: result.fine ? [result.fine] : [],
+      });
+      const fine = result.fine && !result.fine.settled;
+      setSceneryNotice(
+        `${action.label}${result.points ? ` · +${result.points} XP` : " · Already explored today or daily XP limit reached"}.${fine ? ` A simulated €${(result.fine!.amountCents / 100).toFixed(0)} park fine is in your city wallet.` : ""}`,
+      );
+      setSceneryNoticeWallet(Boolean(fine));
+    } catch (reason) {
+      const code =
+        reason instanceof Error ? reason.message : "scenery_unavailable";
+      const ambiguous = sent && !definitiveSceneryFailure(code);
+      sceneryGate.current.finish(attempt.requestId, ambiguous);
+      if (!ambiguous && code !== "scenery_cooldown")
+        sceneryRetryAction.current = null;
+      if (!sceneryActive.current) return;
+      setSceneryRetry(ambiguous || code === "scenery_cooldown");
+      setSceneryNotice(
+        code === "scenery_cooldown"
+          ? "Give your character 10 seconds between city moments, then try again."
+          : code === "scenery_fines_full"
+            ? "Settle a pending game fine before choosing another cheeky action."
+            : !sent
+              ? "Your character could not reach that spot. Try a closer object."
+              : ambiguous
+                ? "Your city moment may still be saving. Try again to check it without repeating the reward or fine."
+                : "This city moment could not be saved. Refresh and try again.",
+      );
+      setSceneryNoticeWallet(code === "scenery_fines_full");
+    } finally {
+      if (sceneryActive.current) setSceneryBusy(false);
+    }
+  }
+  async function paySceneryFine(fine: SceneryFine) {
+    if (!sceneryGate.current.lockSettlement()) return;
+    sceneryRetryFine.current = fine;
+    setSceneryBusy(true);
+    setSceneryRetry(false);
+    setSceneryOpen(false);
+    setSceneryNoticeWallet(false);
+    setSceneryNotice("Settling your simulated park fine…");
+    try {
+      const result = await settleSceneryFine(fine.id);
+      sceneryRetryFine.current = null;
+      if (!sceneryActive.current) return;
+      receiveScenery(result);
+      sceneryWalletCallback.current?.(result.wallet);
+      setSceneryNotice(
+        `Simulated €${(fine.amountCents / 100).toFixed(0)} fine settled. Your game wallet is updated.`,
+      );
+      setSceneryNoticeWallet(true);
+    } catch (reason) {
+      if (!sceneryActive.current) return;
+      const code =
+        reason instanceof Error ? reason.message : "scenery_unavailable";
+      const retry = ![
+        "insufficient_funds",
+        "scenery_fine_unavailable",
+        "invalid_scenery_action",
+        "wallet_conflict",
+        "session_expired",
+        "forbidden",
+      ].includes(code);
+      if (!retry) sceneryRetryFine.current = null;
+      setSceneryRetry(retry);
+      setSceneryNoticeWallet(true);
+      setSceneryNotice(
+        code === "insufficient_funds"
+          ? "Your game euro wallet does not have enough to settle this fine yet."
+          : retry
+            ? "The payment may still be saving. Try again to check this same fine; it will only be paid once."
+            : "That fine could not be settled. Refresh your city wallet to check its status.",
+      );
+    } finally {
+      sceneryGate.current.unlockSettlement();
+      if (sceneryActive.current) setSceneryBusy(false);
+    }
+  }
+  function retryScenery() {
+    if (sceneryRetryFine.current) void paySceneryFine(sceneryRetryFine.current);
+    else if (sceneryRetryAction.current)
+      void doSceneryAction(
+        sceneryRetryAction.current.object,
+        sceneryRetryAction.current.action,
+      );
+  }
+
   useEffect(() => {
     if (!socialEvent || travelSequence || socialEvent.venueId !== interior?.id)
       return;
@@ -240,6 +490,7 @@ export default function World({
   useEffect(() => {
     setPerson(null);
     if (googleVisible) return;
+    setScenerySceneStatus("loading");
     let cancelled = false;
     import("../lib/city-scene.js")
       .then(({ createCity }) => {
@@ -252,6 +503,22 @@ export default function World({
               if (latest.current.travelSequence) return;
               setPerson(null);
               callback.current(h);
+            },
+            onScenery: (object: SceneryObject) => {
+              if (
+                latest.current.travelSequence ||
+                latest.current.interior ||
+                !Number.isFinite(object.x) ||
+                !Number.isFinite(object.z)
+              )
+                return;
+              setSceneryWalletOpen(false);
+              setSceneryObject(object);
+              setSceneryOpen(true);
+              setPerson(null);
+              setPeer(null);
+              setGallery(false);
+              setViewOptionsOpen(false);
             },
             onStatus: setStatus,
             onStats: setStats,
@@ -300,12 +567,23 @@ export default function World({
             },
           });
           setSceneUnavailable(false);
+          const instance = controller.current;
+          void instance.ready
+            .then((ready) => {
+              if (cancelled || controller.current !== instance) return;
+              setScenerySceneStatus(ready ? "ready" : "unavailable");
+            })
+            .catch(() => {
+              if (!cancelled && controller.current === instance)
+                setScenerySceneStatus("unavailable");
+            });
           controller.current?.setMode(ui.current.gesture);
           controller.current?.setMotion(ui.current.motion);
           setSceneVersion((version) => version + 1);
           if (controller.current) startPendingTravel(controller.current);
         } catch {
           setSceneUnavailable(true);
+          setScenerySceneStatus("unavailable");
           setStatus(
             "3D is unavailable on this device. Trip experiences still work.",
           );
@@ -316,7 +594,9 @@ export default function World({
         }
       })
       .catch(() => {
+        if (cancelled) return;
         setSceneUnavailable(true);
+        setScenerySceneStatus("unavailable");
         setStatus("The city could not load. Try reloading.");
         if (latest.current.travelSequence)
           setTravelError(
@@ -678,6 +958,31 @@ export default function World({
                   <button
                     type="button"
                     data-view-action
+                    data-scenery-browser
+                    disabled={scenerySceneStatus !== "ready"}
+                    aria-busy={scenerySceneStatus === "loading"}
+                    onClick={() => {
+                      if (scenerySceneStatus !== "ready" || !controller.current)
+                        return;
+                      setSceneryItems(controller.current.nearbyScenery());
+                      setSceneryObject(null);
+                      setSceneryWalletOpen(false);
+                      setSceneryOpen(true);
+                      setGallery(false);
+                      setPerson(null);
+                      closeViewOptions();
+                    }}
+                  >
+                    <span aria-hidden="true">🌿</span>{" "}
+                    {scenerySceneStatus === "ready"
+                      ? "Things around you"
+                      : scenerySceneStatus === "loading"
+                        ? "Loading city objects…"
+                        : "City objects unavailable"}
+                  </button>
+                  <button
+                    type="button"
+                    data-view-action
                     onClick={() => {
                       setGallery(false);
                       setPerson(null);
@@ -732,6 +1037,35 @@ export default function World({
             </label>
           </div>
         </div>
+      )}
+      {sceneryOpen &&
+        !travelSequence &&
+        (sceneryWalletOpen || (!googleVisible && !interior)) && (
+          <SceneryPopup
+            object={sceneryWalletOpen ? null : sceneryObject}
+            items={sceneryItems}
+            walletView={sceneryWalletOpen}
+            snapshot={sceneryState}
+            balanceCents={walletBalanceCents}
+            busy={sceneryBusy}
+            loading={sceneryLoading}
+            error={sceneryError}
+            onPick={setSceneryObject}
+            onAction={(object, action) => void doSceneryAction(object, action)}
+            onSettle={(fine) => void paySceneryFine(fine)}
+            onRefresh={() => void refreshScenery()}
+            onWallet={openSceneryWallet}
+            onClose={() => setSceneryOpen(false)}
+          />
+        )}
+      {sceneryNotice && !travelSequence && (
+        <SceneryNotice
+          message={sceneryNotice}
+          busy={sceneryBusy}
+          onRetry={sceneryRetry ? retryScenery : undefined}
+          onWallet={sceneryNoticeWallet ? openSceneryWallet : undefined}
+          onClose={() => setSceneryNotice("")}
+        />
       )}
       {interior && !travelSequence && !sharedOuting && (
         <InteriorPanel

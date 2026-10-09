@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"regexp"
@@ -53,31 +54,49 @@ func validWalletSpend(input walletSpendInput) bool {
 	return true
 }
 
-func (s *server) getWallet(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r)
-	var snapshot walletSnapshot
-	err := s.db.QueryRow(r.Context(), `SELECT currency,balance_cents FROM wallets WHERE user_id=$1`, user.ID).Scan(&snapshot.Currency, &snapshot.BalanceCents)
+type walletReader interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func loadWalletSnapshot(ctx context.Context, reader walletReader, userID string) (walletSnapshot, error) {
+	result := walletSnapshot{Entries: []walletEntry{}}
+	err := reader.QueryRow(ctx, `SELECT currency,balance_cents FROM wallets WHERE user_id=$1`, userID).Scan(&result.Currency, &result.BalanceCents)
 	if err != nil {
-		fail(w, err)
-		return
+		return result, err
 	}
-	snapshot.Entries = []walletEntry{}
-	rows, err := s.db.Query(r.Context(), `SELECT id,transaction_id::text,kind,amount_cents,balance_after_cents,purpose,description,created_at
-		FROM wallet_ledger WHERE user_id=$1 ORDER BY id DESC LIMIT 20`, user.ID)
+	rows, err := reader.Query(ctx, `SELECT id,transaction_id::text,kind,amount_cents,balance_after_cents,purpose,description,created_at
+        FROM wallet_ledger WHERE user_id=$1 ORDER BY id DESC LIMIT 20`, userID)
 	if err != nil {
-		fail(w, err)
-		return
+		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var entry walletEntry
 		if err = rows.Scan(&entry.ID, &entry.TransactionID, &entry.Kind, &entry.AmountCents, &entry.BalanceAfterCents, &entry.Purpose, &entry.Description, &entry.CreatedAt); err != nil {
-			fail(w, err)
-			return
+			return result, err
 		}
-		snapshot.Entries = append(snapshot.Entries, entry)
+		result.Entries = append(result.Entries, entry)
 	}
-	if err = rows.Err(); err != nil {
+	return result, rows.Err()
+}
+
+func (s *server) getWallet(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r)
+	// Balance and ledger must describe the same committed state, even when a
+	// journey purchase and scenery fine finish between the two read queries.
+	tx, err := s.db.BeginTx(r.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	snapshot, err := loadWalletSnapshot(r.Context(), tx, user.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
 		fail(w, err)
 		return
 	}
@@ -117,11 +136,16 @@ func (s *server) spendWallet(w http.ResponseWriter, r *http.Request) {
 			fail(w, apiError("wallet_conflict"))
 			return
 		}
+		snapshot, receiptErr := loadWalletSnapshot(r.Context(), tx, user.ID)
+		if receiptErr != nil {
+			fail(w, receiptErr)
+			return
+		}
 		if err = tx.Commit(r.Context()); err != nil {
 			fail(w, err)
 			return
 		}
-		s.getWallet(w, r)
+		respond(w, http.StatusOK, snapshot)
 		return
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -143,9 +167,14 @@ func (s *server) spendWallet(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	snapshot, err := loadWalletSnapshot(r.Context(), tx, user.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	if err = tx.Commit(r.Context()); err != nil {
 		fail(w, err)
 		return
 	}
-	s.getWallet(w, r)
+	respond(w, http.StatusOK, snapshot)
 }
