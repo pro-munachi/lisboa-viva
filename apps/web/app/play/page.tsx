@@ -148,13 +148,13 @@ import {
   WALKABLE_METRES,
 } from "../../lib/area-transport";
 const colors = TRAVELLER_COLOURS.map((colour) => colour.value);
-const interests: { id: Interest; name: string }[] = [
-  { id: "food", name: "Food & cafés" },
-  { id: "culture", name: "Art & culture" },
-  { id: "nature", name: "Nature & views" },
-  { id: "nightlife", name: "Music & nightlife" },
-  { id: "wellness", name: "Wellness" },
-  { id: "community", name: "Local life" },
+const interests: { id: Interest; name: string; emoji: string }[] = [
+  { id: "food", name: "Food & cafés", emoji: "☕" },
+  { id: "culture", name: "Art & culture", emoji: "🎨" },
+  { id: "nature", name: "Nature & views", emoji: "🌿" },
+  { id: "nightlife", name: "Music & nightlife", emoji: "🎧" },
+  { id: "wellness", name: "Wellness", emoji: "🧘" },
+  { id: "community", name: "Local life", emoji: "🤝" },
 ];
 const accommodations: { id: Accommodation; name: string; detail: string }[] = [
   { id: "hotel", name: "Hotel", detail: "A comfortable landing" },
@@ -1408,7 +1408,23 @@ function RoamExperience({ user }: { user: AuthUser }) {
       label: "Profile",
       detail: "Your character, trip & account",
       icon: UserRound,
-      content: <ProfileMenu onAction={closePhone} />,
+      content: (
+        <ProfileMenu
+          onAction={closePhone}
+          travelStyle={
+            trip
+              ? JOURNEY_PERSONAS[trip.setup.persona || "tourist"].name
+              : undefined
+          }
+          interests={
+            trip
+              ? interests.filter((interest) =>
+                  trip.setup.interests?.includes(interest.id),
+                )
+              : []
+          }
+        />
+      ),
     },
     {
       id: "messages",
@@ -1654,7 +1670,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
   return (
     <main className="app-shell">
       <div
-        className={`game roam-play${clean || travelSequence ? " clean-world" : ""}`}
+        className={`game roam-play${interior ? " inside-location" : ""}${clean || travelSequence ? " clean-world" : ""}`}
       >
         <World
           focus={mapFocus}
@@ -1723,7 +1739,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
             </a>
             {trip ? (
               <div className="clock">
-                <Sun size={18} />
+                <span className="app-emoji status-emoji" aria-hidden="true">
+                  {trip.minute < 360 || trip.minute >= 1200 ? "🌙" : "🌤️"}
+                </span>
                 <span>
                   DAY {String(trip.day).padStart(2, "0")} <b>·</b>{" "}
                   {time(trip.minute)}
@@ -1738,7 +1756,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
               </div>
             ) : (
               <div className="clock intro-clock">
-                <Sun size={18} />
+                <span className="app-emoji status-emoji" aria-hidden="true">
+                  🌤️
+                </span>
                 <span>A CITY TO TRY BEFORE YOU GO</span>
               </div>
             )}
@@ -1747,7 +1767,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
               disabled={Boolean(travelSequence)}
               onClick={() => setPanel("pocket")}
             >
-              <Wallet size={18} />
+              <span className="app-emoji status-emoji" aria-hidden="true">
+                💶
+              </span>
               <span>{wallet ? euro(wallet.balanceCents / 100) : "Wallet"}</span>
             </button>
           </header>
@@ -1947,7 +1969,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
                 aria-controls="city-experiences"
                 onClick={() => setActivitiesOpen((open) => !open)}
               >
-                <Sparkles size={18} />
+                <span className="app-emoji action-emoji" aria-hidden="true">
+                  ✨
+                </span>
                 <span>
                   {activitiesOpen ? "Close experiences" : "Things to do"}
                 </span>
@@ -1959,7 +1983,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
                 onClick={() => openFeature("map-search")}
                 aria-pressed={panel === "map-search"}
               >
-                <Search />
+                <span
+                  className="app-emoji dock-emoji"
+                  data-tone="mint"
+                  aria-hidden="true"
+                >
+                  🗺️
+                </span>
                 <span>Explore</span>
               </button>
               <button
@@ -1971,7 +2001,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
                   panel === "travel" || panel === "journey" || panel === "setup"
                 }
               >
-                <Map />
+                <span
+                  className="app-emoji dock-emoji"
+                  data-tone="coral"
+                  aria-hidden="true"
+                >
+                  🧳
+                </span>
                 <span>Travel</span>
               </button>
               <button
@@ -1979,7 +2015,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
                 onClick={openMessages}
                 aria-haspopup="dialog"
               >
-                <MessageCircle />
+                <span
+                  className="app-emoji dock-emoji"
+                  data-tone="lilac"
+                  aria-hidden="true"
+                >
+                  💬
+                </span>
                 <span>Chat</span>
               </button>
               <button
@@ -1994,7 +2036,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
                 aria-haspopup="dialog"
                 aria-expanded={phoneOpen}
               >
-                <Smartphone />
+                <span
+                  className="app-emoji dock-emoji"
+                  data-tone="blue"
+                  aria-hidden="true"
+                >
+                  📱
+                </span>
                 <span>Phone</span>
               </button>
             </nav>
@@ -2105,6 +2153,24 @@ function RoamExperience({ user }: { user: AuthUser }) {
                     aria-pressed={venueFilter === category}
                     onClick={() => setVenueFilter(category)}
                   >
+                    <span
+                      className="app-emoji category-emoji"
+                      aria-hidden="true"
+                    >
+                      {
+                        {
+                          all: "🌍",
+                          landmarks: "🏛️",
+                          cafe: "☕",
+                          gym: "🏋️",
+                          restaurant: "🍝",
+                          bar: "🍸",
+                          shop: "🛍️",
+                          culture: "🎨",
+                          beach: "🏖️",
+                        }[category]
+                      }
+                    </span>
                     {category === "all"
                       ? "All places"
                       : category === "landmarks"
@@ -2479,7 +2545,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
             <fieldset>
               <legend>What would you like to discover?</legend>
               <div className="segments interest-options">
-                {interests.map(({ id, name }) => (
+                {interests.map(({ id, name, emoji }) => (
                   <button
                     type="button"
                     key={id}
@@ -2493,6 +2559,9 @@ function RoamExperience({ user }: { user: AuthUser }) {
                       }))
                     }
                   >
+                    <span className="interest-emoji" aria-hidden="true">
+                      {emoji}
+                    </span>
                     {name}
                     {setup.interests?.includes(id) && <Check size={14} />}
                   </button>

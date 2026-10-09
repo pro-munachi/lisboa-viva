@@ -13,7 +13,6 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
-  Coffee,
   GlassWater,
   Heart,
   MapPin,
@@ -24,9 +23,6 @@ import {
   Send,
   Sparkles,
   Users,
-  Waves,
-  Dumbbell,
-  Landmark,
   Hand,
   Swords,
   Wallet,
@@ -90,12 +86,12 @@ export type ActivitiesPanelProps = {
   draftStore?: Record<string, ChatDraft>;
   onDraftChange?: (key: string, draft: ChatDraft) => void;
 };
-const icons = {
-  nightlife: Music,
-  coffee: Coffee,
-  outdoors: Waves,
-  culture: Landmark,
-  wellness: Dumbbell,
+const categoryEmoji: Record<ActivityCategory, string> = {
+  nightlife: "🎉",
+  coffee: "☕",
+  outdoors: "🏖️",
+  culture: "🎨",
+  wellness: "🧘",
 };
 const emptyDraft: ChatDraft = { body: "", attempt: null };
 const failure = (error: unknown) =>
@@ -413,20 +409,19 @@ export default function ActivitiesPanel(props: ActivitiesPanelProps) {
           >
             All plans
           </button>
-          {ACTIVITY_CATEGORIES.map((type) => {
-            const Icon = icons[type];
-            return (
-              <button
-                key={type}
-                type="button"
-                aria-pressed={category === type}
-                onClick={() => setCategory(type)}
-              >
-                <Icon size={15} />
-                {ACTIVITY_LABELS[type]}
-              </button>
-            );
-          })}
+          {ACTIVITY_CATEGORIES.map((type) => (
+            <button
+              key={type}
+              type="button"
+              aria-pressed={category === type}
+              onClick={() => setCategory(type)}
+            >
+              <span className={styles.filterEmoji} aria-hidden="true">
+                {categoryEmoji[type]}
+              </span>
+              {ACTIVITY_LABELS[type]}
+            </button>
+          ))}
         </div>
         {notice && (
           <p className={styles.notice} role="status">
@@ -443,7 +438,6 @@ export default function ActivitiesPanel(props: ActivitiesPanelProps) {
               const venue = catalogue.find(
                 (venue) => venue.id === activity.venueId,
               );
-              const Icon = icons[activity.category];
               const full =
                 activity.memberCount >= activity.capacity && !activity.joined;
               return (
@@ -454,7 +448,12 @@ export default function ActivitiesPanel(props: ActivitiesPanelProps) {
                 >
                   <div className={styles.cardTop}>
                     <span className={styles.categoryIcon}>
-                      <Icon size={26} />
+                      <span className={styles.categoryEmoji} aria-hidden="true">
+                        {categoryEmoji[activity.category]}
+                      </span>
+                      <span className={styles.hostBadge} aria-hidden="true">
+                        {Array.from(activity.host.handle)[0]?.toUpperCase()}
+                      </span>
                     </span>
                     <div>
                       <span>
@@ -1114,7 +1113,9 @@ function ActivityRoomView({
       {section === "plan" ? (
         <div className={styles.roomScroll}>
           <div className={styles.destination}>
-            <MapPin size={24} />
+            <span className={styles.destinationEmoji} aria-hidden="true">
+              {categoryEmoji[room.category]}
+            </span>
             <div>
               <span>MEET HERE</span>
               <h3>{venue?.name || "The group's mapped venue"}</h3>

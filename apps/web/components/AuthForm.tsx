@@ -8,6 +8,7 @@ import { authError, type AuthUser } from "../lib/auth";
 import AppearanceCustomizer from "./AppearanceCustomizer";
 import { DEFAULT_APPEARANCE } from "../lib/appearance";
 import { validNewHandle } from "../lib/handle";
+import ActivityGraphic from "./ActivityGraphic";
 
 type Mode = "login" | "register";
 
@@ -91,10 +92,13 @@ export default function AuthForm({ mode }: { mode: Mode }) {
           ROAM
           <span>Every city. Your story.</span>
         </Link>
+        <ActivityGraphic />
         <div className="auth-story-copy">
           <span className="eyebrow">FIRST CHAPTER · LISBON</span>
           <h1>
-            {registering ? "A city of possibilities." : "Your story continues."}
+            {registering
+              ? "New city. Find your people."
+              : "Your next little adventure."}
           </h1>
           <p>
             Explore Lisbon, our first playable city, at your own pace. Your
@@ -116,6 +120,9 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       </section>
       <section className="auth-panel">
         <div className="auth-card">
+          <Link className="auth-mobile-brand" href="/" aria-label="ROAM home">
+            ROAM<span>Every city. Your story.</span>
+          </Link>
           <span className="eyebrow">
             {registering ? "CREATE ACCOUNT" : "SIGN IN"}
           </span>

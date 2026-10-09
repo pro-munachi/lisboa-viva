@@ -3,25 +3,13 @@
   min-width: 0;
   overflow: hidden;
   border-radius: 20px;
-  background: radial-gradient(
-    ellipse at 50% 30%,
-    #fff 0%,
-    #edf2ff 49%,
-    #dae7ff 100%
-  );
-  border: 1px solid #d9e3fb;
+  background: linear-gradient(180deg, #fff 0%, #f7f8fa 100%);
+  border: 1px solid #e4e8ee;
   isolation: isolate;
+  font-family: var(--font-roam-app), sans-serif;
 }
 .studio::before {
-  content: "";
-  position: absolute;
-  height: 190px;
-  width: 190px;
-  background: #ff947e35;
-  border-radius: 50%;
-  right: -110px;
-  top: -80px;
-  z-index: -1;
+  content: none;
 }
 .badge {
   display: flex;
@@ -29,15 +17,15 @@
   align-items: center;
   gap: 7px;
   padding: 17px 10px 0;
-  color: #52668d;
+  color: #657080;
   font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 1.1px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
 }
 .badge span {
   width: 6px;
   height: 6px;
-  background: #277c60;
+  background: var(--roam-cobalt, #2456d8);
   border-radius: 50%;
 }
 .framing {
@@ -47,9 +35,9 @@
   max-width: 280px;
   margin: 12px auto 2px;
   padding: 4px;
-  border: 1px solid #ffffffc9;
-  border-radius: 16px;
-  background: #ffffff61;
+  border: 1px solid #e4e8ee;
+  border-radius: 999px;
+  background: #f4f6f8;
 }
 .framing button {
   display: flex;
@@ -59,22 +47,21 @@
   min-width: 0;
   min-height: 44px;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: 999px;
   background: transparent;
-  color: #54617a;
+  color: #657080;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   transition:
     background-color 120ms ease-out,
     color 120ms ease-out;
 }
 .framing button[aria-pressed="true"] {
-  background: #fffefa;
-  color: #2947c3;
-  box-shadow: 0 2px 8px #444b8112;
+  background: var(--roam-blue-soft, #eaf0ff);
+  color: var(--roam-cobalt-dark, #193faf);
 }
 .framing button:focus-visible {
-  outline: 3px solid #315ff2;
+  outline: 3px solid var(--roam-cobalt, #2456d8);
   outline-offset: 3px;
 }
 .framing button:disabled {
@@ -100,7 +87,7 @@
   display: grid;
   place-content: center;
   padding: 24px;
-  color: #52668d;
+  color: #657080;
   text-align: center;
   font-size: 12px;
   line-height: 1.6;
@@ -117,12 +104,12 @@
   min-height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
-  background: #ffffffd9;
-  border: 1px solid #d9e3fb;
-  color: #284679;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #e4e8ee;
+  color: #476189;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   transition:
     transform 130ms cubic-bezier(0.23, 1, 0.32, 1),
     background-color 130ms ease-out;
@@ -132,8 +119,8 @@
 }
 .controls button[aria-pressed="true"] {
   color: #fff;
-  background: #2659df;
-  border-color: #2659df;
+  background: var(--roam-cobalt, #2456d8);
+  border-color: var(--roam-cobalt, #2456d8);
 }
 .controls button:active {
   transform: scale(0.96);
@@ -142,12 +129,12 @@
   opacity: 0.45;
 }
 .controls button:focus-visible {
-  outline: 3px solid #315ff2;
+  outline: 3px solid var(--roam-cobalt, #2456d8);
   outline-offset: 3px;
 }
 .hint {
   margin: 10px 4px 14px;
-  color: #52668d;
+  color: #657080;
   text-align: center;
   font-size: 9px;
   line-height: 1.5;
@@ -155,25 +142,13 @@
 .wardrobe {
   border: 0;
   border-radius: 22px 22px 0 0;
-  background: radial-gradient(
-    ellipse at 50% 36%,
-    #faf7ff 0%,
-    #e9eafa 53%,
-    #d9e5f3 100%
-  );
-}
-.wardrobe::before {
-  width: 190px;
-  height: 190px;
-  right: -90px;
-  top: -130px;
-  background: #d7ee8399;
+  background: linear-gradient(180deg, #fff 0%, #f7f8fa 100%);
 }
 .wardrobe .badge {
   padding-top: 19px;
-  color: #566285;
+  color: #657080;
   font-size: 10px;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.8px;
 }
 .wardrobe .viewport {
   height: clamp(260px, calc(100svh - 480px), 390px);
@@ -185,11 +160,10 @@
 .wardrobe .controls button {
   width: 46px;
   height: 46px;
-  border-color: #ffffff;
+  border-color: #e4e8ee;
   border-radius: 50%;
-  background: #ffffffbf;
-  color: #344e7c;
-  box-shadow: 0 2px 6px #344a3010;
+  background: #fff;
+  color: #476189;
 }
 .wardrobe .controls .front {
   width: auto;
@@ -199,12 +173,12 @@
 }
 .wardrobe .controls button[aria-pressed="true"] {
   color: #fff;
-  background: #3156df;
-  border-color: #3156df;
+  background: var(--roam-cobalt, #2456d8);
+  border-color: var(--roam-cobalt, #2456d8);
 }
 .wardrobe .hint {
   margin: 12px 8px 16px;
-  color: #586585;
+  color: #657080;
   font-size: 10px;
 }
 @media (max-width: 600px) {

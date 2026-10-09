@@ -1,7 +1,7 @@
 .panel {
-  --ink: #193342;
-  --muted: #637783;
-  --blue: #345de3;
+  --ink: #243246;
+  --muted: #657185;
+  --blue: #2456d8;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -11,8 +11,8 @@
   min-height: 0;
   overflow: hidden;
   color: var(--ink);
-  background: #f6f8fc;
-  font-family: var(--font-body), sans-serif;
+  background: #ffffff;
+  font-family: var(--font-roam-app), Arial, sans-serif;
 }
 .panel :is(button, input, select, textarea) {
   font: inherit;
@@ -23,10 +23,10 @@
   justify-content: center;
   gap: 8px;
   min-height: 44px;
-  border: 0;
-  border-radius: 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 600;
   cursor: pointer;
 }
 .panel button:disabled {
@@ -68,16 +68,16 @@
 .formHeader span,
 .destination span {
   font-size: 9px;
-  font-weight: 850;
+  font-weight: 650;
   letter-spacing: 0.11em;
   color: var(--blue);
 }
 .hero h2 {
   margin-top: 7px;
-  font-family: var(--font-display), sans-serif;
-  font-size: 29px;
-  line-height: 1.08;
-  letter-spacing: -0.055em;
+  font-family: var(--font-roam-app), Arial, sans-serif;
+  font-size: 23px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
 }
 .hero p {
   margin-top: 9px;
@@ -93,11 +93,12 @@
   gap: 6px;
   width: max-content;
   padding: 8px 10px;
-  border-radius: 10px;
-  background: #dcf4e9;
-  color: #215846;
+  border: 1px solid #e7ebf1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #657185;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 650;
   white-space: nowrap;
 }
 .feedTools {
@@ -108,7 +109,7 @@
   width: 100%;
   background: var(--blue);
   color: #fff;
-  box-shadow: 0 4px 10px #345de319;
+  box-shadow: 0 3px 9px #2456d80d;
 }
 .panel .primary {
   min-height: 48px;
@@ -116,8 +117,10 @@
 .iconButton {
   flex-shrink: 0;
   width: 44px;
-  color: var(--ink);
-  background: #eaf0f7;
+  color: var(--blue);
+  border-color: #e0e8f8;
+  border-radius: 50%;
+  background: #f1f5ff;
 }
 .feedTools .primary {
   flex: 1;
@@ -133,42 +136,56 @@
   flex-shrink: 0;
   padding: 0 12px;
   background: #fff;
-  color: #6b7d8b;
-  font-size: 11px;
+  border-color: #e7ebf1;
+  color: var(--muted);
+  font-size: 12px;
 }
 .filters button[aria-pressed="true"] {
-  color: #fff;
-  background: #203946;
+  color: var(--blue);
+  border-color: #c4d4fa;
+  background: #edf3ff;
+}
+.filterEmoji,
+.categoryEmoji,
+.destinationEmoji {
+  font-family:
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1;
+}
+.filterEmoji {
+  font-size: 20px;
 }
 .cards {
   display: grid;
   gap: 14px;
 }
 .card {
-  --accent: #bf6ba9;
-  --wash: #f5e9f2;
+  --accent: #9374b5;
+  --wash: #f3effb;
   overflow: hidden;
   padding: 17px 15px 0;
-  border: 1px solid #e4e9ef;
+  border: 1px solid #e7ebf1;
   border-radius: 19px;
   background: #fff;
-  box-shadow: 0 3px 10px #19334204;
+  box-shadow: 0 4px 16px #24324608;
 }
 .card[data-category="coffee"] {
-  --accent: #b77641;
-  --wash: #f9eee3;
+  --accent: #9b754d;
+  --wash: #fcf3e6;
 }
 .card[data-category="outdoors"] {
-  --accent: #25866e;
-  --wash: #e2f3eb;
+  --accent: #638775;
+  --wash: #edf7f2;
 }
 .card[data-category="culture"] {
-  --accent: #345de3;
-  --wash: #e8edff;
+  --accent: #2456d8;
+  --wash: #edf3ff;
 }
 .card[data-category="wellness"] {
-  --accent: #e16c60;
-  --wash: #ffebe5;
+  --accent: #ae7768;
+  --wash: #fff0ec;
 }
 .cardTop {
   display: flex;
@@ -176,21 +193,42 @@
   align-items: center;
 }
 .categoryIcon {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
   background: var(--wash);
+  box-shadow: 0 4px 12px #24324605;
   color: var(--accent);
   flex-shrink: 0;
+}
+.categoryEmoji {
+  font-size: 29px;
+}
+.hostBadge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #edf3ff;
+  color: #2456d8;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 2px 5px #24324612;
 }
 .cardTop > div {
   min-width: 0;
 }
 .cardTop > div > span {
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 650;
   color: var(--accent);
 }
 .cardTop h3 {
@@ -223,7 +261,7 @@
   margin-top: 13px;
   font-size: 10px;
   font-weight: 650;
-  color: #627b89;
+  color: var(--muted);
 }
 .cardFacts span {
   display: flex;
@@ -287,7 +325,7 @@
   margin: 12px 0 !important;
   padding: 11px 12px;
   border-radius: 12px;
-  background: #def3e9;
+  background: #edf7f2;
   font-size: 12px;
   line-height: 1.5;
   color: #285d49;
@@ -315,7 +353,7 @@
   min-height: 44px;
   background: transparent;
   color: #943c3c;
-  font-weight: 800;
+  font-weight: 650;
   font-size: 11px;
 }
 .formHeader {
@@ -326,9 +364,9 @@
 }
 .formHeader h2 {
   margin-top: 3px;
-  font-family: var(--font-display), sans-serif;
-  font-size: 25px;
-  letter-spacing: -0.04em;
+  font-family: var(--font-roam-app), Arial, sans-serif;
+  font-size: 23px;
+  letter-spacing: -0.025em;
 }
 .createForm fieldset {
   display: grid;
@@ -344,7 +382,7 @@
   gap: 8px;
   min-width: 0;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
 }
 .createForm :is(input, select),
 .targetLabel select {
@@ -354,8 +392,8 @@
   padding: 10px 12px;
   color: var(--ink);
   background: #fff;
-  border: 1px solid #dbe3ec;
-  border-radius: 12px;
+  border: 1px solid #e7ebf1;
+  border-radius: 15px;
   font-size: 14px;
 }
 .createForm label small {
@@ -369,17 +407,18 @@
   grid-template-columns: 1fr 1fr;
   gap: 6px;
   padding: 4px;
-  border-radius: 15px;
-  background: #e7edf6;
+  border-radius: 999px;
+  background: #f5f7fa;
 }
 .when button {
   color: var(--muted);
   background: transparent;
 }
 .when button[aria-pressed="true"] {
-  background: #fff;
+  background: #edf3ff;
+  border-color: #c4d4fa;
   color: var(--blue);
-  box-shadow: 0 2px 5px #19334208;
+  box-shadow: none;
 }
 .back {
   padding: 0 12px;
@@ -401,7 +440,7 @@
 }
 .roomHeader > div > span {
   font-size: 9px;
-  font-weight: 750;
+  font-weight: 600;
   color: var(--muted);
 }
 .roomHeader h2 {
@@ -429,11 +468,13 @@
   gap: 5px;
   font-size: 11px;
   color: var(--muted);
-  background: #f3f6fa;
+  border-color: #e7ebf1;
+  background: #ffffff;
 }
 .roomTabs button[aria-pressed="true"] {
-  color: #fff;
-  background: var(--blue);
+  color: var(--blue);
+  border-color: #c4d4fa;
+  background: #edf3ff;
 }
 .tabBadge {
   display: inline-flex;
@@ -461,8 +502,20 @@
   padding: 16px 14px;
   margin-bottom: 15px;
   color: var(--blue);
-  background: #e8eeff;
-  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e7ebf1;
+  border-radius: 18px;
+  box-shadow: 0 4px 16px #24324606;
+}
+.destinationEmoji {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #edf3ff;
+  font-size: 27px;
 }
 .destination h3 {
   margin-top: 4px;
@@ -509,15 +562,15 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #ccefe0;
+  background: #edf7f2;
   color: #256549;
   font-style: normal;
-  font-weight: 850;
+  font-weight: 650;
 }
 .members small {
   color: var(--blue);
   font-size: 8px;
-  font-weight: 800;
+  font-weight: 650;
 }
 .optIn {
   display: flex;
@@ -527,6 +580,7 @@
   padding: 14px;
   margin-top: 22px;
   border-radius: 15px;
+  border: 1px solid #e7ebf1;
   background: #fff;
   cursor: pointer;
 }
@@ -558,7 +612,7 @@
   margin-top: 16px;
   padding: 14px;
   border-radius: 13px;
-  background: #ffebe5;
+  background: #fff4ef;
 }
 .leaveConfirm p {
   margin-bottom: 9px;
@@ -592,8 +646,17 @@
   gap: 8px;
   min-height: 105px;
   padding: 15px 6px;
-  color: #8b5a37;
-  background: #fff0de;
+  color: #8b6d4e;
+  border-color: #e7ebf1;
+  border-radius: 18px;
+  background: #ffffff;
+}
+.drinks button > svg {
+  width: 38px;
+  height: 38px;
+  padding: 9px;
+  border-radius: 50%;
+  background: #fcf3e6;
 }
 .drinks strong {
   font-size: 12px;
@@ -608,7 +671,8 @@
   margin-top: 12px;
   padding: 0 13px;
   color: var(--blue);
-  background: #e5ecff;
+  background: #edf3ff;
+  border-color: #dce6fb;
 }
 .friendly small {
   margin-left: auto;
@@ -626,14 +690,14 @@
 }
 .friendlyActions button {
   color: #28745b;
-  background: #def3e9;
+  background: #edf7f2;
 }
 .invitation {
   margin-top: 12px;
   padding: 14px;
-  border: 1px solid #f7d493;
+  border: 1px solid #f2e4c9;
   border-radius: 15px;
-  background: #fff4dc;
+  background: #fffaef;
 }
 .invitation strong {
   font-size: 12px;
@@ -663,7 +727,8 @@
   align-items: flex-start;
   gap: 9px;
   padding: 11px 12px;
-  border-radius: 11px;
+  border: 1px solid #e7ebf1;
+  border-radius: 14px;
   background: #fff;
   font-size: 11px;
   line-height: 1.5;
@@ -700,14 +765,14 @@
   width: fit-content;
   max-width: 92%;
   padding: 10px 12px;
-  border-radius: 13px 13px 13px 3px;
+  border-radius: 17px 17px 17px 4px;
   background: #fff;
   border: 1px solid #e4eaf0;
 }
 .message[data-own="true"] {
   align-self: flex-end;
-  border-radius: 13px 13px 3px 13px;
-  background: #e7edff;
+  border-radius: 17px 17px 4px 17px;
+  background: #edf3ff;
   border-color: #d9e2ff;
 }
 .message header {
@@ -746,7 +811,7 @@
 }
 .composerLabel label {
   color: var(--ink);
-  font-weight: 750;
+  font-weight: 600;
 }
 .composer textarea {
   display: block;
@@ -755,9 +820,9 @@
   max-height: 110px;
   resize: vertical;
   padding: 10px 12px;
-  border: 1px solid #dce3ec;
-  border-radius: 12px;
-  background: #f6f8fc;
+  border: 1px solid #e7ebf1;
+  border-radius: 17px;
+  background: #fbfcfe;
   color: var(--ink);
   font-size: 13px;
 }
@@ -881,9 +946,9 @@
   gap: 8px;
   margin-top: 12px;
   padding: 13px;
-  border: 1px solid #f1dbad;
+  border: 1px solid #f2e4c9;
   border-radius: 13px;
-  background: #fff6df;
+  background: #fffaef;
 }
 .savedRequest strong {
   flex: 1 1 150px;

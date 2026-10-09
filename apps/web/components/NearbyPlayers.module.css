@@ -4,17 +4,18 @@
   left: 30px;
   bottom: 104px;
   width: min(274px, calc(100% - 40px));
-  color: var(--ink, #213052);
+  color: #243246;
+  font-family: var(--font-roam-app), Arial, sans-serif;
 }
 .dockBar {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 7px;
-  border: 1px solid #ffffff;
+  border: 1px solid #e7ebf1;
   border-radius: 18px;
-  background: #fffefbf2;
-  box-shadow: 0 8px 30px #21305226;
+  background: #fffffff5;
+  box-shadow: 0 5px 20px #24324612;
   backdrop-filter: blur(12px);
 }
 .findButton {
@@ -26,7 +27,7 @@
   min-width: 0;
   padding: 6px 7px;
   border-radius: 12px;
-  color: #213052;
+  color: #243246;
   background: transparent;
   text-align: left;
 }
@@ -42,7 +43,7 @@
 .findButton small {
   display: block;
   margin-top: 3px;
-  color: #69748a;
+  color: #657185;
   font-size: 9px;
 }
 .findButton small[data-status="online"] {
@@ -55,13 +56,14 @@
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  background: #eaf0ff;
+  border-radius: 50%;
+  border: 1px solid #e0e8f8;
+  background: #edf3ff;
   color: #2456d8;
 }
 .visibility[aria-pressed="false"] {
   background: #eef0f4;
-  color: #69748a;
+  color: #657185;
 }
 .arrival {
   position: absolute;
@@ -72,10 +74,10 @@
   gap: 2px;
   width: min(326px, calc(100vw - 40px));
   padding: 7px;
-  border: 1px solid #ffffff;
+  border: 1px solid #e7ebf1;
   border-radius: 17px;
-  background: #fffefb;
-  box-shadow: 0 10px 36px #21305233;
+  background: #ffffff;
+  box-shadow: 0 6px 24px #24324618;
 }
 .arrivalPlayer {
   display: flex;
@@ -86,7 +88,7 @@
   min-width: 0;
   padding: 5px;
   border-radius: 11px;
-  color: #213052;
+  color: #243246;
   background: transparent;
   text-align: left;
 }
@@ -99,9 +101,9 @@
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 13px;
-  background: #d7ee83;
-  color: #213052;
+  border-radius: 50%;
+  background: #edf7f2;
+  color: #243246;
 }
 .arrivalPlayer strong {
   display: block;
@@ -114,7 +116,7 @@
   align-items: center;
   gap: 4px;
   margin-top: 4px;
-  color: #616c80;
+  color: #657185;
   font-size: 10px;
   line-height: 1.4;
 }
@@ -123,7 +125,7 @@
 }
 .dismiss {
   background: transparent;
-  color: #616c80;
+  color: #657185;
 }
 .directory {
   width: min(660px, calc(100vw - 36px));
@@ -132,11 +134,12 @@
   margin: auto;
   padding: 0;
   overflow: hidden;
-  border: 1px solid #ffffff;
+  border: 1px solid #e7ebf1;
   border-radius: 24px;
-  background: #fffefb;
-  color: #213052;
-  box-shadow: 0 20px 90px #10244966;
+  background: #ffffff;
+  color: #243246;
+  font-family: var(--font-roam-app), Arial, sans-serif;
+  box-shadow: 0 18px 70px #24324626;
 }
 .directory::backdrop {
   background: #10244966;
@@ -154,8 +157,9 @@
   align-items: center;
   gap: 13px;
   padding: 22px;
-  background: #2456d8;
-  color: #fff;
+  background: #ffffff;
+  border-bottom: 1px solid #edf0f5;
+  color: #243246;
 }
 .headerSymbol {
   display: grid;
@@ -163,25 +167,25 @@
   place-items: center;
   width: 52px;
   height: 52px;
-  border-radius: 17px;
-  background: #d7ee83;
-  color: #213052;
+  border-radius: 50%;
+  background: #edf3ff;
+  color: #243246;
 }
 .header > div:nth-child(2) {
   flex: 1;
   min-width: 0;
 }
 .header > div > span {
-  color: #e7edff;
+  color: #657185;
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 1.2px;
 }
 .header h2 {
   margin: 5px 0 0;
-  font-size: 28px;
+  font-size: 23px;
   font-weight: 600;
-  letter-spacing: -0.8px;
+  letter-spacing: -0.5px;
 }
 .close {
   display: grid;
@@ -189,9 +193,9 @@
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  color: #fff;
-  background: #ffffff17;
+  border-radius: 50%;
+  color: #657185;
+  background: #f5f7fa;
 }
 .directoryIntro {
   flex-shrink: 0;
@@ -199,13 +203,13 @@
   border-bottom: 1px solid #e2e7f0;
 }
 .directoryIntro strong {
-  color: #213052;
+  color: #243246;
   font-size: 15px;
 }
 .directoryIntro p {
   max-width: 500px;
   margin-top: 6px;
-  color: #616c80;
+  color: #657185;
   font-size: 11px;
   line-height: 1.6;
 }
@@ -234,13 +238,14 @@
   padding: 16px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: #f6f8fc;
+  background: #ffffff;
 }
 .loadMore {
   grid-column: 1 / -1;
   min-height: 44px;
-  border-radius: 12px;
-  background: #eaf0ff;
+  border-radius: 50%;
+  border: 1px solid #e0e8f8;
+  background: #edf3ff;
   color: #2456d8;
   font-weight: 600;
 }
@@ -250,9 +255,10 @@
 .playerCard {
   min-width: 0;
   padding: 14px;
-  border: 1px solid #e0e6f2;
+  border: 1px solid #e7ebf1;
   border-radius: 17px;
-  background: #fffefb;
+  background: #ffffff;
+  box-shadow: 0 2px 8px #24324604;
 }
 .playerIdentity {
   display: flex;
@@ -265,16 +271,16 @@
   place-items: center;
   width: 48px;
   height: 48px;
-  border-radius: 15px;
+  border-radius: 50%;
 }
 .playerAvatar > span {
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 11px;
+  border-radius: 50%;
   background: #ffffffed;
-  color: #213052;
+  color: #243246;
   font-size: 19px;
   font-weight: 600;
 }
@@ -289,7 +295,7 @@
   margin-top: -10px;
   padding: 10px 0 4px;
   overflow: hidden;
-  color: #193faf;
+  color: #2456d8;
   background: transparent;
   font-size: 14px;
   font-weight: 600;
@@ -300,7 +306,7 @@
 .playerIdentity > div > span {
   display: block;
   margin-top: -3px;
-  color: #616c80;
+  color: #657185;
   font-size: 10px;
   line-height: 1.45;
 }
@@ -311,9 +317,10 @@
   min-height: 63px;
   margin-block: 11px;
   padding: 10px;
-  border-radius: 11px;
-  background: #edf7ef;
-  color: #347458;
+  border: 1px solid #e7ebf1;
+  border-radius: 14px;
+  background: #fbfcfe;
+  color: #657185;
 }
 .placeLine > svg {
   flex-shrink: 0;
@@ -346,17 +353,19 @@
   min-height: 44px;
   min-width: 0;
   padding: 8px;
-  border-radius: 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
   font-size: 11px;
   font-weight: 600;
 }
 .messageButton {
-  background: #eaf0ff;
-  color: #193faf;
+  background: #2456d8;
+  color: #ffffff;
 }
 .joinButton {
-  background: #d7ee83;
-  color: #213052;
+  background: #edf3ff;
+  border-color: #dce6fb;
+  color: #2456d8;
 }
 .empty {
   display: grid;
@@ -372,9 +381,9 @@
   width: 68px;
   height: 68px;
   margin-bottom: 2px;
-  border-radius: 23px;
-  background: #d7ee83;
-  color: #213052;
+  border-radius: 50%;
+  background: #edf7f2;
+  color: #243246;
 }
 .empty strong {
   font-size: 19px;
@@ -382,7 +391,7 @@
 }
 .empty p {
   max-width: 340px;
-  color: #616c80;
+  color: #657185;
   font-size: 12px;
   line-height: 1.65;
 }
@@ -394,7 +403,7 @@
   margin: 0;
   padding: 12px 22px;
   border-top: 1px solid #e2e7f0;
-  color: #616c80;
+  color: #657185;
   font-size: 10px;
   line-height: 1.5;
 }
@@ -420,7 +429,7 @@
   transform: none;
 }
 .close:focus-visible {
-  outline-color: #d7ee83 !important;
+  outline-color: #2456d8;
 }
 @media (hover: hover) and (pointer: fine) {
   .findButton:hover,
@@ -452,10 +461,10 @@
     width: auto;
     min-height: 60px;
     padding: 7px;
-    border: 1px solid #ffffff;
+    border: 1px solid #e7ebf1;
     border-radius: 18px;
-    background: #fffefbf2;
-    box-shadow: 0 8px 30px #21305226;
+    background: #fffffff5;
+    box-shadow: 0 5px 20px #24324612;
     backdrop-filter: blur(12px);
   }
   .dock[data-inside="true"] .dockBar {
@@ -515,7 +524,7 @@
     padding: 18px;
   }
   .header h2 {
-    font-size: 25px;
+    font-size: 23px;
   }
   .directoryIntro {
     padding: 14px 18px;

@@ -124,7 +124,9 @@ export default function MultiplayerDock({
           }}
           aria-haspopup="dialog"
         >
-          <Users size={19} />
+          <span className="app-emoji action-emoji" aria-hidden="true">
+            🧑‍🤝‍🧑
+          </span>
           <span>
             <strong>Find nearby players</strong>
             <small data-status={status}>{state}</small>

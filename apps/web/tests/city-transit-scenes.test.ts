@@ -76,14 +76,14 @@ test("three transit scenes are original detailed finite builds with nine real cl
       assert.equal(floors, 1);
       assert.ok(
         meshes <= 120,
-        `${kind} ${meshes} draw calls including two residents`,
+        `${kind} ${meshes} draw calls including three simulated residents`,
       );
       assert.ok(
         triangles >= 5000 && triangles < 40000,
         `${kind} ${triangles} triangles`,
       );
       assert.deepEqual([...clickable].sort(), [...expected[kind]].sort());
-      assert.equal(room.residents.length, 2);
+      assert.equal(room.residents.length, 3);
       assert.ok(
         room.residents.every(
           (actor: any) => actor.userData.rig && actor.userData.npc.simulated,

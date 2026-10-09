@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Sparkles } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { Setup } from "../lib/engine";
 import type { PlaceId } from "../lib/content";
 import {
@@ -8,6 +8,18 @@ import {
   type RecommendationResult,
 } from "../lib/recommendations";
 import styles from "./TripRecommendations.module.css";
+
+const chapterGraphics: Record<PlaceId, string> = {
+  home: "🏡",
+  exchange: "🎨",
+  cafe: "☕️",
+  viewpoint: "🌅",
+  riverside: "🌊",
+  music: "🎶",
+  cais: "🛍️",
+  benfica: "🏘️",
+  sintra: "🏰",
+};
 
 export default function TripRecommendations({
   setup,
@@ -71,7 +83,9 @@ export default function TripRecommendations({
           </h3>
         </div>
         <button type="button" onClick={refresh} disabled={busy}>
-          <Sparkles size={15} />
+          <span className={styles.actionGraphic} aria-hidden="true">
+            ✨
+          </span>
           {busy ? "Finding your rhythm…" : "Ask AI for suggestions"}
         </button>
       </header>
@@ -82,11 +96,14 @@ export default function TripRecommendations({
             key={item.place}
             onClick={() => onChoose(item.place)}
           >
+            <span className={styles.itemGraphic} aria-hidden="true">
+              {chapterGraphics[item.place]}
+            </span>
             <strong>
               {item.title}
-              <ArrowUpRight size={15} />
+              <ArrowUpRight size={15} aria-hidden="true" />
             </strong>
-            <span>{item.detail}</span>
+            <span className={styles.itemDetail}>{item.detail}</span>
           </button>
         ))}
       </div>

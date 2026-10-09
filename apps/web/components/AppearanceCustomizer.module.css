@@ -4,22 +4,23 @@
   width: 100%;
   margin: 0;
   padding: 16px;
-  border: 1px solid #c9d6ef;
+  border: 1px solid #e4e8ee;
   border-radius: 22px;
-  background: #fffefb;
-  color: #23314d;
+  background: #ffffff;
+  color: #213052;
+  font-family: var(--font-roam-app), sans-serif;
 }
 .legend {
   padding: 0 7px;
-  font-family: var(--font-display, inherit);
-  font-size: 21px;
-  font-weight: 700;
+  font-family: inherit;
+  font-size: 23px;
+  font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.55px;
 }
 .intro {
   margin: 0 0 14px;
-  color: #66718a;
+  color: #657080;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -41,29 +42,28 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 62px;
+  min-height: 56px;
   min-width: 0;
   padding: 10px 13px;
-  border: 1px solid #ccd8ef;
-  border-radius: 13px;
-  background: #f0f4fd;
-  color: #4d6190;
+  border: 1px solid #e4e8ee;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #657080;
 }
 .bodySelector button[aria-pressed="true"] {
-  border-color: #3156df;
+  border-color: #bfd0f5;
   background: #eaf0ff;
-  box-shadow: inset 0 0 0 1px #3156df;
-  color: #2649bd;
+  color: var(--roam-cobalt-dark, #193faf);
 }
 .bodySelector strong {
   flex: 1;
   text-align: left;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .bodySelector button[aria-pressed="true"] .choiceCheck {
-  border-color: #3156df;
-  background: #3156df;
+  border-color: var(--roam-cobalt, #2456d8);
+  background: var(--roam-cobalt, #2456d8);
 }
 .bodyIcon {
   width: 24px;
@@ -74,17 +74,17 @@
 .previewFrame {
   min-height: 260px;
   overflow: hidden;
-  border: 1px solid #c9e4db;
+  border: 1px solid #e4e8ee;
   border-radius: 17px;
-  background: #e7f5ee;
+  background: #f8f9fb;
 }
 .chosenLook {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 13px;
-  border-top: 1px solid #cddced;
-  background: #eef3ff;
+  border-top: 1px solid #e4e8ee;
+  background: #f8f9fb;
 }
 .lookMark {
   display: grid;
@@ -105,18 +105,18 @@
   margin-bottom: 4px;
   color: #4564b1;
   font-size: 8px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 1px;
 }
 .chosenLook strong {
   display: block;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.35;
 }
 .chosenLook p {
   margin: 3px 0 0;
-  color: #5d6c88;
+  color: #657080;
   font-size: 10px;
   line-height: 1.45;
 }
@@ -126,7 +126,7 @@
   height: 24px;
   border: 3px solid #fff;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px #cdd6e7;
+  box-shadow: 0 0 0 1px #e4e8ee;
 }
 .sections {
   display: grid;
@@ -134,9 +134,9 @@
   gap: 4px;
   margin: 0 0 14px;
   padding: 4px;
-  border: 1px solid #dce3f2;
-  border-radius: 14px;
-  background: #edf1f8;
+  border: 1px solid #e4e8ee;
+  border-radius: 999px;
+  background: #f4f6f8;
 }
 .sections button {
   display: flex;
@@ -146,25 +146,26 @@
   min-width: 0;
   min-height: 44px;
   padding: 8px 5px;
-  border-radius: 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
   background: transparent;
-  color: #52617c;
+  color: #657080;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .sections button[aria-pressed="true"] {
-  background: #3156df;
-  color: #fff;
-  box-shadow: 0 2px 4px #2540ae24;
+  border-color: #bfd0f5;
+  background: var(--roam-blue-soft, #eaf0ff);
+  color: var(--roam-cobalt-dark, #193faf);
 }
 .choices {
   min-width: 0;
 }
 .choices h3 {
   margin: 0 0 12px;
-  font-family: var(--font-display, inherit);
+  font-family: inherit;
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
 }
 .styleGrid {
@@ -180,16 +181,15 @@
   min-height: 72px;
   min-width: 0;
   padding: 12px;
-  border: 1px solid #dce3ee;
-  border-radius: 13px;
+  border: 1px solid #e4e8ee;
+  border-radius: 16px;
   background: #fff;
-  color: #23314d;
+  color: #213052;
   text-align: left;
 }
 .styleChoice[aria-pressed="true"] {
-  border-color: #3156df;
+  border-color: #bfd0f5;
   background: #eaf0ff;
-  box-shadow: inset 0 0 0 1px #3156df;
 }
 .choiceText {
   min-width: 0;
@@ -197,13 +197,13 @@
 .choiceText strong {
   display: block;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.4;
 }
 .choiceText > span {
   display: block;
   margin-top: 3px;
-  color: #64738e;
+  color: #657080;
   font-size: 10px;
   line-height: 1.45;
 }
@@ -213,18 +213,18 @@
   place-items: center;
   width: 22px;
   height: 22px;
-  border: 1px solid #d3dced;
+  border: 1px solid #d8dfe9;
   border-radius: 50%;
-  background: #f4f6fa;
+  background: #f4f6f8;
   color: #fff;
 }
 .styleChoice[aria-pressed="true"] .choiceCheck {
-  border-color: #3156df;
-  background: #3156df;
+  border-color: var(--roam-cobalt, #2456d8);
+  background: var(--roam-cobalt, #2456d8);
 }
 .shortcutLabel {
   margin: 16px 0 8px;
-  color: #64738e;
+  color: #657080;
   font-size: 11px;
   font-weight: 600;
 }
@@ -240,10 +240,10 @@
   min-width: 0;
   min-height: 60px;
   padding: 8px;
-  border: 1px solid #d5e6de;
+  border: 1px solid #e4e8ee;
   border-radius: 11px;
-  background: #edf8f2;
-  color: #284743;
+  background: #ffffff;
+  color: #213052;
   text-align: left;
 }
 .shortcutDisc {
@@ -252,7 +252,7 @@
   height: 18px;
   border: 2px solid #fff;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px #ccdcd4;
+  box-shadow: 0 0 0 1px #e4e8ee;
 }
 .colourShortcuts button > span:nth-child(2) {
   flex: 1;
@@ -261,13 +261,13 @@
 .colourShortcuts strong {
   display: block;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .colourShortcuts button > span > span {
   display: block;
   margin-top: 3px;
   overflow-wrap: anywhere;
-  color: #54716a;
+  color: #657080;
   font-size: 9px;
 }
 .colourShortcuts svg {
@@ -285,10 +285,10 @@
   line-height: 1.5;
 }
 .paletteHeading strong {
-  font-weight: 700;
+  font-weight: 600;
 }
 .paletteHeading > span {
-  color: #5f6d88;
+  color: #657080;
 }
 .swatchGrid {
   display: grid;
@@ -303,20 +303,19 @@
   min-width: 44px;
   min-height: 76px;
   padding: 7px 3px;
-  border: 1px solid #dce3ee;
+  border: 1px solid #e4e8ee;
   border-radius: 11px;
   background: #fff;
-  color: #51617d;
+  color: #657080;
   font-size: 9px;
   font-weight: 600;
   line-height: 1.35;
   text-align: center;
 }
 .swatch[aria-pressed="true"] {
-  border-color: #3156df;
+  border-color: #bfd0f5;
   background: #eaf0ff;
-  box-shadow: inset 0 0 0 1px #3156df;
-  color: #203fab;
+  color: var(--roam-cobalt-dark, #193faf);
 }
 .colourDisc {
   position: relative;
@@ -338,45 +337,46 @@
   height: 19px;
   border: 2px solid #fff;
   border-radius: 50%;
-  background: #3156df;
+  background: var(--roam-cobalt, #2456d8);
   color: #fff;
 }
 .partPicker {
   display: grid;
   gap: 8px;
-  color: #52617c;
+  color: #657080;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .partPicker select {
   display: block;
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid #cdd7ec;
+  border: 1px solid #d8dfe9;
   border-radius: 11px;
   background: #fff;
-  color: #23314d;
+  color: #213052;
   font: inherit;
   font-size: 13px;
 }
 .paletteHint {
   margin: 14px 0 0;
-  color: #64738e;
+  color: #657080;
   font-size: 11px;
   line-height: 1.5;
 }
 .customizer button {
   transition:
     background-color 120ms ease,
-    border-color 120ms ease;
+    border-color 120ms ease,
+    transform 130ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .customizer button:active:not(:disabled) {
   transform: scale(0.97);
 }
 .customizer button:focus-visible,
 .customizer select:focus-visible {
-  outline: 3px solid #3156df;
+  outline: 3px solid var(--roam-cobalt, #2456d8);
   outline-offset: 3px;
   transition: none;
 }
@@ -411,15 +411,15 @@
 }
 .customizer[data-variant="wardrobe"] .previewFrame {
   grid-area: preview;
-  border: 0;
+  border: 1px solid #e4e8ee;
   border-radius: 22px;
-  background: #e7eafa;
+  background: #f8f9fb;
 }
 .customizer[data-variant="wardrobe"] .chosenLook {
   gap: 12px;
   padding: 18px;
-  border-top: 0;
-  background: #e2e7f6;
+  border-top: 1px solid #e4e8ee;
+  background: #f4f6f8;
 }
 .customizer[data-variant="wardrobe"] .lookMark,
 .customizer[data-variant="wardrobe"] .lookColour {
@@ -445,13 +445,12 @@
   min-height: 48px;
   gap: 10px;
   padding: 7px 13px;
-  border-color: transparent;
-  background: #e9edf6;
+  border-color: #e4e8ee;
+  background: #ffffff;
 }
 .customizer[data-variant="wardrobe"] .bodySelector button[aria-pressed="true"] {
-  border-color: #3156df;
+  border-color: #bfd0f5;
   background: #eaf0ff;
-  box-shadow: inset 0 0 0 1px #3156df;
 }
 .customizer[data-variant="wardrobe"] .bodyIcon {
   width: 21px;
@@ -469,16 +468,16 @@
 .customizer[data-variant="wardrobe"] .sections button {
   min-height: 48px;
   gap: 8px;
-  border-radius: 12px;
-  background: #edf1f8;
-  font-size: 14px;
+  border-radius: 999px;
+  background: #f4f6f8;
+  font-size: 13px;
 }
 .customizer[data-variant="wardrobe"] .sections button[aria-pressed="true"] {
-  background: #3156df;
+  background: var(--roam-blue-soft, #eaf0ff);
 }
 .customizer[data-variant="wardrobe"] .choices h3 {
   margin-bottom: 14px;
-  font-size: 21px;
+  font-size: 20px;
   letter-spacing: -0.5px;
 }
 .customizer[data-variant="wardrobe"] .choices {
@@ -495,22 +494,22 @@
   min-height: 72px;
   gap: 12px;
   padding: 12px;
-  border-color: #d6ddeb;
+  border-color: #e4e8ee;
   border-radius: 14px;
-  background: #fafbfe;
+  background: #ffffff;
 }
 .customizer[data-variant="wardrobe"] .styleChoice[aria-pressed="true"] {
-  border-color: #3156df;
+  border-color: #bfd0f5;
   background: #eaf0ff;
 }
 .customizer[data-variant="wardrobe"] .choiceText {
   flex: 1;
 }
 .customizer[data-variant="wardrobe"] .choiceText strong {
-  font-size: 15px;
+  font-size: 14px;
 }
 .customizer[data-variant="wardrobe"] .choiceText > span {
-  color: #576780;
+  color: #657080;
   font-size: 12px;
 }
 .choiceGlyph {
@@ -520,12 +519,12 @@
   width: 39px;
   height: 39px;
   border-radius: 11px;
-  background: #e3eee8;
-  color: #3c7264;
+  background: #edf5ef;
+  color: #557860;
 }
 .styleChoice[aria-pressed="true"] .choiceGlyph {
   background: #d4dfff;
-  color: #3156df;
+  color: var(--roam-cobalt, #2456d8);
 }
 .customizer[data-variant="wardrobe"] .shortcutLabel {
   margin-top: 20px;
@@ -533,7 +532,7 @@
 }
 .customizer[data-variant="wardrobe"] .colourShortcuts button {
   min-height: 65px;
-  border: 0;
+  border: 1px solid #e4e8ee;
   border-radius: 12px;
 }
 .customizer[data-variant="wardrobe"] .colourShortcuts strong {
@@ -608,15 +607,15 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .sections button:not([aria-pressed="true"]):hover {
-    background: #e0e8f6;
+    background: #edf3ff;
   }
   .styleChoice:hover,
   .swatch:hover {
-    border-color: #3156df;
+    border-color: var(--roam-cobalt, #2456d8);
   }
   .colourShortcuts button:hover {
-    border-color: #87b6a7;
-    background: #e2f3eb;
+    border-color: #c3d2f1;
+    background: #f5f8ff;
   }
 }
 @media (max-width: 600px) {
@@ -642,7 +641,7 @@
     border-radius: 18px;
   }
   .legend {
-    font-size: 19px;
+    font-size: 21px;
   }
   .sections button {
     gap: 5px;

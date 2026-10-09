@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { createCharacter, animateCharacter } from "./characters";
 
 // Original scenic interpretations. These are not surveyed terminals, real
@@ -33,10 +34,10 @@ function tileMap() {
         Math.abs(Math.abs(u) + Math.abs(v) - 8) < 1.8 || Math.abs(u * v) < 5;
       const seam = x % 24 === 0 || y % 24 === 0;
       const rgb = seam
-        ? [189, 192, 174]
+        ? [215, 224, 236]
         : pattern
-          ? [58, 115, 135]
-          : [231, 233, 210];
+          ? [36, 86, 216]
+          : [248, 251, 255];
       const at = (y * size + x) * 4;
       bytes.set([...rgb, 255], at);
     }
@@ -64,37 +65,43 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     hits = [];
   const mats = {
     floor: new THREE.MeshStandardMaterial({
-      color: kind === "airport" ? "#dddccb" : "#c4c6bc",
-      roughness: 0.85,
+      color: kind === "airport" ? "#edf3ff" : "#e7edf3",
+      roughness: 0.82,
     }),
     plaster: new THREE.MeshStandardMaterial({
-      color: "#e8e5d5",
+      color: "#ffffff",
       roughness: 0.92,
     }),
-    blue: new THREE.MeshStandardMaterial({ color: "#366976", roughness: 0.7 }),
-    sage: new THREE.MeshStandardMaterial({ color: "#7d9885", roughness: 0.86 }),
-    dark: new THREE.MeshStandardMaterial({ color: "#263d47", roughness: 0.74 }),
+    blue: new THREE.MeshStandardMaterial({ color: "#2456d8", roughness: 0.66 }),
+    sage: new THREE.MeshStandardMaterial({ color: "#81bca5", roughness: 0.86 }),
+    mint: new THREE.MeshStandardMaterial({ color: "#b9e5d3", roughness: 0.79 }),
+    coral: new THREE.MeshStandardMaterial({
+      color: "#f6a394",
+      roughness: 0.78,
+    }),
+    lilac: new THREE.MeshStandardMaterial({ color: "#d4c4ee", roughness: 0.8 }),
+    dark: new THREE.MeshStandardMaterial({ color: "#243246", roughness: 0.74 }),
     metal: new THREE.MeshStandardMaterial({
-      color: "#8c9d9b",
+      color: "#b3c0ce",
       metalness: 0.45,
       roughness: 0.52,
     }),
     brass: new THREE.MeshStandardMaterial({
-      color: "#b49b60",
+      color: "#d8b984",
       metalness: 0.48,
       roughness: 0.48,
     }),
-    wood: new THREE.MeshStandardMaterial({ color: "#a17a52", roughness: 0.89 }),
+    wood: new THREE.MeshStandardMaterial({ color: "#c9ab85", roughness: 0.89 }),
     ochre: new THREE.MeshStandardMaterial({
-      color: "#cfa559",
+      color: "#f1ce70",
       roughness: 0.88,
     }),
     white: new THREE.MeshStandardMaterial({
-      color: "#f4f0df",
+      color: "#ffffff",
       roughness: 0.78,
     }),
     glass: new THREE.MeshStandardMaterial({
-      color: "#a9c5c3",
+      color: "#c5dfec",
       transparent: true,
       opacity: 0.45,
       roughness: 0.22,
@@ -106,9 +113,9 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
       side: THREE.DoubleSide,
     }),
     screen: new THREE.MeshStandardMaterial({
-      color: "#123c46",
-      emissive: "#21646e",
-      emissiveIntensity: 0.25,
+      color: "#193faf",
+      emissive: "#2456d8",
+      emissiveIntensity: 0.2,
       roughness: 0.55,
     }),
   };
@@ -122,6 +129,13 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     rotation = [0, 0, 0],
     ground = false,
   ) {
+    // Rounded furniture is non-indexed. Keep every source in the same format
+    // so it can still share the existing material/zone draw-call batches.
+    if (geometry.index) {
+      const source = geometry;
+      geometry = source.toNonIndexed();
+      source.dispose();
+    }
     const matrix = new THREE.Matrix4().compose(
       new THREE.Vector3(x, y, z),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation)),
@@ -144,6 +158,15 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     zone = null,
     rotation = [0, 0, 0],
   ) => add(new THREE.BoxGeometry(w, h, d), mat, x, y, z, zone, rotation);
+  const softBox = (x, y, z, w, h, d, mat = mats.white, zone = null) =>
+    add(
+      new RoundedBoxGeometry(w, h, d, 1, Math.min(0.14, w / 5, h / 3, d / 5)),
+      mat,
+      x,
+      y,
+      z,
+      zone,
+    );
   const cylinder = (
     x,
     y,
@@ -173,30 +196,54 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     });
   }
   function sign(text, x, y, z, width, height, zone = null) {
-    let material = mats.dark;
+    let material = mats.white;
     if (typeof document !== "undefined") {
       const canvas = document.createElement("canvas");
       canvas.width = 768;
       canvas.height = 256;
       const context = canvas.getContext("2d");
       if (context) {
-        context.fillStyle = "#263d47";
-        context.fillRect(0, 0, 768, 256);
-        context.fillStyle = "#f0eddc";
+        context.fillStyle = "#ffffff";
+        if (typeof context.roundRect === "function") {
+          context.beginPath();
+          context.roundRect(0, 0, 768, 256, 56);
+          context.fill();
+        } else context.fillRect(0, 0, 768, 256);
+        const emoji =
+          zone === "card"
+            ? "💳"
+            : zone === "tickets"
+              ? "🎟️"
+              : kind === "airport"
+                ? "✈️"
+                : kind === "station"
+                  ? "🚆"
+                  : "🚌";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.font = '68px "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+        context.fillText(emoji, 84, 133);
+        context.fillStyle = "#2456d8";
         context.textAlign = "center";
         context.textBaseline = "middle";
         const lines = text.split("\n");
-        let size = lines.length > 1 ? 42 : 55;
+        const appFont =
+          typeof getComputedStyle === "function" && document.documentElement
+            ? getComputedStyle(document.documentElement)
+                .getPropertyValue("--font-roam-app")
+                .trim() || '"DM Sans", Arial, sans-serif'
+            : '"DM Sans", Arial, sans-serif';
+        let size = lines.length > 1 ? 39 : 51;
         while (size > 22) {
-          context.font = `600 ${size}px Arial`;
-          if (lines.every((line) => context.measureText(line).width <= 720))
+          context.font = `650 ${size}px ${appFont}`;
+          if (lines.every((line) => context.measureText(line).width <= 572))
             break;
           size--;
         }
         lines.forEach((line, i) =>
           context.fillText(
             line,
-            384,
+            446,
             128 + (i - (lines.length - 1) / 2) * (size + 14),
           ),
         );
@@ -204,16 +251,17 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         map.colorSpace = THREE.SRGBColorSpace;
         material = new THREE.MeshStandardMaterial({
           map,
-          roughness: 0.86,
+          roughness: 0.79,
+          alphaTest: 0.05,
           side: THREE.DoubleSide,
         });
       }
     }
     add(new THREE.PlaneGeometry(width, height), material, x, y, z, zone);
   }
-  function bench(x, z, width = 3.8, zone = null) {
-    box(x, 0.62, z, width, 0.18, 0.72, mats.wood, zone);
-    box(x, 1.07, z - 0.32, width, 0.65, 0.14, mats.wood, zone);
+  function bench(x, z, width = 3.8, zone = null, upholstery = mats.mint) {
+    softBox(x, 0.62, z, width, 0.18, 0.72, upholstery, zone);
+    softBox(x, 1.07, z - 0.32, width, 0.65, 0.14, upholstery, zone);
     for (const side of [-1, 1]) {
       box(
         x + side * (width / 2 - 0.35),
@@ -239,8 +287,8 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     footprint(x, z, width + 0.1, 0.85, zone);
   }
   function machine(x, z, zone, title) {
-    box(x, 0.18, z, 1.15, 0.36, 1.05, mats.dark, zone);
-    box(x, 1.2, z, 1.05, 1.75, 0.78, mats.blue, zone);
+    softBox(x, 0.18, z, 1.15, 0.36, 1.05, mats.metal, zone);
+    softBox(x, 1.2, z, 1.05, 1.75, 0.78, mats.blue, zone);
     box(x, 1.55, z + 0.405, 0.73, 0.55, 0.035, mats.screen, zone);
     box(x, 1.03, z + 0.44, 0.45, 0.15, 0.08, mats.metal, zone);
     box(x + 0.34, 1.03, z + 0.47, 0.12, 0.22, 0.06, mats.ochre, zone);
@@ -249,7 +297,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     footprint(x, z, 1.25, 1.15, zone);
   }
   function bag(x, z, zone, color = mats.ochre) {
-    box(x, 0.46, z, 0.46, 0.69, 0.34, color, zone);
+    softBox(x, 0.46, z, 0.46, 0.69, 0.34, color, zone);
     box(x, 0.87, z, 0.07, 0.17, 0.06, mats.metal, zone);
     box(x, 0.98, z, 0.34, 0.06, 0.08, mats.dark, zone);
     box(x, 0.46, z + 0.18, 0.035, 0.64, 0.035, mats.brass, zone);
@@ -262,7 +310,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     footprint(x, z, 0.52, 0.4, zone);
   }
   function plant(x, z) {
-    cylinder(x, 0.34, z, 0.34, 0.65, mats.wood);
+    cylinder(x, 0.34, z, 0.34, 0.65, mats.coral);
     for (let i = 0; i < 5; i++) {
       const angle = (i * Math.PI * 2) / 5;
       add(
@@ -299,8 +347,8 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     }
     sign("ROAM · LISBOA\nORIGINAL TERMINAL", 1, 3.12, -7.28, 7.5, 0.85);
     machine(-8.8, -3.8, "card", "TRAVEL CARD");
-    box(-2.2, 0.72, -4.5, 5.2, 1.4, 1.6, mats.wood, "check-in");
-    box(-2.2, 1.45, -4.5, 5.5, 0.13, 1.76, mats.white, "check-in");
+    softBox(-2.2, 0.72, -4.5, 5.2, 1.4, 1.6, mats.mint, "check-in");
+    softBox(-2.2, 1.45, -4.5, 5.5, 0.13, 1.76, mats.white, "check-in");
     box(-2.2, 0.72, -3.67, 4.95, 0.64, 0.035, mats.tiles, "check-in");
     footprint(-2.2, -4.5, 5.5, 1.76, "check-in");
     for (const x of [-3.6, -0.8]) {
@@ -318,10 +366,10 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
       footprint(x, -1.7, 0.38, 2.78, "check-in");
     }
     for (const x of [5.9, 7.7]) {
-      box(x, 0.98, -4.4, 0.45, 1.96, 0.55, mats.blue, "gate");
+      softBox(x, 0.98, -4.4, 0.45, 1.96, 0.55, mats.blue, "gate");
       footprint(x, -4.4, 0.55, 0.65, "gate");
     }
-    box(6.8, 2.7, -4.4, 2.85, 0.45, 0.35, mats.dark, "gate");
+    softBox(6.8, 2.7, -4.4, 2.85, 0.45, 0.35, mats.coral, "gate");
     sign("GATE · ROAM", 6.8, 2.7, -4.2, 2.6, 0.36, "gate");
     box(6.8, 0.96, -4.4, 1.3, 0.9, 0.06, mats.glass, "gate");
     footprint(6.8, -4.4, 1.4, 0.15, "gate");
@@ -335,7 +383,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
       "gate",
     );
     bench(5.8, 2.8, 4.6, "gate");
-    bench(-7.5, 4, 3.4, "card");
+    bench(-7.5, 4, 3.4, "card", mats.lilac);
     plant(-10.3, -6.4);
     plant(10.3, 3.6);
     bag(3.05, 3.5, "gate");
@@ -346,7 +394,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         x: -2.2,
         z: -5.9,
         zone: "check-in",
-        shirt: "#537a75",
+        shirt: "#2456d8",
         angle: 0,
       },
       {
@@ -354,8 +402,18 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         x: 2.4,
         z: 3.4,
         zone: "gate",
-        shirt: "#b88359",
+        shirt: "#f6a394",
         angle: -0.6,
+      },
+      {
+        name: "Simulated arriving traveller",
+        x: 7.8,
+        z: 4.8,
+        zone: "gate",
+        shirt: "#81bca5",
+        bodyType: "female",
+        hairStyle: "bun",
+        angle: -0.7,
       },
     );
   } else if (kind === "station") {
@@ -368,7 +426,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
       box(-11.5 + i, 0.04, -5.25, 0.18, 0.045, 2.65, mats.wood, "platform");
     box(0, 0.032, -3.26, 23.4, 0.022, 0.22, mats.ochre, "platform");
     box(0, 0.58, -5.15, 20.7, 0.5, 2.6, mats.blue, "platform");
-    box(0, 3.03, -5.15, 20.7, 0.25, 2.65, mats.white, "platform");
+    softBox(0, 3.03, -5.15, 20.7, 0.25, 2.65, mats.white, "platform");
     box(0, 1.95, -6.45, 20.7, 2.05, 0.13, mats.white, "platform");
     for (const [x, w] of [
       [-3, 14.5],
@@ -410,12 +468,12 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     machine(-8.8, 3.4, "card", "TRAVEL CARD");
     machine(-4.6, -1.2, "tickets", "TRAIN TICKETS");
     machine(-6.2, -1.2, "tickets", "ROAM ROUTES");
-    bench(4.1, 3.4, 4.5, "platform");
+    bench(4.1, 3.4, 4.5, "platform", mats.coral);
     for (const x of [-10.9, 10.9]) {
       box(x, 1.8, -1.6, 0.2, 3.6, 0.2, mats.metal);
       footprint(x, -1.6, 0.28, 0.28);
     }
-    box(0, 3.5, -1.6, 22.1, 0.18, 1.4, mats.blue);
+    softBox(0, 3.5, -1.6, 22.1, 0.18, 1.4, mats.blue);
     sign(
       "ROAM STATION\nSIMULATED JOURNEYS",
       1,
@@ -434,7 +492,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         x: 8.4,
         z: -0.2,
         zone: "platform",
-        shirt: "#4f7379",
+        shirt: "#2456d8",
         angle: -0.65,
       },
       {
@@ -442,8 +500,18 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         x: -6.4,
         z: 2,
         zone: "tickets",
-        shirt: "#b88763",
+        shirt: "#f6a394",
         angle: 0.4,
+      },
+      {
+        name: "Simulated station traveller",
+        x: 2.6,
+        z: 0.9,
+        zone: "platform",
+        shirt: "#81bca5",
+        bodyType: "female",
+        hairStyle: "bob",
+        angle: 0.45,
       },
     );
   } else {
@@ -452,7 +520,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
     // Parked broadside bus; a front-facing entrance is marked by its doorway.
     box(4.8, 0.56, -3.85, 12.2, 0.28, 2.9, mats.blue, "board");
     box(4.8, 0.92, -5.25, 12.1, 0.72, 0.13, mats.blue, "board");
-    box(4.8, 2.76, -3.85, 12.2, 0.28, 2.9, mats.white, "board");
+    softBox(4.8, 2.76, -3.85, 12.2, 0.28, 2.9, mats.white, "board");
     box(4.8, 1.86, -5.25, 12.1, 1.45, 0.12, mats.white, "board");
     for (const [x, w] of [
       [2.6, 7.75],
@@ -487,7 +555,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         box(x, 1.45, z, 0.12, 2.9, 0.12, mats.metal, "timetable");
         footprint(x, z, 0.24, 0.24, "timetable");
       }
-    box(-4.9, 2.93, -2.08, 6.75, 0.18, 2.4, mats.blue, "timetable");
+    softBox(-4.9, 2.93, -2.08, 6.75, 0.18, 2.4, mats.blue, "timetable");
     box(-4.9, 1.4, -3.13, 6.3, 2.5, 0.07, mats.glass, "timetable");
     footprint(-4.9, -3.13, 6.45, 0.1, "timetable");
     bench(-5.4, -2.33, 4.3, "timetable");
@@ -518,7 +586,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         x: -0.85,
         z: 2,
         zone: "board",
-        shirt: "#b48762",
+        shirt: "#f6a394",
         angle: -0.6,
       },
       {
@@ -526,8 +594,18 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
         x: -2,
         z: 1,
         zone: "timetable",
-        shirt: "#5b8070",
+        shirt: "#2456d8",
         angle: 0.4,
+      },
+      {
+        name: "Simulated waiting traveller",
+        x: 3.9,
+        z: 3.4,
+        zone: "board",
+        shirt: "#81bca5",
+        bodyType: "female",
+        hairStyle: "curly",
+        angle: -0.4,
       },
     );
   }
@@ -547,11 +625,12 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
   }
   const residents = people.map((person, i) => {
     const resident = createCharacter({
+      bodyType: person.bodyType || "male",
       shirt: person.shirt || shirt,
       skin: i ? "#b88b69" : "#986746",
-      trousers: "#344d50",
+      trousers: "#243246",
       style: i ? "tourist" : "local",
-      hairStyle: i ? "curly" : "short",
+      hairStyle: person.hairStyle || (i ? "curly" : "short"),
       phase: i * 1.6,
     });
     resident.position.set(person.x, 0.02, person.z);
@@ -572,7 +651,7 @@ export function createTransitScene(kind, { shirt = "#c58e59" } = {}) {
   const focus = new THREE.Mesh(
     new THREE.RingGeometry(0.34, 0.4, 32),
     new THREE.MeshBasicMaterial({
-      color: "#547c6a",
+      color: "#2456d8",
       transparent: true,
       opacity: 0.65,
       side: THREE.DoubleSide,

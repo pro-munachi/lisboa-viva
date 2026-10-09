@@ -84,7 +84,16 @@ test("all six original rooms have finite detailed geometry, clickable props and 
       expectedZones[kind].forEach((id) =>
         assert.ok(clickable.has(id), `${kind}/${id} pickable`),
       );
-      assert.ok(room.residents.length >= 1 && room.residents.length <= 2);
+      assert.equal(room.residents.length, kind === "home" ? 2 : 4);
+      assert.equal(
+        new Set(room.residents.map((npc: any) => npc.name)).size,
+        room.residents.length,
+      );
+      assert.ok(
+        room.residents.every(
+          (npc: any) => npc.userData.npc.simulated && !npc.userData.peer,
+        ),
+      );
       assert.equal(room.group.userData.room.approximate, true);
     } finally {
       room.dispose();
@@ -127,6 +136,59 @@ test("all eighteen activity targets and transitions are reachable around actual 
         );
         assert.ok(zone.seat.height > 0.4 && zone.seat.height < 1);
       }
+    } finally {
+      room.dispose();
+      dispose(room.group);
+    }
+  }
+});
+
+test("added scenic locals stay outside furniture and activity targets with two owned meshes and paused head motion", () => {
+  for (const kind of kinds) {
+    const room = createInteriorScene(kind);
+    try {
+      const additions = room.residents.filter(
+        (npc: any) => npc.userData.scenicHead,
+      );
+      assert.equal(additions.length, kind === "home" ? 1 : 2);
+      for (const npc of additions) {
+        let meshes = 0;
+        npc.traverse((node: any) => {
+          if (node.isMesh) meshes++;
+        });
+        assert.equal(meshes, 2, `${kind} extra local stays batched`);
+        const { x, z } = npc.position;
+        for (const obstacle of room.obstacles) {
+          // Every resident has its own exact 0.58m blocker for live-peer placement.
+          const own =
+            Math.abs((obstacle.minX + obstacle.maxX) / 2 - x) < 1e-6 &&
+            Math.abs((obstacle.minZ + obstacle.maxZ) / 2 - z) < 1e-6 &&
+            Math.abs(obstacle.maxX - obstacle.minX - 0.58) < 1e-6;
+          if (own) continue;
+          assert.ok(
+            !(
+              x >= obstacle.minX - 0.32 &&
+              x <= obstacle.maxX + 0.32 &&
+              z >= obstacle.minZ - 0.32 &&
+              z <= obstacle.maxZ + 0.32
+            ),
+            `${kind}/${npc.name} clears furniture`,
+          );
+        }
+        for (const zone of room.zones)
+          assert.ok(
+            Math.hypot(x - zone.target.x, z - zone.target.z) > 0.85,
+            `${kind}/${npc.name} leaves activity arrival clear`,
+          );
+      }
+      const head = additions[0].userData.scenicHead;
+      room.update(1, 0.1, true, null);
+      const moving = head.rotation.y;
+      room.update(2, 0.1, true, null);
+      assert.notEqual(head.rotation.y, moving);
+      const paused = head.rotation.y;
+      room.update(20, 0, false, null);
+      assert.equal(head.rotation.y, paused);
     } finally {
       room.dispose();
       dispose(room.group);

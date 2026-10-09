@@ -26,7 +26,7 @@
 .identity h2 {
   margin: 0;
   overflow-wrap: anywhere;
-  font-family: var(--font-roam-game), sans-serif;
+  font-family: var(--font-roam-app), sans-serif;
   font-size: 21px;
   font-weight: 650;
   line-height: 1.25;
@@ -67,12 +67,47 @@
   min-width: 0;
   min-height: 65px;
   padding: 10px;
-  border: 1px solid transparent;
+  border: 1px solid #e7ebf1;
   border-radius: 14px;
   color: #213052;
-  background: #eef3ff;
+  background: #fff;
   text-align: left;
   transition: background-color 120ms ease-out;
+}
+.preferenceCard {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #edf0f4;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 5px 18px #24324608;
+}
+.preferenceCard h3 {
+  margin: 0 0 15px;
+  font-family: var(--font-roam-app), sans-serif;
+  font-size: 17px;
+  font-weight: 650;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chips > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: #fff0f1;
+  color: #5b3b4b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.chips > span > span {
+  font-family:
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 18px;
 }
 .icon {
   display: grid;

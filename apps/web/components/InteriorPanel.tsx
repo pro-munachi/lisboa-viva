@@ -1,27 +1,20 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
-  Bus,
   Check,
-  Coffee,
+  ChevronDown,
   DoorOpen,
-  Dumbbell,
   Footprints,
-  Home,
-  Landmark,
   Pause,
   Play,
-  PlaneTakeoff,
-  ShoppingBag,
-  TrainFront,
-  Wine,
 } from "lucide-react";
 import {
   INTERIOR_ACTIVITIES,
   INTERIOR_LABELS,
+  type InteriorKind,
   type InteriorVisit,
 } from "../lib/interiors";
 import styles from "./InteriorPanel.module.css";
@@ -38,16 +31,28 @@ export type InteriorPanelProps = {
   motion?: boolean;
 };
 
-const roomIcons = {
-  home: Home,
-  cafe: Coffee,
-  gym: Dumbbell,
-  shop: ShoppingBag,
-  museum: Landmark,
-  bar: Wine,
-  airport: PlaneTakeoff,
-  station: TrainFront,
-  "bus-stop": Bus,
+const roomGraphics: Record<InteriorKind, string> = {
+  home: "🏡",
+  cafe: "☕️",
+  gym: "🏋️",
+  shop: "🛍️",
+  museum: "🎨",
+  bar: "🍹",
+  airport: "✈️",
+  station: "🚆",
+  "bus-stop": "🚌",
+};
+
+const cornerGraphics: Record<InteriorKind, Record<string, string>> = {
+  home: { rest: "🛋️", kitchen: "🥐", plan: "🗺️" },
+  cafe: { espresso: "☕️", pastry: "🥐", table: "🪑" },
+  gym: { treadmill: "🏃", weights: "🏋️", stretch: "🧘" },
+  shop: { browse: "👕", "try-on": "🪞", counter: "🛍️" },
+  museum: { gallery: "🖼️", tiles: "🔷", bench: "🪑" },
+  bar: { listen: "🎶", counter: "🍹", lounge: "🛋️" },
+  airport: { card: "💳", "check-in": "✈️", gate: "🎟️" },
+  station: { card: "💳", tickets: "🎟️", platform: "🚆" },
+  "bus-stop": { card: "💳", timetable: "🗓️", board: "🚌" },
 };
 
 export default function InteriorPanel({
@@ -61,6 +66,7 @@ export default function InteriorPanel({
   motion = true,
 }: InteriorPanelProps) {
   const titleId = useId();
+  const [expanded, setExpanded] = useState(false);
   const activities = INTERIOR_ACTIVITIES[visit.kind];
   const selected =
     activities.find((activity) => activity.id === selectedZone) ||
@@ -71,7 +77,6 @@ export default function InteriorPanel({
   const busy = activityState !== "idle";
   const transit = ["airport", "station", "bus-stop"].includes(visit.kind);
   const done = !busy && completed.includes(selected.id);
-  const RoomIcon = roomIcons[visit.kind];
   const status =
     !motion && busy
       ? "Movement is paused. Use the play control to continue exploring."
@@ -101,11 +106,22 @@ export default function InteriorPanel({
       className={styles.panel}
       aria-labelledby={titleId}
       data-interior-kind={visit.kind}
+      data-expanded={expanded}
     >
       <div className={styles.topline}>
+        <button
+          type="button"
+          className={styles.detailsToggle}
+          aria-expanded={expanded}
+          aria-controls={`${titleId}-corners ${titleId}-room-details`}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          Room activities
+          <ChevronDown size={16} aria-hidden="true" />
+        </button>
         <span className={styles.badge}>
           <DoorOpen size={13} aria-hidden="true" />
-          {transit ? "Original ROAM transit scene" : "Original ROAM interior"}
+          {transit ? "Your next stop" : "Inside Lisbon"}
         </span>
         <button
           type="button"
@@ -118,57 +134,70 @@ export default function InteriorPanel({
         </button>
       </div>
       <header className={styles.header}>
-        <h2 id={titleId}>{visit.name}</h2>
-        <span className={styles.kind}>
-          <RoomIcon size={14} aria-hidden="true" />
-          {INTERIOR_LABELS[visit.kind]}
-          <span aria-hidden="true">·</span>
-          {transit ? "Plan your journey" : "Explore freely"}
+        <span className={styles.venueGraphic} aria-hidden="true">
+          {roomGraphics[visit.kind]}
         </span>
+        <div className={styles.headerCopy}>
+          <h2 id={titleId}>{visit.name}</h2>
+          <div className={styles.kind}>
+            <span className={styles.kindChip}>
+              {INTERIOR_LABELS[visit.kind]}
+            </span>
+            <span>{transit ? "Plan your journey" : "Explore freely"}</span>
+          </div>
+        </div>
       </header>
 
-      <div className={styles.zoneHeading}>
-        <span>{transit ? "Choose a travel point" : "Choose a corner"}</span>
-        <span
-          aria-label={
-            transit
+      <div id={`${titleId}-corners`} className={styles.detailControls}>
+        <div className={styles.zoneHeading}>
+          <span>{transit ? "Choose a travel point" : "Choose a corner"}</span>
+          <span
+            aria-label={
+              transit
+                ? `${activities.length} travel points`
+                : `${explored} of ${activities.length} corners explored`
+            }
+          >
+            {transit
               ? `${activities.length} travel points`
-              : `${explored} of ${activities.length} corners explored`
-          }
+              : `${explored}/${activities.length} explored`}
+          </span>
+        </div>
+        <div
+          className={styles.zones}
+          role="group"
+          aria-label={transit ? "Travel points" : "Room corners"}
         >
-          {transit
-            ? `${activities.length} travel points`
-            : `${explored}/${activities.length} explored`}
-        </span>
-      </div>
-      <div
-        className={styles.zones}
-        role="group"
-        aria-label={transit ? "Travel points" : "Room corners"}
-      >
-        {activities.map((activity, index) => {
-          const visited = completed.includes(activity.id);
-          return (
-            <button
-              type="button"
-              key={activity.id}
-              className={styles.zone}
-              aria-pressed={selected.id === activity.id}
-              aria-label={`${activity.label}${visited ? ", explored" : ""}`}
-              disabled={busy}
-              onClick={() => onSelectZone(activity.id)}
-            >
-              <span className={styles.zoneNumber} aria-hidden="true">
-                {visited ? (
-                  <Check size={14} />
-                ) : (
-                  String(index + 1).padStart(2, "0")
-                )}
-              </span>
-              <span>{activity.label}</span>
-            </button>
-          );
-        })}
+          {activities.map((activity, index) => {
+            const visited = completed.includes(activity.id);
+            return (
+              <button
+                type="button"
+                key={activity.id}
+                className={styles.zone}
+                aria-pressed={selected.id === activity.id}
+                aria-label={`${activity.label}${visited ? ", explored" : ""}`}
+                disabled={busy}
+                onClick={() => onSelectZone(activity.id)}
+              >
+                <span className={styles.zoneTop} aria-hidden="true">
+                  <span className={styles.zoneGraphic}>
+                    {cornerGraphics[visit.kind][activity.id] ||
+                      roomGraphics[visit.kind]}
+                  </span>
+                  <span className={styles.zoneNumber} data-complete={visited}>
+                    {visited ? (
+                      <Check size={12} />
+                    ) : (
+                      String(index + 1).padStart(2, "0")
+                    )}
+                  </span>
+                </span>
+                <span>{activity.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className={styles.activity}>
@@ -212,34 +241,41 @@ export default function InteriorPanel({
         )}
       </div>
 
-      {visit.kind === "bar" && (
-        <div className={styles.activity}>
-          <ClubMusic key={visit.id} enabled={motion} compact />
-        </div>
-      )}
-
-      <footer className={styles.footer}>
-        <p>
-          {visit.kind === "home"
-            ? "Your ROAM home is an original imagined space."
-            : transit
-              ? "This is an original imagined transit scene. The real facility’s layout and services may differ."
-              : visit.kind === "bar"
-                ? "This room and its synthesized club mix are original ROAM creations. The venue’s actual layout and services may differ."
-                : "This is an original imagined room. The venue’s actual layout and services may differ."}
-        </p>
-        {sourceUrl && (
-          <a
-            href={sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`View map source for ${visit.name}`}
-          >
-            Mapped place
-            <ArrowUpRight size={12} aria-hidden="true" />
-          </a>
+      <div id={`${titleId}-room-details`} className={styles.extraDetails}>
+        {visit.kind === "bar" && (
+          <div className={styles.activity}>
+            <ClubMusic key={visit.id} enabled={motion} compact />
+          </div>
         )}
-      </footer>
+
+        <footer className={styles.footer}>
+          <p>
+            {visit.kind === "home"
+              ? "Your ROAM home is an original imagined space."
+              : transit
+                ? "This is an original imagined transit scene. The real facility’s layout and services may differ."
+                : visit.kind === "bar"
+                  ? "This room and its synthesized club mix are original ROAM creations. The venue’s actual layout and services may differ."
+                  : "This is an original imagined room. The venue’s actual layout and services may differ."}
+          </p>
+          {sourceUrl && (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`View map source for ${visit.name}`}
+            >
+              Mapped place
+              <ArrowUpRight size={12} aria-hidden="true" />
+            </a>
+          )}
+        </footer>
+      </div>
+      <p className={styles.compactNote}>
+        {visit.kind === "home"
+          ? "An original ROAM space."
+          : "An imagined scene. The actual layout may differ."}
+      </p>
     </section>
   );
 }

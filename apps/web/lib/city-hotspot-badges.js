@@ -1,74 +1,46 @@
 import { Vector3 } from "three";
 
-// Original 24px drawings, shared by street places and room activities.
-const ICONS = {
-  cafe: [
-    "M4 8h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5Z",
-    "M16 9h2a3 3 0 0 1 0 6h-2M3 21h16M8 5V2m5 3V2",
-  ],
-  restaurant: [
-    "M10 12a6 6 0 1 0 12 0 6 6 0 0 0-12 0M3 3v6m3-6v6M3 7h3m-1.5 2v12M21 3v5",
-  ],
-  gym: ["M7 12h10M4 7v10m3-12v14m10-14v14m3-12v10M3 9h4m10 0h4M3 15h4m10 0h4"],
-  shop: ["M4 8h16l-1 13H5ZM8 8V6a4 4 0 0 1 8 0v2"],
-  beach: [
-    "M3 11a9 9 0 0 1 18 0ZM12 2v15M7 11c0-4 2-9 5-9s5 5 5 9",
-    "M2 21c2-2 4 2 6 0s4 2 6 0 4 2 6 0",
-  ],
-  bar: ["M4 4h16l-8 9Zm8 9v8m-4 0h8M15 4l3-2"],
-  museum: ["M3 8 12 3l9 5ZM5 11v8m7-8v8m7-8v8M3 21h18M3 9h18"],
-  culture: ["M4 4h16v16H4ZM7 15l4-5 3 3 3-4M16 7h.01"],
-  landmark: ["M4 21V9l8-6 8 6v12M9 21v-7a3 3 0 0 1 6 0v7M4 10h16M8 7h8"],
-  viewpoint: [
-    "M2 19 8 11l4 5 3-4 7 7M2 21h20M15 6a3 3 0 1 0 6 0 3 3 0 0 0-6 0",
-  ],
-  transport: [
-    "M6 3h12a2 2 0 0 1 2 2v13H4V5a2 2 0 0 1 2-2ZM4 11h16M12 3v8M7 15h.01m10 0h.01M7 18l-2 3m12-3 2 3",
-  ],
-  custom: ["M18 9c0 5-6 12-6 12S6 14 6 9a6 6 0 1 1 12 0ZM10 9h4m-2-2v4"],
-  market: ["M3 9h18l-2 12H5ZM7 9l5-7 5 7M8 13v4m4-4v4m4-4v4"],
-  street: ["M5 3v18m14-18v18M12 3v3m0 4v4m0 4v3M3 8h4m10 8h4"],
-  rest: ["M6 10V5h12v5M4 10h4v5h8v-5h4v9H4ZM6 19v2m12-2v2"],
-  kitchen: [
-    "M5 9h14v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3ZM3 9h18M8 6h8M12 6V4M2 13h3m14 0h3",
-  ],
-  plan: ["M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16m6-14v16M11 10l2 3m-2 0 2-3"],
-  pastry: ["M4 15c0-4 3-9 8-9s8 5 8 9l-4 3-4-2-4 2ZM8 8l2 7m6-7-2 7M3 21h18"],
-  table: ["M4 9h16M7 9v12m10-12v12M9 6h6M2 15h3v6m17-6h-3v6"],
-  treadmill: [
-    "M4 18h15l2 3H2Zm13-1V6h4M12 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M11 9l-3 3 4 2-1 3m0-8 4 3h3",
-  ],
-  stretch: [
-    "M10 4a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 8v7M5 5l7 5 7-5M12 15l-5 6m5-6 5 6",
-  ],
-  browse: ["M4 21V3h16v18M4 5h16M8 6v3l-3 3h14l-3-3V6M9 12v6h6v-6"],
-  "try-on": [
-    "M5 3h14v18H5ZM9 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0M8 18v-3a4 4 0 0 1 8 0v3M3 21h18",
-  ],
-  counter: ["M3 10h18M5 10v11h14V10M8 6h3V3H8ZM15 10V6h4v4M5 15h14"],
-  gallery: ["M3 3h18v18H3ZM6 17l5-6 4 4 3-4M16 7h.01"],
-  tiles: [
-    "M12 2l5 5-5 5-5-5Zm-5 5-5 5 5 5 5-5Zm5 5 5 5-5 5-5-5Zm5-5 5 5-5 5-5-5Z",
-  ],
-  bench: ["M4 6h16v7H4ZM3 16h18M6 16v5m12-5v5M7 6v7m5-7v7m5-7v7"],
-  listen: [
-    "M9 17V5l11-2v12M9 17a3 3 0 1 1-3-3c2 0 3 1 3 3Zm11-2a3 3 0 1 1-3-3c2 0 3 1 3 3ZM9 8l11-2",
-  ],
-  lounge: ["M5 11V5h14v6M3 11h5v5h8v-5h5v9H3ZM6 20v2m12-2v2"],
-  card: ["M3 5h18v14H3ZM3 9h18M6 14h4m5 1h3"],
-  "check-in": [
-    "M8 5h8v16H8ZM10 5V2h4v3M2 12h5m-2-2 2 2-2 2M17 12h5m-2-2 2 2-2 2M10 17h4",
-  ],
-  gate: ["M4 21V3h16v18M7 21h10M8 10l4-3 4 3M12 7v8m-2-2 2 2 2-2"],
-  tickets: [
-    "M3 5h18v4a3 3 0 0 0 0 6v4H3v-4a3 3 0 0 0 0-6ZM15 6v2m0 3v2m0 3v2M7 9h4m-4 5h4",
-  ],
-  timetable: ["M4 3h16v18H4ZM7 7h6m-6 4h4m-4 4h6M16 8v5l2 1"],
-  board: ["M3 12h11m-4-4 4 4-4 4M17 3h4v18h-4M17 6h4m-4 12h4"],
+// Native color emoji, shared by street places and room activities.
+const EMOJIS = {
+  cafe: "☕",
+  restaurant: "🍽️",
+  gym: "🏋️",
+  shop: "🛍️",
+  beach: "🏖️",
+  bar: "🍸",
+  museum: "🏛️",
+  culture: "🎭",
+  landmark: "🏰",
+  viewpoint: "🌄",
+  transport: "🚆",
+  custom: "📍",
+  market: "🧺",
+  street: "🚶",
+  rest: "🛋️",
+  kitchen: "🍳",
+  plan: "🗺️",
+  pastry: "🥐",
+  table: "🍽️",
+  treadmill: "🏃",
+  stretch: "🧘",
+  browse: "👕",
+  "try-on": "🪞",
+  counter: "🛎️",
+  gallery: "🖼️",
+  tiles: "🎨",
+  bench: "🪑",
+  listen: "🎵",
+  lounge: "🛋️",
+  card: "💳",
+  "check-in": "🧳",
+  gate: "🚪",
+  tickets: "🎟️",
+  timetable: "🗓️",
+  board: "🚎",
+  espresso: "☕",
+  weights: "🏋️",
+  platform: "🚉",
 };
-ICONS.espresso = ICONS.cafe;
-ICONS.weights = ICONS.gym;
-ICONS.platform = [...ICONS.transport, "M2 23h20"];
 
 const TONES = {
   cafe: "coral",
@@ -202,24 +174,11 @@ export function declutterBadgePositions(
 }
 
 function createGlyph(doc, category) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "24");
-  svg.setAttribute("height", "24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.7");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("focusable", "false");
-  svg.setAttribute("class", "roam-badge-glyph");
-  for (const d of ICONS[category] || ICONS.custom) {
-    const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    svg.appendChild(path);
-  }
-  return svg;
+  const glyph = doc.createElement("span");
+  glyph.setAttribute("class", "roam-badge-glyph");
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.textContent = EMOJIS[category] || EMOJIS.custom;
+  return glyph;
 }
 
 /** A non-React overlay; callers own world positions and selection behavior. */
@@ -369,7 +328,8 @@ export function createHotspotBadgeLayer(host, { onSelect } = {}) {
       }
       record.item = item;
       const category =
-        typeof item.category === "string" && Object.hasOwn(ICONS, item.category)
+        typeof item.category === "string" &&
+        Object.hasOwn(EMOJIS, item.category)
           ? item.category
           : "custom";
       if (category !== record.category) {
