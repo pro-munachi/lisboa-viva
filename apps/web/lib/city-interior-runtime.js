@@ -425,7 +425,9 @@ export function createInteriorRuntime({
     room.group.add(actor);
     scene.add(room.group);
     refreshPeers();
-    selected = room.zones[0]?.id || null;
+    selected = room.zones.some((zone) => zone.id === next.initialZoneId)
+      ? next.initialZoneId
+      : room.zones[0]?.id || null;
     badges?.setItems(
       room.zones.map((zone) => ({
         id: zone.id,

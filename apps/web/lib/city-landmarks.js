@@ -9,6 +9,9 @@ const ARCH = 41683195;
 const CATHEDRAL = 19372558; // The nearby apartment building shares the name "Sé".
 const BELEM = 24341353;
 const SINTRA = 1633002;
+const RIBEIRA_MARKET = 39729235;
+// The apartment way 737906969 has the same name; it is not this market hall.
+const BENFICA_MARKET = 146533532;
 const CHIMNEYS = new Set([172718755, 172718756]);
 // Pena's OSM building parts are unnamed in the extract. These exact component IDs
 // form the palace beside the independently mapped visitor hotspot 612095421.
@@ -28,6 +31,8 @@ const REPLACED = new Set([
   CATHEDRAL,
   BELEM,
   SINTRA,
+  RIBEIRA_MARKET,
+  BENFICA_MARKET,
   ...CHIMNEYS,
   ...PENA_PARTS,
 ]);
@@ -45,7 +50,20 @@ const colors = {
 
 /** Only exclude a generic footprint when this module renders that exact object. */
 export function isLandmarkBuilding(building) {
-  return REPLACED.has(Number(building.id)) && validRing(building.ring);
+  const id = Number(building.id);
+  if (!REPLACED.has(id) || !validRing(building.ring)) return false;
+  if (id !== RIBEIRA_MARKET && id !== BENFICA_MARKET) return true;
+  if (building.ring.length > 256) return false;
+  const origin = building.ring[0];
+  const area = building.ring.reduce((sum, a, index, ring) => {
+    const c = ring[(index + 1) % ring.length];
+    return (
+      sum +
+      (a[0] - origin[0]) * (c[1] - origin[1]) -
+      (c[0] - origin[0]) * (a[1] - origin[1])
+    );
+  }, 0);
+  return Math.abs(area) > 1e-12;
 }
 
 function validRing(ring) {
@@ -709,6 +727,580 @@ function penaPart(building, projectGeo, geoY) {
   return b.finish();
 }
 
+// These original market models use the same mapped footprint as the generic
+// extrusion they replace. Ornament is approximate, not a surveyed reconstruction.
+// Ribeira: Câmara Municipal de Lisboa / Bibliotecas de Lisboa, Mercado da Ribeira.
+// Benfica: Junta de Freguesia de Benfica, Footsteps heritage guide, and CML's
+// Mercado de Benfica heritage inventory (circular concrete nave, brick cladding,
+// three relief-decorated public entrances). No photograph or model is copied.
+const MARKET_GLYPHS = {
+  A: [14, 17, 17, 31, 17, 17, 17],
+  B: [30, 17, 17, 30, 17, 17, 30],
+  C: [14, 17, 16, 16, 16, 17, 14],
+  D: [30, 17, 17, 17, 17, 17, 30],
+  E: [31, 16, 16, 30, 16, 16, 31],
+  F: [31, 16, 16, 30, 16, 16, 16],
+  I: [31, 4, 4, 4, 4, 4, 31],
+  M: [17, 27, 21, 21, 17, 17, 17],
+  N: [17, 25, 25, 21, 19, 19, 17],
+  O: [14, 17, 17, 17, 17, 17, 14],
+  R: [30, 17, 17, 30, 20, 18, 17],
+};
+
+function marketLettering(b, text, x, y, z, yaw, size = 0.14) {
+  const width = (text.length * 6 - 1) * size;
+  for (let i = 0; i < text.length; i++) {
+    const glyph = MARKET_GLYPHS[text[i]];
+    if (!glyph) continue;
+    for (let row = 0; row < 7; row++)
+      for (let col = 0; col < 5; col++) {
+        if (!(glyph[row] & (1 << (4 - col)))) continue;
+        const offset = -width / 2 + (i * 6 + col + 0.5) * size;
+        b.box(
+          size * 0.88,
+          size * 0.88,
+          0.05,
+          colors.red,
+          x + Math.cos(yaw) * offset,
+          y + (6 - row + 0.5) * size,
+          z - Math.sin(yaw) * offset,
+          yaw,
+        );
+      }
+  }
+}
+
+function insideMarket(point, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i],
+      c = ring[j];
+    if (
+      a.z > point.z !== c.z > point.z &&
+      point.x < ((c.x - a.x) * (point.z - a.z)) / (c.z - a.z) + a.x
+    )
+      inside = !inside;
+  }
+  return inside;
+}
+
+function marketEdge(a, c, ring) {
+  const dx = c.x - a.x,
+    dz = c.z - a.z,
+    length = Math.hypot(dx, dz);
+  if (length < 0.1) return null;
+  const x = (a.x + c.x) / 2,
+    z = (a.z + c.z) / 2;
+  let nx = -dz / length,
+    nz = dx / length;
+  if (insideMarket({ x: x + nx * 0.3, z: z + nz * 0.3 }, ring)) {
+    nx *= -1;
+    nz *= -1;
+  }
+  return { x, z, nx, nz, length, yaw: Math.atan2(nx, nz) };
+}
+
+function marketDoor(b, edge, x, z, height = 4.1, width = 2.6) {
+  const { nx, nz, yaw } = edge;
+  panel(
+    b,
+    width + 0.44,
+    height + 0.26,
+    colors.light,
+    x + nx * 0.11,
+    0.36,
+    z + nz * 0.11,
+    yaw,
+  );
+  panel(
+    b,
+    width,
+    height,
+    colors.glass,
+    x + nx * 0.24,
+    0.36,
+    z + nz * 0.24,
+    yaw,
+  );
+  b.box(
+    0.09,
+    height - width / 2,
+    0.08,
+    colors.shade,
+    x + nx * 0.31,
+    0.36 + (height - width / 2) / 2,
+    z + nz * 0.31,
+    yaw,
+  );
+  b.box(
+    width,
+    0.11,
+    0.09,
+    colors.shade,
+    x + nx * 0.32,
+    height - width / 2 + 0.36,
+    z + nz * 0.32,
+    yaw,
+  );
+  b.box(
+    width + 0.5,
+    0.15,
+    0.7,
+    colors.shade,
+    x + nx * 0.17,
+    0.15,
+    z + nz * 0.17,
+    yaw,
+  );
+}
+
+function clipMarketRoof(ring, boundary, keepAbove, axis = "z") {
+  const output = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i],
+      c = ring[(i + 1) % ring.length];
+    const aIn = keepAbove ? a[axis] >= boundary : a[axis] <= boundary;
+    const cIn = keepAbove ? c[axis] >= boundary : c[axis] <= boundary;
+    if (aIn) output.push(a);
+    if (aIn !== cIn) {
+      const t = (boundary - a[axis]) / (c[axis] - a[axis]);
+      output.push({ x: a.x + (c.x - a.x) * t, z: a.z + (c.z - a.z) * t });
+    }
+  }
+  return output;
+}
+
+function ribeiraMarket(building, projectGeo, geoY) {
+  const f = footprintFrame(building, projectGeo, geoY);
+  if (!f) return null;
+  const b = builder(f, "Mercado da Ribeira", [building.id]);
+  const height = Math.max(5, Math.min(24, Number(building.height) || 12));
+  const eaves = height * 0.66;
+  footprint(b, f, eaves, colors.stone);
+  // Three long market naves and their roof ridges are clipped to the exact ring.
+  // The northern annex is retained instead of replacing the whole with a box.
+  const minZ = Math.min(...f.ring.map((p) => p.z));
+  const maxZ = Math.max(...f.ring.map((p) => p.z));
+  const span = (maxZ - minZ) / 3;
+  const roofAt = (z) => {
+    const phase = Math.min(3 - 1e-9, Math.max(0, (z - minZ) / span)) % 1;
+    return eaves + (height - eaves) * (1 - Math.abs(phase * 2 - 1));
+  };
+  function roofSurface(ring, color, relief = false) {
+    if (ring.length < 3) return;
+    const geometry = relief
+      ? new THREE.ExtrudeGeometry(ringShape(ring), {
+          depth: 0.045,
+          steps: 1,
+          bevelEnabled: false,
+        })
+      : new THREE.ShapeGeometry(ringShape(ring));
+    geometry.rotateX(-Math.PI / 2);
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++)
+      position.setY(
+        i,
+        Math.min(
+          height,
+          roofAt(position.getZ(i)) + position.getY(i) + (relief ? 0.015 : 0),
+        ),
+      );
+    geometry.computeVertexNormals();
+    b.add(geometry, color);
+  }
+  for (let nave = 0; nave < 3; nave++)
+    for (let half = 0; half < 2; half++) {
+      const low = minZ + (nave + half / 2) * span,
+        high = low + span / 2;
+      const ring = clipMarketRoof(
+        clipMarketRoof(f.ring, low, true),
+        high,
+        false,
+      );
+      roofSurface(ring, colors.roof);
+      // Original shallow ceramic courses and longitudinal seams, clipped to
+      // each exact roof plane. Hundreds of joints still merge into one mesh.
+      for (let row = Math.ceil(low / 1.8) * 1.8; row < high; row += 1.8)
+        roofSurface(
+          clipMarketRoof(
+            clipMarketRoof(ring, row, true),
+            Math.min(high, row + 0.055),
+            false,
+          ),
+          "#a34d3b",
+          true,
+        );
+      const minX = Math.min(...ring.map((p) => p.x));
+      const maxX = Math.max(...ring.map((p) => p.x));
+      const spacing = Math.max(2.5, (maxX - minX) / 48);
+      for (let x = Math.ceil(minX / spacing) * spacing; x < maxX; x += spacing)
+        roofSurface(
+          clipMarketRoof(
+            clipMarketRoof(ring, x, true, "x"),
+            Math.min(maxX, x + 0.045),
+            false,
+            "x",
+          ),
+          "#a34d3b",
+          true,
+        );
+    }
+  const facades = [];
+  for (let i = 0; i < f.ring.length; i++) {
+    const a = f.ring[i],
+      c = f.ring[(i + 1) % f.ring.length];
+    const edge = marketEdge(a, c, f.ring);
+    if (!edge) continue;
+    // Fill the gables up to each clipped roof plane, including every ridge break.
+    const breaks = [0, 1];
+    if (Math.abs(c.z - a.z) > 0.01)
+      for (let step = 1; step < 6; step++) {
+        const t = (minZ + (step * span) / 2 - a.z) / (c.z - a.z);
+        if (t > 0 && t < 1) breaks.push(t);
+      }
+    breaks.sort((a, c) => a - c);
+    for (let j = 0; j < breaks.length - 1; j++) {
+      const p = breaks[j],
+        q = breaks[j + 1];
+      const ax = a.x + (c.x - a.x) * p,
+        az = a.z + (c.z - a.z) * p;
+      const cx = a.x + (c.x - a.x) * q,
+        cz = a.z + (c.z - a.z) * q;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(
+          [
+            ax,
+            eaves,
+            az,
+            cx,
+            eaves,
+            cz,
+            cx,
+            roofAt(cz),
+            cz,
+            ax,
+            eaves,
+            az,
+            cx,
+            roofAt(cz),
+            cz,
+            ax,
+            roofAt(az),
+            az,
+          ],
+          3,
+        ),
+      );
+      geometry.computeVertexNormals();
+      // Duplicate inward and outward faces; neither side depends on ring winding.
+      const reverse = geometry.clone();
+      const attribute = reverse.attributes.position;
+      for (let v = 0; v < attribute.count; v += 3) {
+        const x = attribute.getX(v),
+          y = attribute.getY(v),
+          z = attribute.getZ(v);
+        attribute.setXYZ(
+          v,
+          attribute.getX(v + 2),
+          attribute.getY(v + 2),
+          attribute.getZ(v + 2),
+        );
+        attribute.setXYZ(v + 2, x, y, z);
+      }
+      reverse.computeVertexNormals();
+      b.add(geometry, colors.stone);
+      b.add(reverse, colors.stone);
+    }
+    if (edge.length < 12) continue;
+    b.box(
+      edge.length,
+      0.38,
+      0.43,
+      colors.light,
+      edge.x,
+      eaves - 0.2,
+      edge.z,
+      edge.yaw,
+    );
+    b.box(edge.length, 0.7, 0.25, colors.shade, edge.x, 0.4, edge.z, edge.yaw);
+    const count = Math.min(14, Math.floor(edge.length / 6.5));
+    for (let bay = 0; bay < count; bay++) {
+      const t = (bay + 0.5) / count;
+      marketDoor(
+        b,
+        edge,
+        a.x + (c.x - a.x) * t,
+        a.z + (c.z - a.z) * t,
+        Math.min(4.9, eaves * 0.66),
+        2.8,
+      );
+    }
+    facades.push(edge);
+  }
+  // Signage is vector geometry, so chunk rendering works without Canvas/fonts.
+  // The principal facade faces Avenida 24 de Julho, toward the river (south).
+  const fronts = facades.filter(
+    (edge) => edge.nx * Math.sin(f.angle) + edge.nz * Math.cos(f.angle) > 0.8,
+  );
+  const front = (fronts.length ? fronts : facades).sort(
+    (a, c) => Math.hypot(a.x, a.z) - Math.hypot(c.x, c.z),
+  )[0];
+  if (front) {
+    marketLettering(
+      b,
+      "MERCADO DA RIBEIRA",
+      front.x + front.nx * 0.31,
+      eaves - 1.7,
+      front.z + front.nz * 0.31,
+      front.yaw,
+      0.17,
+    );
+    // A loading shutter reads as a public food market, not another residence.
+    const x = front.x + Math.cos(front.yaw) * front.length * 0.35;
+    const z = front.z - Math.sin(front.yaw) * front.length * 0.35;
+    for (let slat = 0; slat < 13; slat++)
+      b.box(
+        3.9,
+        0.24,
+        0.1,
+        slat % 2 ? colors.shade : colors.blue,
+        x + front.nx * 0.35,
+        0.8 + slat * 0.25,
+        z + front.nz * 0.35,
+        front.yaw,
+      );
+    // The centre clock and metal cupola are the market's street-side silhouette.
+    // A narrow, upright dome reads as a tower while staying inside mapped height.
+    const cupolaRadius = Math.min(3.2, front.length * 0.16);
+    const cupolaX = front.x - front.nx * (cupolaRadius + 0.3);
+    const cupolaZ = front.z - front.nz * (cupolaRadius + 0.3);
+    const drumTop = height * 0.76;
+    b.box(
+      cupolaRadius * 2,
+      drumTop - eaves,
+      cupolaRadius * 2,
+      colors.stone,
+      cupolaX,
+      (drumTop + eaves) / 2,
+      cupolaZ,
+      front.yaw,
+    );
+    b.box(
+      cupolaRadius * 2 + 0.35,
+      0.16,
+      cupolaRadius * 2 + 0.35,
+      colors.light,
+      cupolaX,
+      drumTop - 0.08,
+      cupolaZ,
+      front.yaw,
+    );
+    for (let face = 0; face < 4; face++) {
+      const yaw = front.yaw + (face * Math.PI) / 2;
+      for (const offset of [-0.9, 0.9])
+        panel(
+          b,
+          0.56,
+          0.96,
+          colors.glass,
+          cupolaX +
+            Math.sin(yaw) * (cupolaRadius + 0.04) +
+            Math.cos(yaw) * offset,
+          eaves + 0.12,
+          cupolaZ +
+            Math.cos(yaw) * (cupolaRadius + 0.04) -
+            Math.sin(yaw) * offset,
+          yaw,
+        );
+    }
+    const domeHeight = height - drumTop - 0.09;
+    const dome = new THREE.SphereGeometry(
+      cupolaRadius,
+      24,
+      10,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI / 2,
+    );
+    dome.scale(1, domeHeight / cupolaRadius, 1);
+    b.add(dome, colors.blue, cupolaX, drumTop, cupolaZ);
+    for (let rib = 0; rib < 12; rib++) {
+      const geometry = new THREE.TorusGeometry(
+        cupolaRadius,
+        0.04,
+        4,
+        12,
+        Math.PI / 2,
+      );
+      geometry.scale(1, domeHeight / cupolaRadius, 1);
+      b.add(
+        geometry,
+        colors.shade,
+        cupolaX,
+        drumTop,
+        cupolaZ,
+        (rib * Math.PI) / 6 - Math.PI / 2,
+      );
+    }
+    b.add(
+      new THREE.CircleGeometry(0.95, 24),
+      colors.white,
+      front.x + front.nx * 0.39,
+      eaves + 1.15,
+      front.z + front.nz * 0.39,
+      front.yaw,
+    );
+    b.add(
+      new THREE.TorusGeometry(0.98, 0.11, 5, 24),
+      colors.shade,
+      front.x + front.nx * 0.44,
+      eaves + 1.15,
+      front.z + front.nz * 0.44,
+      front.yaw,
+    );
+    b.box(
+      0.1,
+      0.7,
+      0.07,
+      colors.glass,
+      front.x + front.nx * 0.49,
+      eaves + 1.4,
+      front.z + front.nz * 0.49,
+      front.yaw,
+    );
+    b.box(
+      0.55,
+      0.1,
+      0.07,
+      colors.glass,
+      front.x + front.nx * 0.5 + Math.cos(front.yaw) * 0.23,
+      eaves + 1.15,
+      front.z + front.nz * 0.5 - Math.sin(front.yaw) * 0.23,
+      front.yaw,
+    );
+  }
+  b.group.userData.marketArchitecture = "three-nave covered hall";
+  b.group.userData.mappedHeight = height;
+  return b.finish();
+}
+
+function marketCircle(ring) {
+  // Largest inscribed circle identifies the circular nave without including its
+  // separately shaped loading annex in the radius or fabricating a new footprint.
+  let minX = Math.min(...ring.map((p) => p.x)),
+    maxX = Math.max(...ring.map((p) => p.x));
+  let minZ = Math.min(...ring.map((p) => p.z)),
+    maxZ = Math.max(...ring.map((p) => p.z));
+  let best = { x: 0, z: 0, radius: 0 };
+  if (maxX - minX < 0.1 || maxZ - minZ < 0.1) return best;
+  for (let pass = 0; pass < 3; pass++) {
+    const dx = (maxX - minX) / 12,
+      dz = (maxZ - minZ) / 12;
+    for (let x = minX + dx / 2; x < maxX; x += dx)
+      for (let z = minZ + dz / 2; z < maxZ; z += dz) {
+        if (!insideMarket({ x, z }, ring)) continue;
+        let radius = Infinity;
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i],
+            c = ring[(i + 1) % ring.length];
+          const vx = c.x - a.x,
+            vz = c.z - a.z;
+          const t = Math.max(
+            0,
+            Math.min(
+              1,
+              ((x - a.x) * vx + (z - a.z) * vz) / (vx * vx + vz * vz || 1),
+            ),
+          );
+          radius = Math.min(
+            radius,
+            Math.hypot(x - a.x - t * vx, z - a.z - t * vz),
+          );
+        }
+        if (radius > best.radius) best = { x, z, radius };
+      }
+    minX = best.x - dx;
+    maxX = best.x + dx;
+    minZ = best.z - dz;
+    maxZ = best.z + dz;
+  }
+  return best;
+}
+
+function benficaMarket(building, projectGeo, geoY) {
+  const f = footprintFrame(building, projectGeo, geoY);
+  if (!f) return null;
+  const b = builder(f, "Mercado de Benfica", [building.id]);
+  const height = Math.max(5, Math.min(18, Number(building.height) || 7));
+  const eaves = height * 0.64;
+  footprint(b, f, eaves, colors.red, colors.light);
+  const nave = marketCircle(f.ring),
+    r = nave.radius * 0.98;
+  if (r > 2) {
+    b.cylinder(r, r, 0.24, colors.light, nave.x, eaves + 0.12, nave.z, 48);
+    // Shallow concrete radial shell with clerestory glazing under its overhang.
+    b.cylinder(
+      0,
+      r,
+      height - eaves - 0.4,
+      colors.light,
+      nave.x,
+      (height + eaves + 0.4) / 2,
+      nave.z,
+      48,
+    );
+    for (let i = 0; i < 48; i++) {
+      const angle = (i * Math.PI * 2) / 48;
+      const x = nave.x + Math.sin(angle) * r,
+        z = nave.z + Math.cos(angle) * r;
+      b.box(r * 0.11, 0.85, 0.13, colors.glass, x, eaves - 0.5, z, angle);
+      b.box(
+        0.22,
+        eaves - 0.5,
+        0.2,
+        colors.light,
+        x,
+        (eaves - 0.5) / 2,
+        z,
+        angle,
+      );
+    }
+    for (let entrance = 0; entrance < 3; entrance++) {
+      const angle = (entrance * Math.PI * 2) / 3;
+      const x = nave.x + Math.sin(angle) * r,
+        z = nave.z + Math.cos(angle) * r;
+      const edge = { nx: Math.sin(angle), nz: Math.cos(angle), yaw: angle };
+      marketDoor(b, edge, x, z, eaves - 0.7, 3.1);
+      b.box(5.8, 0.25, 1.8, colors.light, x, eaves, z, angle);
+      marketLettering(
+        b,
+        entrance ? "BENFICA" : "MERCADO",
+        x + edge.nx * 0.42,
+        eaves - 0.08,
+        z + edge.nz * 0.42,
+        angle,
+        0.115,
+      );
+      // Abstract produce relief medallion, inspired by the entrance typology.
+      const sideX = x + Math.cos(angle) * 2.5,
+        sideZ = z - Math.sin(angle) * 2.5;
+      b.add(
+        new THREE.IcosahedronGeometry(0.58, 0),
+        colors.stone,
+        sideX + edge.nx * 0.23,
+        2.1,
+        sideZ + edge.nz * 0.23,
+      );
+    }
+  }
+  b.group.userData.marketArchitecture = "circular concrete nave";
+  b.group.userData.mappedHeight = height;
+  return b.finish();
+}
+
 /** Returns an entirely owned/disposable group; no browser globals are required. */
 export function createLandmarks(chunk, { projectGeo, geoY }) {
   const group = new THREE.Group();
@@ -729,9 +1321,13 @@ export function createLandmarks(chunk, { projectGeo, geoY }) {
             ? belem
             : id === SINTRA
               ? sintraPalace
-              : CHIMNEYS.has(id)
-                ? sintraChimney
-                : penaPart;
+              : id === RIBEIRA_MARKET
+                ? ribeiraMarket
+                : id === BENFICA_MARKET
+                  ? benficaMarket
+                  : CHIMNEYS.has(id)
+                    ? sintraChimney
+                    : penaPart;
     const model = make(building, projectGeo, geoY);
     if (!model) continue;
     model.updateMatrixWorld(true);
@@ -739,6 +1335,12 @@ export function createLandmarks(chunk, { projectGeo, geoY }) {
       name: model.name,
       osmId: id,
       position: model.position.toArray(),
+      ...(model.userData.marketArchitecture
+        ? {
+            marketArchitecture: model.userData.marketArchitecture,
+            mappedHeight: model.userData.mappedHeight,
+          }
+        : {}),
     });
     model.traverse((object) => {
       if (!object.isMesh) return;
@@ -751,7 +1353,7 @@ export function createLandmarks(chunk, { projectGeo, geoY }) {
     group.userData.landmarkIds.push(id);
   }
   // Pena has many mapped parts, but all of them share these small color buckets.
-  // The whole chunk therefore adds at most nine draw calls, not one per window.
+  // The whole chunk therefore adds a bounded palette of draw calls, not one per window.
   for (const [color, geometries] of buckets) {
     const geometry = mergeGeometries(geometries, false);
     geometries.forEach((part) => part.dispose());

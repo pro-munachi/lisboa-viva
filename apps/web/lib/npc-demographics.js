@@ -162,10 +162,25 @@ export function demographicProfile(categoryId, seed, options = {}) {
     prop = random() > 0.65 ? "cane" : "none";
   }
   if (category.id === "DEMO_006") {
-    role = choose(["neighbour", "commuter", "café-worker"]);
+    const contextualRoles =
+      options.context === "market"
+        ? ["shopper", "shopper", "neighbour", "market-vendor"]
+        : options.context === "café" || options.context === "cafe"
+          ? ["neighbour", "shopper", "café-worker"]
+          : options.context === "transit"
+            ? ["commuter", "commuter", "neighbour"]
+            : ["neighbour", "commuter", "shopper"];
+    role = contextualRoles.includes(options.role)
+      ? options.role
+      : choose(contextualRoles);
     style = role === "commuter" ? "jacket" : "casual";
-    prop =
-      role === "café-worker" ? "apron" : role === "commuter" ? "tote" : "none";
+    prop = ["café-worker", "market-vendor"].includes(role)
+      ? "apron"
+      : ["commuter", "shopper"].includes(role)
+        ? "tote"
+        : "none";
+    speed =
+      role === "commuter" ? 1.12 + random() * 0.12 : 0.96 + random() * 0.2;
   }
   if (category.id === "DEMO_007") {
     role = "visitor";
@@ -174,9 +189,9 @@ export function demographicProfile(categoryId, seed, options = {}) {
     speed = 0.9 + random() * 0.15;
   }
   if (category.id === "DEMO_008") {
-    role = "transit-staff";
+    role = options.context === "market" ? "market-staff" : "transit-staff";
     style = "jacket";
-    prop = "staff-uniform";
+    prop = options.context === "market" ? "apron" : "staff-uniform";
     speed = 1.1 + random() * 0.13;
   }
   const bodyType =
@@ -447,6 +462,11 @@ export function poseLocalDemographic(character, profile, time = 0) {
   }
   if (profile.prop === "scooter") rig.hips.position.y += 0.1;
   if (profile.ageBand === "elder") rig.torso.rotation.x += 0.025;
-  if (profile.moving === false && profile.role === "visitor")
-    rig.head.rotation.y += Math.sin(time * 0.35) * 0.12;
+  if (
+    profile.moving === false &&
+    (profile.role === "visitor" ||
+      profile.role === "shopper" ||
+      profile.role === "neighbour")
+  )
+    rig.head.rotation.y += Math.sin(time * 0.35 + profile.phase) * 0.2;
 }
