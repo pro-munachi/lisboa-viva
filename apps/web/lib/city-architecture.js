@@ -8,7 +8,7 @@ const FAMILIES = [
     bay: 3.5,
     storey: 3.2,
     roof: "hip",
-    colors: ["#edb09a", "#f1d58d"],
+    colors: ["#eea58f", "#f2cb68"],
     trim: "#fff0d5",
     frame: "#406f64",
   },
@@ -17,7 +17,7 @@ const FAMILIES = [
     bay: 3.3,
     storey: 3.1,
     roof: "gable",
-    colors: ["#77a7cd", "#6ab7aa"],
+    colors: ["#6ba9db", "#62bcb0"],
     trim: "#f8f0d7",
     frame: "#f1eedc",
   },
@@ -26,7 +26,7 @@ const FAMILIES = [
     bay: 4.1,
     storey: 3,
     roof: "gable",
-    colors: ["#ceacd1", "#a5d0ba"],
+    colors: ["#d49ec6", "#97cdb0"],
     trim: "#fff1d8",
     frame: "#667852",
   },
@@ -35,7 +35,7 @@ const FAMILIES = [
     bay: 5.2,
     storey: 4.1,
     roof: "mansard",
-    colors: ["#ead7bb", "#dfb9a5"],
+    colors: ["#efdbb6", "#e5b099"],
     trim: "#fff4e1",
     frame: "#485a66",
   },
@@ -44,7 +44,7 @@ const FAMILIES = [
     bay: 5.6,
     storey: 3.1,
     roof: "flat",
-    colors: ["#e8ece5", "#e2a27e"],
+    colors: ["#edf0e8", "#e49b74"],
     trim: "#f6f0df",
     frame: "#58696e",
   },
@@ -53,7 +53,7 @@ const FAMILIES = [
     bay: 5.8,
     storey: 3.5,
     roof: "flat",
-    colors: ["#8bb6c4", "#6d929f"],
+    colors: ["#87b9ce", "#648eac"],
     trim: "#c7dadc",
     frame: "#d9e7e7",
   },
@@ -348,7 +348,10 @@ export function createArchitecturePalette() {
         THREE.ShaderChunk.emissivemap_fragment.replace(
           "texture2D( emissiveMap, vEmissiveMapUv )",
           "texture2D( emissiveMap, vec2(vEmissiveMapUv.x, roamFacadeV(vEmissiveMapUv.y)) )",
-        ) + "\ntotalEmissiveRadiance *= roamNight;",
+        ) +
+          // Stable per-bay occupancy makes the city feel inhabited without a
+          // separate light for every window or an animation that flickers.
+          "\ntotalEmissiveRadiance *= roamNight;\n#ifdef USE_EMISSIVEMAP\nvec2 roamWindow = floor(vec2(vEmissiveMapUv.x * 2.0, vEmissiveMapUv.y));\nfloat roamOccupied = fract(sin(dot(roamWindow, vec2(17.17, 83.13))) * 43758.5453);\ntotalEmissiveRadiance *= mix(0.08, 1.0, step(0.38, roamOccupied));\n#endif",
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <map_fragment>",
@@ -360,7 +363,7 @@ export function createArchitecturePalette() {
     };
     material.userData.nightUniform = night;
     material.userData.family = FACADES[i].name;
-    material.customProgramCacheKey = () => "roam-facade-family-atlas-night-v3";
+    material.customProgramCacheKey = () => "roam-facade-family-atlas-night-v4";
     return material;
   });
   const roofTextures = [0, 1, 2, 3].map((finish) =>

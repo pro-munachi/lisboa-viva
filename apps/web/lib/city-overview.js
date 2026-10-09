@@ -5,13 +5,13 @@ import * as THREE from "three";
 const FAMILIES = ["hip", "gable-x", "gable-z", "flat"];
 const WALL_COLORS = [
   "#f0dfc0",
-  "#e7b198",
-  "#e9cb7f",
-  "#c2d9cf",
-  "#adcbd6",
+  "#eaa58c",
+  "#efca6b",
+  "#acd3bc",
+  "#92c0df",
   "#eed2bf",
   "#d5dcd9",
-  "#c9b3b0",
+  "#d3a3bd",
   "#ead8a8",
   "#bfd2aa",
   "#dec7a6",
@@ -25,7 +25,7 @@ const FLAT_COLORS = [
   "#d5d8df",
   "#ead5c3",
 ].map((color) => new THREE.Color(color));
-const ROOF_COLORS = ["#bd7350", "#b96846", "#cc8059", "#8b9999"];
+const ROOF_COLORS = ["#bf7047", "#b8643e", "#d08250", "#82959d"];
 
 function positionHash(x, z) {
   // Quantization is finer than the overview's metre-rounded source coordinates.

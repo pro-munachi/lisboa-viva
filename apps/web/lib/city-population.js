@@ -381,6 +381,7 @@ export function chooseWalkingRoutes(
 /**
  * Character options and original-line distances; the renderer owns the meshes.
  * @param {{paths: any[], target: {x: number, z: number}, buildings?: BuildingFootprint[], projectGeo?: GeographicProjector, max?: number, maxDistance?: number, context?: string, waterAt?: (point:any,line:any)=>boolean, surfaces?: {kind:string, ring:ReadonlyArray<ReadonlyArray<number>>}[], reservations?: {x:number,z:number,radius:number}[]}} options
+ * @returns {any[]}
  */
 export function createLocalWalkerProfiles({
   paths,
@@ -488,6 +489,7 @@ export function createLocalWalkerProfiles({
         groupId: null,
         groupRole: null,
         groupSize: 1,
+        routeIndex: r,
       };
       if (categoryId === "DEMO_003") {
         const groupId = `scenic-family:${identity}`,
@@ -570,9 +572,8 @@ export function createLocalWalkerProfiles({
           },
           elapsed: 0,
         };
-        // Visitors and local shoppers often travel with a companion. Their
-        // shared reflected interval, speed and pause clock keeps them together
-        // even after a long tab suspension or either end of the safe pavement.
+        // Visitors and local shoppers often travel with a companion. A shared
+        // pavement interval and pause clock keeps their formation together.
         const companionEligible =
           ["visitor", "neighbour", "shopper"].includes(profile.role) &&
           profile.ageBand === "adult" &&
@@ -631,14 +632,304 @@ export function createLocalWalkerProfiles({
       }
     }
   }
+  const network = createWalkingNetwork(routes, {
+    target,
+    buildings,
+    projectGeo,
+    reservations,
+    waterAt,
+    maxDistance,
+  });
+  for (const profile of profiles) {
+    if (profile.groupId) {
+      // Groups pause and turn together at the safe section limits, rather than
+      // flipping their bodies through 180 degrees in a single animation frame.
+      profile.groupJourney = {
+        turnSeconds: 1.4,
+        clock: null,
+        facing: profile.direction < 0 ? Math.PI : 0,
+      };
+    } else {
+      const current = positionAt(profile.line, profile.d, profile.side);
+      profile.journey = {
+        network,
+        routeIndex: profile.routeIndex,
+        leg: 0,
+        goal: profile.direction > 0 ? profile.maxD : profile.minD,
+        rest: 0,
+        connector: null,
+        facing: current.angle + (profile.direction < 0 ? Math.PI : 0),
+        turning: null,
+      };
+    }
+  }
   return profiles;
+}
+
+/** Only join already validated walking sections when every point of the short
+ * connector stays clear of buildings, street furniture, water and carriageways.
+ * This is a local simulation graph, not a city-wide routing service.
+ * @param {any[]} routes
+ * @param {{target?:{x:number,z:number},buildings?:BuildingFootprint[],projectGeo?:GeographicProjector,reservations?:{x:number,z:number,radius:number}[],waterAt?:(point:any,line:any)=>boolean,maxDistance?:number}} [options]
+ * @returns {{routes:any[],connections:any[]}}
+ */
+export function createWalkingNetwork(
+  routes,
+  {
+    target,
+    buildings = [],
+    projectGeo,
+    reservations = [],
+    waterAt,
+    maxDistance = 125,
+  } = {},
+) {
+  const network = {
+    routes,
+    connections: routes.map(() => ({ min: [], max: [] })),
+  };
+  if (!finitePoint(target)) return network;
+  const buildingBlocked = buildingAvoidance(
+    buildings,
+    target,
+    projectGeo,
+    maxDistance + 12,
+    0.48,
+  );
+  const carriages = [
+    ...new Set(
+      routes
+        .filter((route) => !PEDESTRIAN_KINDS.has(route.line.kind))
+        .map((route) => route.line),
+    ),
+  ];
+  const blocked = (point, a, b) => {
+    if (
+      distance(point, target) > maxDistance ||
+      buildingBlocked(point) ||
+      waterAt?.(point, a.line) ||
+      waterAt?.(point, b.line) ||
+      reservations.some(
+        (circle) =>
+          finitePoint(circle) && distance(point, circle) < circle.radius + 0.48,
+      )
+    )
+      return true;
+    // A connector is not permission to cut across an unmarked traffic lane.
+    for (const line of carriages)
+      for (let i = 1; i < line.ps.length; i++) {
+        if (
+          segmentDistance(point, line.ps[i - 1], line.ps[i]) <
+          line.width / 2 + 0.08
+        )
+          return true;
+      }
+    return false;
+  };
+  for (let i = 0; i < routes.length; i++)
+    for (let j = 0; j < i; j++) {
+      const a = routes[i],
+        b = routes[j];
+      if (
+        Math.abs((a.line.layer || 0) - (b.line.layer || 0)) > 0 ||
+        !!a.line.bridge !== !!b.line.bridge
+      )
+        continue;
+      for (const ae of ["min", "max"])
+        for (const be of ["min", "max"]) {
+          const start = positionAt(
+              a.line,
+              ae === "min" ? a.minD : a.maxD,
+              a.side,
+            ),
+            end = positionAt(b.line, be === "min" ? b.minD : b.maxD, b.side);
+          const gap = distance(start, end);
+          if (gap < 0.45 || gap > 5.5 || Math.abs(start.y - end.y) > 0.5)
+            continue;
+          const count = Math.max(2, Math.ceil(gap / 0.25));
+          let clear = true;
+          for (let n = 0; n <= count; n++) {
+            const t = n / count,
+              point = {
+                x: start.x + (end.x - start.x) * t,
+                z: start.z + (end.z - start.z) * t,
+              };
+            if (blocked(point, a, b)) {
+              clear = false;
+              break;
+            }
+          }
+          if (!clear) continue;
+          network.connections[i][ae].push({
+            routeIndex: j,
+            end: be,
+            length: gap,
+            start,
+            endPoint: end,
+          });
+          network.connections[j][be].push({
+            routeIndex: i,
+            end: ae,
+            length: gap,
+            start: end,
+            endPoint: start,
+          });
+        }
+    }
+  return network;
+}
+
+const shortestTurn = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+function faceJourney(profile, angle) {
+  const journey = profile.journey,
+    delta = shortestTurn(journey.facing, angle);
+  if (Math.abs(delta) > 0.12)
+    journey.turning = {
+      from: journey.facing,
+      to: journey.facing + delta,
+      elapsed: 0,
+      duration: Math.max(0.35, Math.abs(delta) * 0.36),
+    };
+  else journey.facing = angle;
+}
+function chooseNextWalkingGoal(profile) {
+  const journey = profile.journey,
+    network = journey.network,
+    route = network.routes[journey.routeIndex];
+  const atEnd =
+    Math.abs(profile.d - profile.minD) < 0.001
+      ? "min"
+      : Math.abs(profile.d - profile.maxD) < 0.001
+        ? "max"
+        : null;
+  const connections = atEnd
+    ? network.connections[journey.routeIndex][atEnd]
+    : [];
+  const choice = npcSeed(`${profile.id}:journey:${journey.leg++}`);
+  if (connections.length && choice % 4 !== 0) {
+    const connection = connections[choice % connections.length];
+    journey.connector = { ...connection, progress: 0 };
+    faceJourney(
+      profile,
+      Math.atan2(
+        connection.endPoint.x - connection.start.x,
+        connection.endPoint.z - connection.start.z,
+      ),
+    );
+    return;
+  }
+  // Browsing residents stop at shopfronts/lookouts as well as street ends.
+  // Commuters generally cross the whole section, while visitors wander between
+  // several destinations. The next goal is deterministic but changes per visit.
+  const span = profile.maxD - profile.minD;
+  const fractions =
+    profile.role === "commuter" ? [0, 1] : [0, 0.24, 0.53, 0.79, 1];
+  let fraction = fractions[choice % fractions.length];
+  if (
+    Math.abs(profile.minD + span * fraction - profile.d) <
+    Math.min(4, span * 0.22)
+  )
+    fraction = profile.d > (profile.minD + profile.maxD) / 2 ? 0 : 1;
+  journey.goal = profile.minD + span * fraction;
+  profile.direction = journey.goal > profile.d ? 1 : -1;
+  faceJourney(
+    profile,
+    positionAt(route.line, profile.d, route.side).angle +
+      (profile.direction < 0 ? Math.PI : 0),
+  );
+}
+
+function advanceWalkingJourney(profile, seconds) {
+  const journey = profile.journey;
+  // Long browser suspensions do not produce millions of destination visits.
+  let left = seconds > 600 ? seconds % 600 : seconds,
+    events = 0;
+  while (left > 1e-8 && events++ < 2048) {
+    if (journey.rest > 0) {
+      const used = Math.min(left, journey.rest);
+      journey.rest -= used;
+      left -= used;
+      profile.moving = false;
+      if (journey.rest <= 1e-8) chooseNextWalkingGoal(profile);
+      continue;
+    }
+    if (journey.turning) {
+      const turn = journey.turning,
+        used = Math.min(left, turn.duration - turn.elapsed);
+      turn.elapsed += used;
+      left -= used;
+      const t = clamp(turn.elapsed / turn.duration, 0, 1),
+        ease = t * t * (3 - 2 * t);
+      journey.facing = turn.from + (turn.to - turn.from) * ease;
+      profile.moving = false;
+      if (turn.elapsed >= turn.duration - 1e-8) {
+        journey.facing = turn.to;
+        journey.turning = null;
+      }
+      continue;
+    }
+    if (journey.connector) {
+      const connector = journey.connector,
+        needed = (connector.length - connector.progress) / profile.speed,
+        used = Math.min(left, needed);
+      connector.progress += used * profile.speed;
+      left -= used;
+      profile.moving = true;
+      if (connector.progress >= connector.length - 1e-8) {
+        journey.routeIndex = connector.routeIndex;
+        const route = journey.network.routes[journey.routeIndex];
+        profile.line = route.line;
+        profile.side = route.side;
+        profile.minD = route.minD;
+        profile.maxD = route.maxD;
+        profile.d = connector.end === "min" ? profile.minD : profile.maxD;
+        profile.context = route.context;
+        journey.connector = null;
+        journey.goal = connector.end === "min" ? profile.maxD : profile.minD;
+        profile.direction = connector.end === "min" ? 1 : -1;
+        faceJourney(
+          profile,
+          positionAt(profile.line, profile.d, profile.side).angle +
+            (profile.direction < 0 ? Math.PI : 0),
+        );
+      }
+      continue;
+    }
+    const gap = Math.abs(journey.goal - profile.d),
+      used = Math.min(left, gap / profile.speed);
+    profile.d = clamp(
+      profile.d + profile.direction * used * profile.speed,
+      profile.minD,
+      profile.maxD,
+    );
+    left -= used;
+    journey.facing =
+      positionAt(profile.line, profile.d, profile.side).angle +
+      (profile.direction < 0 ? Math.PI : 0);
+    profile.moving = true;
+    if (Math.abs(journey.goal - profile.d) < 1e-7) {
+      profile.d = journey.goal;
+      journey.rest =
+        (profile.role === "visitor"
+          ? 3.1
+          : profile.ageBand === "elder"
+            ? 2.8
+            : profile.role === "shopper"
+              ? 2.4
+              : 1.0) +
+        (npcSeed(`${profile.id}:rest:${journey.leg}`) % 11) / 10;
+      profile.moving = false;
+    }
+  }
 }
 
 function walkingTimeUntil(time, walk, period) {
   return Math.floor(time / period) * walk + Math.min(time % period, walk);
 }
 
-/** O(1) reflection inside the safe nearby section, including a very large time step. */
+/** Destination-led journeys and formation-safe group pauses/turns. Legacy
+ * externally supplied profiles without a journey retain their bounded sampler.
+ */
 export function advanceLocalWalker(profile, dt) {
   const span = profile.maxD - profile.minD;
   if (!(span > 0) || !Number.isFinite(dt) || dt <= 0) return profile;
@@ -654,6 +945,49 @@ export function advanceLocalWalker(profile, dt) {
     );
     profile.elapsed = (profile.elapsed || 0) + dt;
     profile.moving = next % period < profile.pause.walk;
+  }
+  const authoredMoving = profile.moving !== false;
+  if (profile.journey) {
+    advanceWalkingJourney(profile, walkingTime);
+    if (!authoredMoving) profile.moving = false;
+    return profile;
+  }
+  if (profile.groupJourney) {
+    const journey = profile.groupJourney,
+      travel = span / profile.speed,
+      turn = journey.turnSeconds,
+      cycle = 2 * (travel + turn);
+    if (journey.clock === null)
+      journey.clock =
+        profile.direction > 0
+          ? (profile.d - profile.minD) / profile.speed
+          : travel + turn + (profile.maxD - profile.d) / profile.speed;
+    journey.clock += walkingTime;
+    const phase = ((journey.clock % cycle) + cycle) % cycle;
+    if (phase < travel) {
+      profile.d = profile.minD + phase * profile.speed;
+      profile.direction = 1;
+      journey.facing = 0;
+      profile.moving = authoredMoving;
+    } else if (phase < travel + turn) {
+      const t = (phase - travel) / turn;
+      profile.d = profile.maxD;
+      profile.direction = 1;
+      journey.facing = Math.PI * t * t * (3 - 2 * t);
+      profile.moving = false;
+    } else if (phase < 2 * travel + turn) {
+      profile.d = profile.maxD - (phase - travel - turn) * profile.speed;
+      profile.direction = -1;
+      journey.facing = Math.PI;
+      profile.moving = authoredMoving;
+    } else {
+      const t = (phase - 2 * travel - turn) / turn;
+      profile.d = profile.minD;
+      profile.direction = -1;
+      journey.facing = Math.PI + Math.PI * t * t * (3 - 2 * t);
+      profile.moving = false;
+    }
+    return profile;
   }
   const travelled = Math.max(0, walkingTime) * profile.speed;
   const initial =
@@ -674,7 +1008,21 @@ export function advanceLocalWalker(profile, dt) {
  */
 export function sampleLocalWalker(profile, output) {
   const p = positionAt(profile.line, profile.d, profile.side, output);
-  p.angle += profile.direction < 0 ? Math.PI : 0;
+  if (profile.journey) {
+    const connector = profile.journey.connector;
+    if (connector) {
+      const t = clamp(connector.progress / connector.length, 0, 1);
+      p.x = connector.start.x + (connector.endPoint.x - connector.start.x) * t;
+      p.y = connector.start.y + (connector.endPoint.y - connector.start.y) * t;
+      p.z = connector.start.z + (connector.endPoint.z - connector.start.z) * t;
+    }
+    p.angle = profile.journey.facing;
+  } else
+    p.angle += profile.groupJourney
+      ? profile.groupJourney.facing
+      : profile.direction < 0
+        ? Math.PI
+        : 0;
   p.reverse = profile.direction < 0;
   return p;
 }

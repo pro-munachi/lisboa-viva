@@ -1,0 +1,351 @@
+.dialog {
+  position: fixed;
+  inset: max(84px, 10dvh) 20px auto auto;
+  width: min(380px, calc(100vw - 40px));
+  max-height: calc(100dvh - 180px);
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  color: #253445;
+  border: 1px solid #e9edf2;
+  border-radius: 30px;
+  background: #fff;
+  box-shadow: 0 18px 70px #24324626;
+  font-family: var(--font-roam-app), Arial, sans-serif;
+  animation: surface 180ms ease-out;
+}
+.dialog::backdrop {
+  background: #192d3e0d;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.header > div {
+  flex: 1;
+  min-width: 0;
+}
+.header p {
+  margin: 0 0 5px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: #647f67;
+}
+.header h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+.hero {
+  display: grid;
+  place-items: center;
+  flex: 0 0 56px;
+  height: 56px;
+  background: #edf7d9;
+  border-radius: 50%;
+  font-size: 28px;
+}
+.close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #304258;
+  background: #f2f5f8;
+}
+.description {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #667381;
+}
+.actions {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+}
+.actions button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 74px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid #edf0f3;
+  border-radius: 21px;
+  background: #f9fafb;
+  color: #253445;
+  cursor: pointer;
+}
+.actions button:active {
+  transform: scale(0.98);
+}
+.actions button > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.actions strong {
+  display: block;
+  font-size: 13px;
+}
+.actions small {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.4;
+  font-size: 11px;
+  color: #6a7684;
+}
+.emoji {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  height: 40px;
+  font-size: 23px;
+  border-radius: 50%;
+  background: #fff;
+}
+.points {
+  font-size: 10px;
+  font-weight: 800;
+  color: #577635;
+  white-space: nowrap;
+  border-radius: 15px;
+  padding: 6px 8px;
+  background: #e9f5ce;
+}
+.note {
+  margin: 16px 0 0;
+  color: #7a8390;
+  font-size: 10px;
+  line-height: 1.5;
+}
+@keyframes surface {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (hover: hover) {
+  .actions button:hover {
+    background: #f0f5ff;
+    border-color: #d9e5fc;
+  }
+}
+@media (max-width: 640px) {
+  .dialog {
+    inset: auto 10px max(94px, env(safe-area-inset-bottom)) 10px;
+    width: auto;
+    max-height: min(66dvh, 540px);
+    padding: 17px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dialog {
+    animation: none;
+  }
+  .actions button:active {
+    transform: none;
+  }
+}
+.walletSummary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 20px 0 12px;
+}
+.walletSummary > span {
+  padding: 15px;
+  background: #f3f7ea;
+  border-radius: 20px;
+}
+.walletSummary > span:last-child {
+  background: #fff2f0;
+}
+.walletSummary small {
+  display: block;
+  color: #71816d;
+  font-size: 11px;
+}
+.walletSummary strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 23px;
+  letter-spacing: -0.04em;
+}
+.fines {
+  padding: 15px;
+  border: 1px solid #edf0f3;
+  border-radius: 22px;
+}
+.fines h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.fines > p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #667381;
+}
+.fine {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #edf0f3;
+}
+.fine > div {
+  flex: 1;
+}
+.fine strong {
+  font-size: 15px;
+}
+.fine p {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #697684;
+  margin: 4px 0 10px;
+}
+.fine button,
+.refresh,
+.walletLink {
+  min-height: 44px;
+  border: 0;
+  border-radius: 15px;
+  padding: 10px 14px;
+  color: #31415a;
+  background: #edf2fd;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.fine button {
+  background: #edf6d7;
+  color: #526d2c;
+}
+.refresh,
+.walletLink {
+  width: 100%;
+  margin-top: 14px;
+}
+.walletLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #f6f7f9;
+}
+.walletLink > span:first-child {
+  font-size: 19px;
+}
+.fineCount {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #a74e4d;
+  background: #ffe6e2;
+  font-size: 11px;
+}
+.actions .warning {
+  color: #a76543;
+  font-weight: 700;
+}
+.error {
+  color: #a7504a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dialog button:disabled,
+.notice button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.dialog button:focus-visible,
+.notice button:focus-visible {
+  outline: 3px solid #c2d2ff;
+  outline-offset: 3px;
+}
+.notice {
+  position: fixed;
+  z-index: 24;
+  left: 50%;
+  bottom: 110px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(400px, calc(100vw - 28px));
+  padding: 13px;
+  border: 1px solid #edf1f4;
+  border-radius: 25px;
+  color: #334257;
+  background: #fffffff5;
+  box-shadow: 0 8px 34px #23344b20;
+  font-family: var(--font-roam-app), Arial, sans-serif;
+}
+.noticeEmoji {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 50%;
+  font-size: 22px;
+  background: #edf6db;
+}
+.notice > div {
+  flex: 1;
+  min-width: 0;
+}
+.notice p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+.noticeActions {
+  display: flex;
+  gap: 7px;
+  margin-top: 6px;
+}
+.noticeActions button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  color: #395a88;
+  border: 0;
+  border-radius: 13px;
+  background: #edf3ff;
+}
+.dismiss {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #647286;
+  background: #f3f5f8;
+}
+@media (max-width: 640px) {
+  .notice {
+    bottom: max(98px, calc(env(safe-area-inset-bottom) + 86px));
+  }
+}

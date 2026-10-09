@@ -53,6 +53,9 @@ func (s *server) routes() http.Handler {
 	mux.Handle("PATCH /v1/player/home", s.requireSession(http.HandlerFunc(s.updateHome)))
 	mux.Handle("GET /v1/player/wallet", s.requireSession(http.HandlerFunc(s.getWallet)))
 	mux.Handle("POST /v1/player/wallet/spend", s.requireSession(http.HandlerFunc(s.spendWallet)))
+	mux.Handle("GET /v1/player/scenery", s.requireSession(http.HandlerFunc(s.getScenery)))
+	mux.Handle("POST /v1/player/scenery", s.requireSession(http.HandlerFunc(s.performScenery)))
+	mux.Handle("POST /v1/player/scenery/fines/{id}/settle", s.requireSession(http.HandlerFunc(s.settleScenery)))
 	mux.Handle("PUT /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.updatePresence)))
 	mux.Handle("DELETE /v1/multiplayer/presence", s.requireSession(http.HandlerFunc(s.clearPresence)))
 	mux.Handle("GET /v1/multiplayer/nearby", s.requireSession(http.HandlerFunc(s.nearbyPlayers)))
@@ -115,18 +118,23 @@ func fail(w http.ResponseWriter, err error) {
 			"invalid_locale":              http.StatusBadRequest, "handle_taken": http.StatusConflict,
 			"email_taken": http.StatusConflict, "credentials": http.StatusUnauthorized,
 			"session_expired": http.StatusUnauthorized, "forbidden": http.StatusForbidden,
-			"invalid_presence":       http.StatusBadRequest,
-			"invalid_appearance":     http.StatusBadRequest,
-			"invalid_home":           http.StatusBadRequest,
-			"invalid_wallet_spend":   http.StatusBadRequest,
-			"insufficient_funds":     http.StatusConflict,
-			"wallet_conflict":        http.StatusConflict,
-			"chat_presence_required": http.StatusForbidden,
-			"rate_limited":           http.StatusTooManyRequests,
-			"payload_too_large":      http.StatusRequestEntityTooLarge,
-			"nonce_conflict":         http.StatusConflict,
-			"invalid_peer":           http.StatusBadRequest,
-			"peer_unavailable":       http.StatusNotFound,
+			"invalid_presence":         http.StatusBadRequest,
+			"invalid_appearance":       http.StatusBadRequest,
+			"invalid_home":             http.StatusBadRequest,
+			"invalid_wallet_spend":     http.StatusBadRequest,
+			"insufficient_funds":       http.StatusConflict,
+			"wallet_conflict":          http.StatusConflict,
+			"invalid_scenery_action":   http.StatusBadRequest,
+			"scenery_conflict":         http.StatusConflict,
+			"scenery_cooldown":         http.StatusTooManyRequests,
+			"scenery_fines_full":       http.StatusConflict,
+			"scenery_fine_unavailable": http.StatusNotFound,
+			"chat_presence_required":   http.StatusForbidden,
+			"rate_limited":             http.StatusTooManyRequests,
+			"payload_too_large":        http.StatusRequestEntityTooLarge,
+			"nonce_conflict":           http.StatusConflict,
+			"invalid_peer":             http.StatusBadRequest,
+			"peer_unavailable":         http.StatusNotFound,
 		}[code]
 		if activityStatus, exists := activityErrorStatuses[code]; exists {
 			status = activityStatus

@@ -797,7 +797,10 @@ test("the avatar faces its direction of travel while boarding each vehicle", () 
         .applyQuaternion(avatar.quaternion)
         .setY(0)
         .normalize();
-      assert.ok(movement.z > 0, `${mode} approaches the vehicle`);
+      assert.ok(
+        mode === "bus" ? movement.z < 0 : movement.z > 0,
+        `${mode} approaches its boarding side`,
+      );
       assert.ok(facing.dot(movement) > 0.99, `${mode} faces its boarding path`);
     } finally {
       env.runtime.dispose();
@@ -1091,4 +1094,95 @@ test("boarding preserves the saved body type, clothing, hair and skin identity",
     "302823",
   );
   env.runtime.dispose();
+});
+
+test("road journeys use the same shaped bus/taxi models as city traffic with moving doors and rolling wheels", () => {
+  for (const mode of ["bus", "taxi"]) {
+    const env = setup();
+    env.runtime.start(sequence(mode));
+    const vehicle = stage(env).getObjectByName(`${mode}-vehicle`);
+    assert.equal(vehicle.userData.vehicle.kind, mode);
+    assert.equal(vehicle.rotation.y, Math.PI / 2);
+    assert.ok(vehicle.userData.vehicle.drawCalls <= 22);
+    const wheels = vehicle.userData.wheels,
+      doors = vehicle.userData.doors;
+    assert.equal(wheels.length, 4);
+    assert.equal(doors.length, mode === "bus" ? 2 : 1);
+    const door = doors[0];
+    assert.ok(
+      mode === "bus"
+        ? door.position.z < door.userData.closedX
+        : door.rotation.y < 0,
+      "doors open before the traveller boards",
+    );
+    const initialX = vehicle.position.x;
+    const avatar = stage(env).getObjectByName("traveller");
+    const initialZ = avatar.position.z;
+    env.runtime.update(1);
+    assert.ok(
+      mode === "bus"
+        ? avatar.position.z < initialZ
+        : avatar.position.z > initialZ,
+    );
+    assert.equal(vehicle.position.x, initialX);
+    env.runtime.update(2.2);
+    assert.equal(avatar.visible, false);
+    assert.ok(vehicle.position.x > initialX);
+    for (const wheel of wheels) assert.ok(Math.abs(wheel.rotation.x) > 0.1);
+    assert.ok(
+      mode === "bus"
+        ? Math.abs(door.position.z - door.userData.closedX) < 1e-8
+        : Math.abs(door.rotation.y) < 1e-8,
+    );
+    const cleanup = auditStage(stage(env));
+    env.runtime.skip();
+    cleanup();
+    assert.equal(env.finishes.length, 1);
+    env.runtime.dispose();
+  }
+});
+test("regional bus visuals, saved road-traveller appearance and reduced motion preserve journey semantics", () => {
+  const appearance = {
+    bodyType: "female",
+    outfitStyle: "dress",
+    topColor: "#ea7588",
+    hairStyle: "bob",
+    hairColor: "#754f32",
+    skinTone: "#745244",
+    bottomColor: "#30354d",
+    shoeColor: "#ece5d7",
+  };
+  for (const mode of ["bus", "taxi"]) {
+    const env = setup(true);
+    env.runtime.start(
+      sequence(mode, `reduced-${mode}`, {
+        appearance,
+        busOperator: "metropolitana",
+      }),
+    );
+    const root = stage(env),
+      vehicle = root.getObjectByName(`${mode}-vehicle`),
+      avatar = root.getObjectByName("traveller");
+    assert.equal(avatar.userData.bodyType, "female");
+    assert.equal(avatar.userData.style, "dress");
+    assert.equal(avatar.userData.hairStyle, "bob");
+    if (mode === "bus") {
+      assert.equal(vehicle.userData.vehicle.operator, "metropolitana");
+      assert.equal(vehicle.userData.vehicle.length, 12);
+    }
+    const pose = vehicle.position.clone(),
+      camera = env.camera.position.clone();
+    env.runtime.update(0.4);
+    assert.deepEqual(vehicle.position.toArray(), pose.toArray());
+    assert.deepEqual(env.camera.position.toArray(), camera.toArray());
+    assert.ok(
+      vehicle.userData.wheels.every((wheel: any) => wheel.rotation.x === 0),
+    );
+    const verify = auditStage(root);
+    env.runtime.update(0.7);
+    verify();
+    assert.equal(env.finishes.length, 1);
+    exactDestination(env);
+    env.runtime.dispose();
+  }
 });

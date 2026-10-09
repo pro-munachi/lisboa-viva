@@ -5,6 +5,7 @@ import {
   createLocalWalkerProfiles,
   advanceLocalWalker,
   sampleLocalWalker,
+  createWalkingNetwork,
 } from "../lib/city-population.js";
 
 const project = (point: number[]) => ({ x: point[0], z: point[1] });
@@ -337,8 +338,10 @@ test("authored pauses integrate elapsed time independently of animation frame si
     target,
     projectGeo: project,
   })[0];
-  const coarse = { ...original },
-    fine = { ...original };
+  // Journey clocks contain mutable destination/turn state; independent actors
+  // must not share that state through a shallow object copy.
+  const coarse = structuredClone(original),
+    fine = structuredClone(original);
   advanceLocalWalker(coarse, 120);
   for (let i = 0; i < 1200; i++) advanceLocalWalker(fine, 0.1);
   near(coarse.d, fine.d);
@@ -493,4 +496,165 @@ test("companions keep one shared route, pause and heading through turns and larg
     "the animation loop can reuse its sample object",
   );
   assert.deepEqual(out, sampleLocalWalker(pair[0]));
+});
+
+test("solo residents follow joined safe pavements to a new street, stopping to look around before turning", () => {
+  const paths = [
+    {
+      id: 1001,
+      kind: "footway",
+      width: 2,
+      length: 30,
+      lengths: [0, 30],
+      ps: [
+        { x: 0, y: 0, z: 0 },
+        { x: 30, y: 0, z: 0 },
+      ],
+    },
+    {
+      id: 1002,
+      kind: "footway",
+      width: 2,
+      length: 30,
+      lengths: [0, 30],
+      ps: [
+        { x: 30, y: 0, z: 0 },
+        { x: 30, y: 0, z: 30 },
+      ],
+    },
+  ];
+  const people = createLocalWalkerProfiles({
+    paths,
+    target: { x: 27, z: 6 },
+    max: 20,
+  });
+  const solos = people.filter((person) => !person.groupId);
+  assert.ok(solos.length > 0);
+  let changedStreet = false,
+    turning = false,
+    resting = false;
+  for (let i = 0; i < 1600; i++)
+    for (const person of solos) {
+      const lineBefore = person.line;
+      advanceLocalWalker(person, 0.1);
+      changedStreet ||= person.line !== lineBefore;
+      turning ||= !!person.journey.turning;
+      resting ||= person.journey.rest > 0;
+      const sample = sampleLocalWalker(person);
+      assert.ok(
+        sample.x >= 0 &&
+          sample.x <= 30.01 &&
+          sample.z >= -0.01 &&
+          sample.z <= 30,
+      );
+      assert.ok(Number.isFinite(sample.angle));
+    }
+  assert.ok(changedStreet, "connected walkers visit another mapped footpath");
+  assert.ok(
+    turning && resting,
+    "destinations have deliberate rests and a smooth turn",
+  );
+});
+test("walking connectors cannot bypass obstacles, enter water or cross unmarked carriageways", () => {
+  const paths = [
+    {
+      id: 1011,
+      kind: "footway",
+      width: 2,
+      length: 30,
+      lengths: [0, 30],
+      ps: [
+        { x: 0, y: 0, z: 0 },
+        { x: 30, y: 0, z: 0 },
+      ],
+    },
+    {
+      id: 1012,
+      kind: "footway",
+      width: 2,
+      length: 30,
+      lengths: [0, 30],
+      ps: [
+        { x: 30, y: 0, z: 0 },
+        { x: 30, y: 0, z: 30 },
+      ],
+    },
+  ];
+  const centre = { x: 27, z: 6 };
+  const routes = chooseWalkingRoutes(paths, centre);
+  const count = (network: any) =>
+    network.connections.flatMap((connection: any) => [
+      ...connection.min,
+      ...connection.max,
+    ]).length;
+  assert.ok(count(createWalkingNetwork(routes, { target: centre })) > 0);
+  assert.equal(
+    count(
+      createWalkingNetwork(routes, {
+        target: centre,
+        reservations: [{ x: 29.4, z: 0.6, radius: 1.0 }],
+      }),
+    ),
+    0,
+  );
+  assert.equal(
+    count(
+      createWalkingNetwork(routes, {
+        target: centre,
+        waterAt: (point: any) => point.x > 28.9 && point.z < 1.2,
+      }),
+    ),
+    0,
+  );
+  const street = {
+    ...longStreet,
+    id: 1013,
+    width: 8,
+    ps: [
+      { x: 30, y: 0, z: -100 },
+      { x: 30, y: 0, z: 100 },
+    ],
+    lengths: [0, 200],
+    length: 200,
+  };
+  const withStreet = chooseWalkingRoutes([...paths, street], centre);
+  const network = createWalkingNetwork(withStreet, { target: centre });
+  const footIndices = network.routes
+    .map((route: any, index: number) => [route.line.id, index])
+    .filter(([id]) => id === 1011 || id === 1012)
+    .map(([, index]) => index);
+  for (const i of footIndices)
+    assert.ok(
+      [...network.connections[i].min, ...network.connections[i].max].every(
+        (connection: any) => !footIndices.includes(connection.routeIndex),
+      ),
+    );
+});
+test("accompanied groups turn gradually in place and keep their formation while waiting", () => {
+  const plaza = { ...longStreet, kind: "pedestrian", width: 6 };
+  const people = createLocalWalkerProfiles({ paths: [plaza], target, max: 64 });
+  const leader = people.find((person) => person.groupId);
+  assert.ok(leader);
+  const group = people.filter((person) => person.groupId === leader.groupId);
+  for (const person of group) {
+    person.direction = 1;
+    person.d = person.maxD - 0.1;
+    person.groupJourney.clock = null;
+    person.pause = { walk: 100, stop: 0, phase: 0 };
+  }
+  const before = sampleLocalWalker(group[0]);
+  for (const person of group) advanceLocalWalker(person, 0.75);
+  const after = sampleLocalWalker(group[0]);
+  assert.ok(
+    Math.abs(after.angle - before.angle) > 0.1 &&
+      Math.abs(after.angle - before.angle) < Math.PI - 0.1,
+  );
+  assert.ok(
+    group.every(
+      (person) =>
+        person.moving === false && Math.abs(person.d - person.maxD) < 1e-8,
+    ),
+  );
+  const gap = group[1].maxD - group[0].maxD;
+  near(group[1].d - group[0].d, gap);
 });

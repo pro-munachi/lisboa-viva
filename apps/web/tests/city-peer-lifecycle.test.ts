@@ -20,6 +20,8 @@ function harness() {
   scene.add(peerPopulation);
   const env: any = {
     options: { peers: [] },
+    navigation: null,
+    refreshCollisionActors() {},
     destroyed: false,
     travelPhase: null,
     travel: {
