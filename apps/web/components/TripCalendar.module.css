@@ -1,9 +1,10 @@
 .calendar {
   padding: 14px;
-  border: 1px solid var(--line, #e5e0e3);
+  border: 1px solid #e4e8ee;
   border-radius: 16px;
-  background: #f4f7ff;
+  background: #fff;
   color: var(--ink, #292942);
+  font-family: var(--font-roam-app), sans-serif;
 }
 .heading {
   display: flex;
@@ -13,7 +14,8 @@
 }
 .heading h3 {
   margin: 0;
-  font-size: 15px;
+  font-family: inherit;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -26,7 +28,8 @@
 .duration {
   padding: 6px 9px;
   border-radius: 999px;
-  background: var(--roam-lime, #d7ee83);
+  background: var(--roam-blue-soft, #eaf0ff);
+  color: var(--roam-cobalt-dark, #193faf);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -47,11 +50,13 @@
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  padding: 9px;
-  border: 1px solid var(--line, #e5e0e3);
-  border-radius: 10px;
-  background: var(--paper, #fffdf9);
-  font-size: 12px;
+  padding: 10px;
+  border: 1px solid #dce2ea;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink, #213052);
+  font-family: inherit;
+  font-size: 14px;
   font-weight: 400;
 }
 .monthBar {
@@ -70,7 +75,8 @@
   min-width: 44px;
   min-height: 44px;
   border-radius: 999px;
-  background: #ffffffb3;
+  border: 1px solid #e4e8ee;
+  background: #fff;
   color: inherit;
 }
 .gridScroller {
@@ -119,7 +125,7 @@
 }
 .day.endpoint,
 .day.endpoint:hover {
-  background: var(--accent, #292942);
+  background: var(--roam-cobalt, #2456d8);
   color: #fff;
   font-weight: 600;
 }
@@ -166,7 +172,10 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .day:not(.endpoint):hover {
-    background: var(--roam-mint, #c9efdf);
+    background: #f1f5ff;
+  }
+  .monthBar button:hover {
+    background: #f4f6f8;
   }
 }
 @media (max-width: 420px) {
@@ -175,6 +184,14 @@
   }
   .fields {
     gap: 8px;
+  }
+  .fields input {
+    font-size: 16px;
+  }
+}
+@media (max-width: 380px) {
+  .fields {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (prefers-reduced-motion: reduce) {

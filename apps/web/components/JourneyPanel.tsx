@@ -1,22 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import {
-  ArrowRight,
-  Bus,
-  CarFront,
-  Check,
-  Compass,
-  CreditCard,
-  Clock3,
-  DoorOpen,
-  Footprints,
-  MapPin,
-  MessageCircle,
-  Plane,
-  Ticket,
-  TrainFront,
-} from "lucide-react";
+import { ArrowRight, Check, Clock3 } from "lucide-react";
 import { euro as fare, previewJourney, time, type Trip } from "../lib/engine";
 import { places } from "../lib/content";
 import {
@@ -39,14 +24,14 @@ export type JourneyPanelProps = {
   onEnterHub: (hub: HubId) => void;
 };
 
-const hubIcons = { airport: Plane, station: TrainFront, "bus-stop": Bus };
-const modeIcons = {
-  metro: TrainFront,
-  train: TrainFront,
-  bus: Bus,
-  walk: Footprints,
-  flight: Plane,
-  taxi: CarFront,
+const hubGraphics = { airport: "✈️", station: "🚆", "bus-stop": "🚌" };
+const modeGraphics = {
+  metro: "🚇",
+  train: "🚆",
+  bus: "🚌",
+  walk: "🚶",
+  flight: "✈️",
+  taxi: "🚕",
 };
 
 function EncounterPortrait({ person }: { person: JourneyPerson }) {
@@ -110,7 +95,7 @@ export default function JourneyPanel({
     : null;
   const cardPreview = previewJourney(trip, { action: "get-card" });
   const boardPreview = previewJourney(trip, { action: "board" });
-  const HubIcon = currentHub ? hubIcons[currentHub.kind] : Compass;
+  const hubGraphic = currentHub ? hubGraphics[currentHub.kind] : "🗺️";
   const finished = journey.phase === "departed" || trip.complete;
   const people = peopleAtHub(journey.hub);
   const selectedPerson =
@@ -163,8 +148,8 @@ export default function JourneyPanel({
     <section className={styles.panel} aria-label="Your transport journey">
       <header className={styles.hero}>
         <div className={styles.heroHeading}>
-          <span className={styles.heroIcon}>
-            <HubIcon size={24} aria-hidden="true" />
+          <span className={styles.heroIcon} aria-hidden="true">
+            {hubGraphic}
           </span>
           <div>
             <span className={styles.eyebrow}>
@@ -207,7 +192,9 @@ export default function JourneyPanel({
             className={styles.sceneButton}
             onClick={() => onEnterHub(currentHub.id)}
           >
-            <DoorOpen size={16} aria-hidden="true" />
+            <span className={styles.graphic} aria-hidden="true">
+              🗺️
+            </span>
             Explore this{" "}
             {currentHub.kind === "airport"
               ? "arrivals hall"
@@ -223,8 +210,8 @@ export default function JourneyPanel({
       {currentHub && (
         <>
           <div className={styles.cardPrompt}>
-            <span className={styles.cardIcon}>
-              <CreditCard size={23} aria-hidden="true" />
+            <span className={styles.cardIcon} aria-hidden="true">
+              💳
             </span>
             <div className={styles.cardCopy}>
               <h4>
@@ -266,7 +253,13 @@ export default function JourneyPanel({
           {booked && (
             <section className={styles.booked} aria-label="Your ready ticket">
               <div className={styles.ticketTop}>
-                <Ticket size={17} aria-hidden="true" />
+                <span
+                  className={styles.graphic}
+                  data-tone="pink"
+                  aria-hidden="true"
+                >
+                  🎟️
+                </span>
                 <span>TICKET READY · SIMULATION</span>
               </div>
               <h4>{booked.name.replace(/ · simulation$/, "")}</h4>
@@ -328,7 +321,6 @@ export default function JourneyPanel({
                   action: "book",
                   routeId: route.id,
                 });
-                const ModeIcon = modeIcons[route.mode];
                 const isBooked = route.id === booked?.id;
                 return (
                   <article
@@ -337,8 +329,12 @@ export default function JourneyPanel({
                     data-booked={isBooked}
                   >
                     <div className={styles.routeTop}>
-                      <span className={styles.routeIcon}>
-                        <ModeIcon size={21} aria-hidden="true" />
+                      <span
+                        className={styles.routeIcon}
+                        data-mode={route.mode}
+                        aria-hidden="true"
+                      >
+                        {modeGraphics[route.mode]}
                       </span>
                       <div>
                         <h5>{route.name.replace(/ · simulation$/, "")}</h5>
@@ -358,11 +354,13 @@ export default function JourneyPanel({
                     <p>{route.description}</p>
                     <div className={styles.routeBottom}>
                       <span className={styles.requirement}>
-                        {route.requiresCard ? (
-                          <CreditCard size={13} aria-hidden="true" />
-                        ) : (
-                          <Footprints size={13} aria-hidden="true" />
-                        )}
+                        <span
+                          className={styles.graphic}
+                          data-tone="peach"
+                          aria-hidden="true"
+                        >
+                          {route.requiresCard ? "💳" : modeGraphics[route.mode]}
+                        </span>
                         {route.requiresCard
                           ? "Card required"
                           : "No card needed"}
@@ -427,11 +425,14 @@ export default function JourneyPanel({
                   action: "visit-hub",
                   hub: hub.id,
                 });
-                const Icon = hubIcons[hub.kind];
                 return (
                   <div key={hub.id} className={styles.hub}>
-                    <span className={styles.routeIcon}>
-                      <Icon size={20} aria-hidden="true" />
+                    <span
+                      className={styles.routeIcon}
+                      data-mode={hub.kind}
+                      aria-hidden="true"
+                    >
+                      {hubGraphics[hub.kind]}
                     </span>
                     <div>
                       <h5>{hub.name}</h5>
@@ -476,7 +477,13 @@ export default function JourneyPanel({
         <section className={styles.encounters} aria-labelledby={`${id}-people`}>
           <div className={styles.sectionHeading}>
             <h4 id={`${id}-people`}>A familiar face, a fresh perspective</h4>
-            <MessageCircle size={16} aria-hidden="true" />
+            <span
+              className={styles.graphic}
+              data-tone="pink"
+              aria-hidden="true"
+            >
+              💬
+            </span>
           </div>
           <p className={styles.encounterIntro}>
             Meet an original local or fellow traveller while you are here.
@@ -558,7 +565,9 @@ export default function JourneyPanel({
                 {chatted ? (
                   <Check size={14} aria-hidden="true" />
                 ) : (
-                  <MessageCircle size={14} aria-hidden="true" />
+                  <span className={styles.graphic} aria-hidden="true">
+                    💬
+                  </span>
                 )}
                 {chatted
                   ? "Conversation recorded"
@@ -582,13 +591,21 @@ export default function JourneyPanel({
           <h4 id={`${id}-missions`}>
             Your {persona.name.toLowerCase()} chapter
           </h4>
-          <Compass size={16} aria-hidden="true" />
+          <span className={styles.graphic} data-tone="mint" aria-hidden="true">
+            🧭
+          </span>
         </div>
         <p>{persona.description}</p>
         <ul>
           {persona.missions.map((mission) => (
             <li key={mission.title}>
-              <MapPin size={14} aria-hidden="true" />
+              <span
+                className={styles.graphic}
+                data-tone="peach"
+                aria-hidden="true"
+              >
+                📍
+              </span>
               <div>
                 <strong>{mission.title}</strong>
                 <span>{mission.detail}</span>

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, Compass, MapPin, Sparkles, Users } from "lucide-react";
 import World from "./World";
 import { GEOGRAPHIC_HOTSPOTS } from "../lib/geography";
+import ActivityGraphic from "./ActivityGraphic";
 import {
   fromGeographic,
   placeFocus,
@@ -59,16 +60,17 @@ export default function LandingMap() {
       </header>
 
       <section className="landing-hero">
+        <ActivityGraphic />
         <span className="landing-kicker">
           <Sparkles size={14} /> Lisbon · Our first playable city
         </span>
         <h1>
-          Every city.
-          <br /> <span className="landing-story">Your story.</span>
+          New city.
+          <br /> <span className="landing-story">Find your people.</span>
         </h1>
         <p>
-          Start in Lisbon. Wander real streets, meet simulated locals, and find
-          your favourite corners. A few days, a thousand little possibilities.
+          Coffee with someone new. A beach day together. A city to make your
+          own. Explore Lisbon in 3D and build your next little adventure.
         </p>
         <div className="landing-actions">
           <Link className="landing-primary" href="/register">
@@ -83,7 +85,7 @@ export default function LandingMap() {
             <Compass size={15} /> Explore freely
           </span>
           <span>
-            <Users size={15} /> Meet simulated locals
+            <Users size={15} /> Create activities together
           </span>
           <span>
             <MapPin size={15} /> Real Lisbon places

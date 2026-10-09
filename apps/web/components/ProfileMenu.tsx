@@ -1,30 +1,28 @@
 "use client";
 
 import { useId } from "react";
-import {
-  Bookmark,
-  BookOpen,
-  ChevronRight,
-  Home,
-  LogOut,
-  Settings,
-  Shirt,
-  Ticket,
-  UserRound,
-} from "lucide-react";
+import { ChevronRight, LogOut } from "lucide-react";
 import { useProfile, type ProfileAction } from "./ProfileActions";
 import styles from "./ProfileMenu.module.css";
 
 const icons = {
-  trip: Ticket,
-  passport: BookOpen,
-  home: Home,
-  settings: Settings,
-  saved: Bookmark,
+  trip: "🎟️",
+  passport: "📖",
+  home: "🏡",
+  settings: "⚙️",
+  saved: "💾",
 };
 
 /** Inline Profile app content; its Phone shell owns navigation and focus. */
-export default function ProfileMenu({ onAction }: { onAction?: () => void }) {
+export default function ProfileMenu({
+  onAction,
+  travelStyle,
+  interests = [],
+}: {
+  onAction?: () => void;
+  travelStyle?: string;
+  interests?: { name: string; emoji: string }[];
+}) {
   const { user, actions, signingOut, logoutError, editCharacter, signOut } =
     useProfile();
   const id = useId();
@@ -40,7 +38,13 @@ export default function ProfileMenu({ onAction }: { onAction?: () => void }) {
     <section className={styles.profile} aria-labelledby={`${id}-identity`}>
       <header className={styles.identity}>
         <span className={styles.avatar} aria-hidden="true">
-          <UserRound size={28} strokeWidth={1.7} />
+          <span
+            className="app-emoji"
+            style={{ fontSize: 32 }}
+            aria-hidden="true"
+          >
+            🧑
+          </span>
         </span>
         <div>
           <h2 id={`${id}-identity`}>@{user.handle}</h2>
@@ -48,6 +52,34 @@ export default function ProfileMenu({ onAction }: { onAction?: () => void }) {
           <small>{user.email}</small>
         </div>
       </header>
+
+      {travelStyle && (
+        <section
+          className={styles.preferenceCard}
+          aria-label="Current trip preferences"
+        >
+          <h3>Travel style</h3>
+          <div className={styles.chips}>
+            <span>
+              <span aria-hidden="true">🧳</span>
+              {travelStyle}
+            </span>
+          </div>
+        </section>
+      )}
+      {interests.length > 0 && (
+        <section className={styles.preferenceCard} aria-label="Trip interests">
+          <h3>Interests</h3>
+          <div className={styles.chips}>
+            {interests.map((interest) => (
+              <span key={interest.name}>
+                <span aria-hidden="true">{interest.emoji}</span>
+                {interest.name}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className={styles.group} aria-labelledby={`${id}-character`}>
         <h3 id={`${id}-character`}>Character</h3>
@@ -59,7 +91,9 @@ export default function ProfileMenu({ onAction }: { onAction?: () => void }) {
           onClick={() => act(editCharacter)}
         >
           <span className={`${styles.icon} ${styles.characterIcon}`}>
-            <Shirt size={21} aria-hidden="true" />
+            <span className="app-emoji action-emoji" aria-hidden="true">
+              👕
+            </span>
           </span>
           <span className={styles.actionText}>
             <strong>Edit character</strong>
@@ -73,7 +107,7 @@ export default function ProfileMenu({ onAction }: { onAction?: () => void }) {
         <section className={styles.group} aria-labelledby={`${id}-trip`}>
           <h3 id={`${id}-trip`}>Your trip</h3>
           {tripActions.map((action: ProfileAction) => {
-            const Icon = icons[action.icon || "settings"];
+            const emoji = icons[action.icon || "settings"];
             return (
               <button
                 key={action.id}
@@ -83,7 +117,9 @@ export default function ProfileMenu({ onAction }: { onAction?: () => void }) {
                 onClick={() => act(action.onSelect)}
               >
                 <span className={styles.icon}>
-                  <Icon size={21} aria-hidden="true" />
+                  <span className="app-emoji action-emoji" aria-hidden="true">
+                    {emoji}
+                  </span>
                 </span>
                 <span className={styles.actionText}>
                   <strong>{action.label}</strong>

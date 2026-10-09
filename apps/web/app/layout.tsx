@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import "./brand.css";
+import "./social.css";
 const appFont = localFont({
   src: "./fonts/DMSans-Variable.ttf",
   variable: "--font-roam-app",

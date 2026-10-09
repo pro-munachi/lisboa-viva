@@ -1814,7 +1814,9 @@ export function createCity(host, options) {
     indoor.setPeers(options.peers || []);
     city.visible = population.visible = peerPopulation.visible = false;
     atmosphere.sky.visible = false;
-    scene.background = new THREE.Color("#d9dfd3");
+    scene.background = new THREE.Color(
+      next.kind === "bar" ? "#eee9f7" : "#edf3ff",
+    );
     status("");
   }
   return {

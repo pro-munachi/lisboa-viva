@@ -149,7 +149,7 @@ export default function LocalRadio({ openRequest }: { openRequest: number }) {
   }, []);
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-local-radio>
       <audio
         ref={audio}
         preload="none"
@@ -265,7 +265,9 @@ export default function LocalRadio({ openRequest }: { openRequest: number }) {
           onClick={() => setExpanded(true)}
           aria-label={`Open local radio${status === "playing" ? `, ${station.name} playing` : ""}`}
         >
-          <Music2 size={18} aria-hidden="true" />
+          <span className="app-emoji action-emoji" aria-hidden="true">
+            🎧
+          </span>
           <span>Radio</span>
           {status === "playing" && <span className={styles.live}>LIVE</span>}
         </button>

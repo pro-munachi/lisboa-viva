@@ -1,11 +1,13 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createCharacter, animateCharacter } from "./characters";
 import { createTransitScene } from "./city-transit-scenes";
 import { createClubLighting } from "./city-club-lighting";
 import { lightingForMinute } from "./city-lighting";
 
-// Original illustrative Lisbon interiors. None reproduces a surveyed business
+// Original, softly rounded Lisbon interiors in ROAM’s bright social palette.
+// None reproduces a surveyed business
 // floor plan or imports artwork, furniture, textures or reference-game assets.
 const ZONES = {
   home: [
@@ -66,34 +68,36 @@ function texture(kind) {
         const border = Math.abs(cx) > 0.465 || Math.abs(cy) > 0.465;
         const diamond = Math.abs(Math.abs(cx) + Math.abs(cy) - 0.36) < 0.035;
         rgb = border
-          ? [176, 188, 176]
+          ? [218, 229, 243]
           : flower || diamond
-            ? [44, 100, 132]
-            : [239, 239, 219];
+            ? [36, 86, 216]
+            : [249, 252, 255];
       } else if (kind === "wood") {
         const seam = y % 32 < 2;
         const streak = Math.sin(u * 120 + Math.sin(v * 8) * 3) * 4 + grain * 6;
-        rgb = seam ? [105, 74, 48] : [169 + streak, 124 + streak, 81 + streak];
+        rgb = seam
+          ? [210, 195, 178]
+          : [233 + streak * 0.45, 218 + streak * 0.4, 195 + streak * 0.35];
       } else if (kind === "cork") {
-        rgb = [189 + grain * 25, 159 + grain * 16, 114 + grain * 8];
+        rgb = [220 + grain * 12, 233 + grain * 10, 242 + grain * 8];
       } else if (kind === "art") {
         const arch = Math.hypot((u - 0.45) * 0.85, v - 0.48) < 0.29;
         const sun = Math.hypot(u - 0.74, v - 0.21) < 0.12;
         rgb = sun
-          ? [206, 159, 78]
+          ? [246, 163, 148]
           : arch
-            ? [72, 123, 127]
+            ? [36, 86, 216]
             : v > 0.7
-              ? [181, 112, 82]
-              : [236, 220, 188];
+              ? [185, 229, 211]
+              : [249, 246, 255];
       } else {
         const seam = x % 32 < 1 || y % 32 < 1;
         const checker = (Math.floor(x / 32) + Math.floor(y / 32)) % 2;
         rgb = seam
-          ? [185, 181, 156]
+          ? [223, 231, 244]
           : checker
-            ? [223 + grain * 9, 214 + grain * 9, 190 + grain * 9]
-            : [241, 235, 215];
+            ? [234 + grain * 5, 242 + grain * 5, 251 + grain * 3]
+            : [252, 253, 255];
       }
       const offset = (y * size + x) * 4;
       pixels[offset] = rgb[0];
@@ -108,7 +112,7 @@ function texture(kind) {
   return map;
 }
 
-function label(text, color = "#335e63", cream = "#f1e5ca") {
+function label(text, color = "#2456d8", cream = "#ffffff") {
   if (typeof document === "undefined") return null;
   const canvas = document.createElement("canvas");
   canvas.width = 768;
@@ -117,15 +121,12 @@ function label(text, color = "#335e63", cream = "#f1e5ca") {
   if (!ctx) return null;
   ctx.fillStyle = cream;
   ctx.fillRect(0, 0, 768, 192);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 6;
-  ctx.strokeRect(10, 10, 748, 172);
   ctx.fillStyle = color;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   let size = 50;
   while (size > 20) {
-    ctx.font = `600 ${size}px Georgia`;
+    ctx.font = `700 ${size}px "DM Sans", Arial, sans-serif`;
     if (ctx.measureText(text).width < 690) break;
     size--;
   }
@@ -137,6 +138,73 @@ function label(text, color = "#335e63", cream = "#f1e5ca") {
     roughness: 0.9,
     side: THREE.DoubleSide,
   });
+}
+
+/** Keep added scenic locals inexpensive: one colored body and one moving head.
+ * The original host/trainer rigs remain fully articulated. All cloned geometry
+ * and the vertex-color material belong to this resident’s normal scene teardown.
+ */
+function compactScenicResident(resident) {
+  resident.updateMatrixWorld(true);
+  const head = resident.userData.rig.head;
+  const headOrigin = new THREE.Vector3().setFromMatrixPosition(
+    head.matrixWorld,
+  );
+  const headInverse = new THREE.Matrix4().makeTranslation(
+    -headOrigin.x,
+    -headOrigin.y,
+    -headOrigin.z,
+  );
+  const parts = { body: [], head: [] },
+    geometries = new Set(),
+    materials = new Set();
+  resident.traverse((node) => {
+    if (!node.isMesh) return;
+    let parent = node,
+      isHead = false;
+    while (parent && parent !== resident) {
+      if (parent === head) isHead = true;
+      parent = parent.parent;
+    }
+    const geometry = node.geometry.clone().applyMatrix4(node.matrixWorld);
+    if (isHead) geometry.applyMatrix4(headInverse);
+    geometry.deleteAttribute("uv");
+    const previous = geometry.getAttribute("color"),
+      count = geometry.getAttribute("position").count,
+      colors = new Float32Array(count * 3),
+      tint = node.material.color;
+    for (let i = 0; i < count; i++) {
+      colors[i * 3] = (previous ? previous.getX(i) : 1) * tint.r;
+      colors[i * 3 + 1] = (previous ? previous.getY(i) : 1) * tint.g;
+      colors[i * 3 + 2] = (previous ? previous.getZ(i) : 1) * tint.b;
+    }
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    parts[isHead ? "head" : "body"].push(geometry);
+    geometries.add(node.geometry);
+    materials.add(node.material);
+  });
+  const material = new THREE.MeshStandardMaterial({
+    color: "#ffffff",
+    vertexColors: true,
+    roughness: 0.86,
+  });
+  resident.clear();
+  delete resident.userData.rig;
+  const headJoint = new THREE.Group();
+  headJoint.position.copy(headOrigin);
+  for (const [name, sources] of Object.entries(parts)) {
+    const geometry = mergeGeometries(sources, false);
+    sources.forEach((source) => source.dispose());
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = `scenic resident ${name}`;
+    mesh.castShadow = mesh.receiveShadow = true;
+    (name === "head" ? headJoint : resident).add(mesh);
+  }
+  resident.add(headJoint);
+  resident.userData.scenicHead = headJoint;
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach((source) => source.dispose());
+  return resident;
 }
 
 /** Interior direction follows city time, with enough fill to explore at night.
@@ -262,37 +330,38 @@ export function createInteriorScene(
     buckets = new Map();
   const mats = {
     plaster: new THREE.MeshStandardMaterial({
-      color: "#ece3cf",
+      color: "#fffdf8",
       roughness: 0.94,
     }),
     cream: new THREE.MeshStandardMaterial({
-      color: "#f2edda",
+      color: "#ffffff",
       roughness: 0.85,
     }),
-    wood: new THREE.MeshStandardMaterial({ color: "#8d6246", roughness: 0.82 }),
+    wood: new THREE.MeshStandardMaterial({ color: "#e6d6bc", roughness: 0.82 }),
     olive: new THREE.MeshStandardMaterial({
-      color: "#66765a",
+      color: "#b9e5d3",
       roughness: 0.92,
     }),
-    ochre: new THREE.MeshStandardMaterial({ color: "#c39a58", roughness: 0.9 }),
-    blue: new THREE.MeshStandardMaterial({ color: "#3c6e80", roughness: 0.83 }),
-    dark: new THREE.MeshStandardMaterial({ color: "#2e4146", roughness: 0.74 }),
+    ochre: new THREE.MeshStandardMaterial({ color: "#f5cf73", roughness: 0.9 }),
+    blue: new THREE.MeshStandardMaterial({ color: "#2456d8", roughness: 0.83 }),
+    dark: new THREE.MeshStandardMaterial({ color: "#243246", roughness: 0.74 }),
     brass: new THREE.MeshStandardMaterial({
-      color: "#b59a65",
+      color: "#a9b8d0",
       metalness: 0.56,
       roughness: 0.38,
     }),
-    fabric: new THREE.MeshStandardMaterial({ color: "#c99f86", roughness: 1 }),
+    fabric: new THREE.MeshStandardMaterial({ color: "#f6a394", roughness: 1 }),
+    lilac: new THREE.MeshStandardMaterial({ color: "#d4c4ee", roughness: 0.9 }),
     glass: new THREE.MeshStandardMaterial({
-      color: "#bddbd7",
+      color: "#bcdff5",
       transparent: true,
       opacity: 0.35,
       roughness: 0.2,
       depthWrite: false,
     }),
     glow: new THREE.MeshStandardMaterial({
-      color: "#f6dfad",
-      emissive: "#e5bd71",
+      color: "#fff1cb",
+      emissive: "#ffdf9a",
       emissiveIntensity: 0.35,
     }),
   };
@@ -321,7 +390,9 @@ export function createInteriorScene(
   const add = (geometry, material, zone = "") => {
     const key = `${material}|${zone}`;
     if (!buckets.has(key)) buckets.set(key, { material, zone, parts: [] });
-    buckets.get(key).parts.push(geometry.toNonIndexed());
+    buckets
+      .get(key)
+      .parts.push(geometry.index ? geometry.toNonIndexed() : geometry.clone());
     geometry.dispose();
   };
   const transform = (geometry, x, y, z, rx = 0, ry = 0, rz = 0) => {
@@ -331,12 +402,22 @@ export function createInteriorScene(
     geometry.translate(x, y, z);
     return geometry;
   };
-  const box = (x, y, z, w, h, d, material = "wood", zone = "", ry = 0) =>
-    add(
-      transform(new THREE.BoxGeometry(w, h, d), x, y, z, 0, ry),
-      material,
-      zone,
-    );
+  const box = (x, y, z, w, h, d, material = "wood", zone = "", ry = 0) => {
+    // Bevel the substantial furniture; fine trim and room structure stay lean.
+    // Rounding stays inside the original dimensions and collision footprints.
+    const rounded =
+      zone && material !== "glass" && w >= 0.5 && h >= 0.11 && d >= 0.25;
+    const geometry = rounded
+      ? new RoundedBoxGeometry(
+          w,
+          h,
+          d,
+          1,
+          Math.min(0.17, w * 0.2, h * 0.3, d * 0.2),
+        )
+      : new THREE.BoxGeometry(w, h, d);
+    add(transform(geometry, x, y, z, 0, ry), material, zone);
+  };
   const cylinder = (
     x,
     y,
@@ -444,7 +525,19 @@ export function createInteriorScene(
       box(p.x, p.y, p.z, w, h, d, mat, zone, ry);
     };
     atBox(0, 0.5, 0, 0.65, 0.14, 0.65, color);
-    atBox(0, 0.97, -0.26, 0.65, 0.75, 0.09, color);
+    const back = point(0, 0.97, -0.26);
+    add(
+      transform(
+        new THREE.SphereGeometry(1, 12, 8).scale(0.34, 0.39, 0.065),
+        back.x,
+        back.y,
+        back.z,
+        0,
+        ry,
+      ),
+      color,
+      zone,
+    );
     for (const dx of [-0.25, 0.25])
       for (const dz of [-0.25, 0.25])
         atBox(dx, 0.24, dz, 0.055, 0.5, 0.055, "wood");
@@ -510,8 +603,22 @@ export function createInteriorScene(
   };
   const pendant = (x, z, height = 3.2) => {
     cylinder(x, height + 0.25, z, 0.015, 0.6, "brass");
-    cylinder(x, height - 0.18, z, 0.4, 0.26, "brass", "", 0.15);
+    sphere(x, height - 0.18, z, 0.42, 0.2, 0.42, "cream");
     sphere(x, height - 0.32, z, 0.11, 0.11, 0.11, "glow");
+  };
+
+  const archPanel = (x, width, height, material) => {
+    const radius = width / 2,
+      shape = new THREE.Shape();
+    shape.moveTo(-radius, 0);
+    shape.lineTo(radius, 0);
+    shape.lineTo(radius, height - radius);
+    shape.absarc(0, height - radius, radius, 0, Math.PI, false);
+    shape.closePath();
+    add(
+      transform(new THREE.ShapeGeometry(shape, 12), x, 0.02, -6.955),
+      material,
+    );
   };
 
   // Inward single-sided wall faces automatically disappear when viewed from
@@ -526,6 +633,19 @@ export function createInteriorScene(
   plane(0, 0.68, -6.97, 17.8, 1.22, "tiles");
   box(0, 0.08, -6.85, 18, 0.16, 0.2, "wood");
   box(0, 1.34, -6.93, 18, 0.045, 0.04, "brass");
+  archPanel(
+    0,
+    4.8,
+    3.3,
+    {
+      home: "fabric",
+      cafe: "fabric",
+      gym: "olive",
+      shop: "lilac",
+      museum: "lilac",
+      bar: "blue",
+    }[kind],
+  );
   sign(TITLES[kind], 0, 2.75, -6.91, 5.6);
   for (const x of [-6.9, 6.9]) {
     box(x, 2.0, -6.88, 1.2, 1.58, 0.11, "wood");
@@ -545,7 +665,16 @@ export function createInteriorScene(
     plane(-4.9, 0.015, -2.4, 6.0, 5.5, "fabric", "rest", -Math.PI / 2);
     box(-5.4, 0.37, -3.6, 3.4, 0.55, 4.15, "wood", "rest");
     box(-5.4, 0.76, -3.6, 3.23, 0.36, 4.0, "cream", "rest");
-    box(-5.4, 1.25, -5.55, 3.6, 1.7, 0.17, "wood", "rest");
+    add(
+      transform(
+        new RoundedBoxGeometry(3.6, 1.7, 0.17, 1, 0.08),
+        -5.4,
+        1.25,
+        -5.55,
+      ),
+      "fabric",
+      "rest",
+    );
     box(-5.4, 0.99, -2.9, 3.22, 0.08, 2.4, "olive", "rest");
     for (const x of [-6.2, -4.6])
       box(x, 1.02, -4.8, 1.24, 0.23, 0.7, "cream", "rest");
@@ -597,6 +726,11 @@ export function createInteriorScene(
     chair(-5.8, 4.6, "plan", Math.PI);
     footprint(-5.8, 3.45, 3.2, 1.2, "plan");
     sign("TRAVEL NOTES", -5.8, 1.5, 3.1, 1.4, "plan");
+    sofa(5.5, 3.9, 2.4, "rest", "olive");
+    cylinder(5.5, 0.51, 2.25, 0.6, 0.13, "cream", "rest");
+    cylinder(5.5, 0.26, 2.25, 0.2, 0.46, "blue", "rest");
+    cup(5.5, 0.69, 2.25, "rest");
+    footprint(5.5, 2.25, 1.25, 1.25, "rest");
   }
 
   if (kind === "cafe") {
@@ -652,6 +786,11 @@ export function createInteriorScene(
     box(-7.8, 1.45, -0.6, 0.45, 2.8, 1.9, "wood", "table");
     footprint(-7.8, -0.6, 0.65, 2.05, "table");
     books(-7.7, 1.55, -0.6, "table", 6);
+    sofa(-5.3, 4.9, 2.4, "table", "fabric");
+    cylinder(-5.3, 0.51, 3.55, 0.5, 0.1, "cream", "table");
+    cylinder(-5.3, 0.26, 3.55, 0.15, 0.47, "blue", "table");
+    cup(-5.3, 0.67, 3.55, "table");
+    footprint(-5.3, 3.55, 1.05, 1.05, "table");
     plant(7.6, -4.7);
     plant(-7.5, -0.7, 0.7);
   }
@@ -733,6 +872,10 @@ export function createInteriorScene(
       box(x, 0.27, 2, 0.09, 0.5, 0.5, "brass", "stretch");
     for (let i = 0; i < 4; i++)
       box(-7.3 + i * 0.58, 0.75, 2, 0.5, 0.2, 0.36, "cream", "stretch");
+    sofa(-5.8, 4.45, 2.4, "stretch", "blue");
+    box(-7.4, 0.52, 3.5, 0.65, 1.0, 0.65, "cream", "stretch");
+    cylinder(-7.4, 1.19, 3.5, 0.19, 0.3, "glass", "stretch");
+    footprint(-7.4, 3.5, 0.75, 0.75, "stretch");
   }
 
   if (kind === "shop") {
@@ -826,6 +969,11 @@ export function createInteriorScene(
     box(5.6, 1.66, 3.05, 0.47, 0.22, 0.025, "blue", "counter");
     box(6.7, 1.53, 2.8, 0.4, 0.4, 0.32, "ochre", "counter");
     footprint(5.6, 2.8, 3.6, 1.3, "counter");
+    chair(-0.65, 4.2, "browse", 0, "lilac");
+    chair(1.25, 4.2, "browse", 0, "fabric");
+    cylinder(0.3, 0.5, 4.2, 0.38, 0.12, "cream", "browse");
+    cylinder(0.3, 0.27, 4.2, 0.1, 0.45, "blue", "browse");
+    footprint(0.3, 4.2, 0.8, 0.8, "browse");
     plant(1.1, -5.6);
   }
 
@@ -886,6 +1034,11 @@ export function createInteriorScene(
     books(4.1, 0.98, 2.6, "bench", 6);
     footprint(4.9, 2.7, 3.7, 1.0, "bench");
     sign("LOOK CLOSER", -4.8, 0.77, 0.68, 1.3, "gallery");
+    sofa(-5.3, 3.9, 2.5, "bench", "lilac");
+    cylinder(-5.3, 0.5, 2.35, 0.48, 0.12, "cream", "bench");
+    cylinder(-5.3, 0.25, 2.35, 0.17, 0.45, "blue", "bench");
+    books(-5.5, 0.75, 2.35, "bench", 3);
+    footprint(-5.3, 2.35, 1.05, 1.05, "bench");
     plant(-7.8, -4.7);
     plant(7.8, -4.7);
   }
@@ -952,6 +1105,11 @@ export function createInteriorScene(
     footprint(4.4, 1.7, 1.45, 1.45, "lounge");
     cup(4.1, 0.75, 1.7, "lounge");
     cup(4.7, 0.75, 1.75, "lounge");
+    chair(-1.8, 3.5, "lounge", 0, "fabric");
+    chair(-0.8, 1.45, "lounge", Math.PI, "olive");
+    cylinder(-1.8, 0.51, 2.05, 0.47, 0.11, "cream", "lounge");
+    cylinder(-1.8, 0.27, 2.05, 0.13, 0.45, "blue", "lounge");
+    footprint(-1.8, 2.05, 1.0, 1.0, "lounge");
     sign("LIVE MUSIC", -5.5, 2.7, -6.8, 3.5, "listen");
   }
 
@@ -969,8 +1127,8 @@ export function createInteriorScene(
   }
 
   const focusMaterial = new THREE.MeshStandardMaterial({
-    color: "#d6b971",
-    emissive: "#a87832",
+    color: "#2456d8",
+    emissive: "#2456d8",
     emissiveIntensity: 0.2,
     transparent: true,
     opacity: 0.5,
@@ -996,7 +1154,7 @@ export function createInteriorScene(
         z: -3.2,
         zone: "kitchen",
         style: "casual",
-        shirt: "#66765a",
+        shirt: "#2456d8",
         hairStyle: "bun",
       },
     ],
@@ -1008,7 +1166,7 @@ export function createInteriorScene(
         z: -5.9,
         zone: "espresso",
         style: "jacket",
-        shirt: "#718273",
+        shirt: "#2456d8",
         hairStyle: "short",
       },
       {
@@ -1018,7 +1176,7 @@ export function createInteriorScene(
         z: 2.4,
         zone: "table",
         style: "tourist",
-        shirt: "#c3915b",
+        shirt: "#f6a394",
         hairStyle: "bob",
       },
     ],
@@ -1030,7 +1188,7 @@ export function createInteriorScene(
         z: 0.3,
         zone: "weights",
         style: "casual",
-        shirt: "#567d79",
+        shirt: "#8ac9b4",
         hairStyle: "short",
       },
       {
@@ -1054,7 +1212,7 @@ export function createInteriorScene(
         z: 1.7,
         zone: "counter",
         style: "jacket",
-        shirt: "#b5865e",
+        shirt: "#d4c4ee",
         hairStyle: "curly",
       },
       {
@@ -1064,7 +1222,7 @@ export function createInteriorScene(
         z: -2.9,
         zone: "browse",
         style: "tourist",
-        shirt: "#58788a",
+        shirt: "#2456d8",
         hairStyle: "bob",
       },
     ],
@@ -1076,7 +1234,7 @@ export function createInteriorScene(
         z: -4.2,
         zone: "gallery",
         style: "jacket",
-        shirt: "#66765a",
+        shirt: "#2456d8",
         hairStyle: "bun",
       },
       {
@@ -1086,7 +1244,7 @@ export function createInteriorScene(
         z: -2.5,
         zone: "tiles",
         style: "tourist",
-        shirt: "#b78266",
+        shirt: "#f6a394",
         hairStyle: "curly",
       },
     ],
@@ -1098,7 +1256,7 @@ export function createInteriorScene(
         z: -5.95,
         zone: "counter",
         style: "jacket",
-        shirt: "#789080",
+        shirt: "#b9e5d3",
         hairStyle: "short",
       },
       {
@@ -1109,18 +1267,55 @@ export function createInteriorScene(
         y: 0.26,
         zone: "listen",
         style: "casual",
-        shirt: "#b58961",
+        shirt: "#f6a394",
         hairStyle: "curly",
       },
     ],
   }[kind];
+  const addedLocals = {
+    home: [["Neighbour", 3.2, 3.0, "rest", "#d4c4ee"]],
+    cafe: [
+      ["Coffee regular", -7.0, 3.2, "table", "#d4c4ee"],
+      ["Lisbon explorer", 6.7, 1.1, "table", "#b9e5d3"],
+    ],
+    gym: [
+      ["Studio regular", -4.1, 3.35, "stretch", "#f6a394"],
+      ["Gym neighbour", 7.2, 4.55, "stretch", "#d4c4ee"],
+    ],
+    shop: [
+      ["Design browser", -7.4, 0.5, "browse", "#f6a394"],
+      ["Local shopper", 1.4, 1.4, "browse", "#b9e5d3"],
+    ],
+    museum: [
+      ["Art enthusiast", -7.0, 2.7, "gallery", "#2456d8"],
+      ["Gallery neighbour", 6.9, 0.8, "tiles", "#d4c4ee"],
+    ],
+    bar: [
+      ["Music regular", 0.35, 0.65, "lounge", "#d4c4ee"],
+      ["Night-out guest", 6.9, 1.5, "lounge", "#f6a394"],
+    ],
+  }[kind];
+  addedLocals.forEach(([name, x, z, zone, top], i) => {
+    people.push({
+      name,
+      x,
+      z,
+      zone,
+      shirt: top,
+      compact: true,
+      bodyType: i ? "male" : "female",
+      style: "casual",
+      hairStyle: i ? "curly" : "bob",
+    });
+  });
   const residents = people.map((person, i) => {
-    const resident = createCharacter({
+    let resident = createCharacter({
       ...person,
       skin: i ? "#9d684b" : "#bb8b68",
       trousers: "#35494a",
       phase: i * 2.1,
     });
+    if (person.compact) resident = compactScenicResident(resident);
     resident.position.set(person.x, person.y || 0.012, person.z);
     resident.rotation.y =
       kind === "gym" && person.walking ? Math.PI : -0.2 + i * 0.45;
@@ -1157,6 +1352,9 @@ export function createInteriorScene(
         poseTime + i * 0.2,
         Boolean(motion && people[i].walking),
       );
+      if (resident.userData.scenicHead)
+        resident.userData.scenicHead.rotation.y =
+          Math.sin(poseTime * 0.48 + i * 2.1) * 0.065;
       if (activeZoneId === people[i].zone && resident.userData.rig) {
         resident.userData.rig.rightArm.rotation.x = -0.35;
         resident.userData.rig.rightElbow.rotation.x = -0.7;

@@ -23,6 +23,19 @@ export type PhoneApp = {
   layout?: "fill";
 };
 
+const appEmoji: Record<string, string> = {
+  radio: "🎧",
+  profile: "🧑‍🎨",
+  messages: "💬",
+  activities: "🎉",
+  nearby: "🧑‍🤝‍🧑",
+  journey: "✈️",
+  journal: "📖",
+  wallet: "💳",
+  home: "🏡",
+  guide: "🗺️",
+};
+
 type PhoneProps = {
   open: boolean;
   onClose: () => void;
@@ -206,6 +219,7 @@ export default function Phone({
                 <nav className={styles.apps} aria-label="Phone apps">
                   {apps.map((app, index) => {
                     const Icon = app.icon;
+                    const emoji = appEmoji[app.id];
                     const badge =
                       typeof app.badge === "number"
                         ? app.badge > 99
@@ -223,11 +237,20 @@ export default function Phone({
                         aria-label={`${app.label}${app.detail ? `: ${app.detail}` : ""}${badge ? `, ${badge} unread` : ""}`}
                       >
                         <span className={styles.appIcon} data-tone={index % 6}>
-                          <Icon
-                            size={27}
-                            strokeWidth={1.8}
-                            aria-hidden="true"
-                          />
+                          {emoji ? (
+                            <span
+                              className={styles.appEmoji}
+                              aria-hidden="true"
+                            >
+                              {emoji}
+                            </span>
+                          ) : (
+                            <Icon
+                              size={27}
+                              strokeWidth={1.8}
+                              aria-hidden="true"
+                            />
+                          )}
                           {Boolean(badge) && (
                             <span className={styles.badge} aria-hidden="true">
                               {badge}
