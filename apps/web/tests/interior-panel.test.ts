@@ -23,6 +23,7 @@ function render(
     selectedZone?: string;
     activityState?: "idle" | "walking" | "active";
     completed?: string[];
+    initiallyCompact?: boolean;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -81,7 +82,7 @@ test("only the original bar panel offers explicit synthesized music controls and
   }
 });
 
-test("the compact room disclosure starts closed and controls existing activity and venue detail regions", () => {
+test("the desktop room disclosure starts expanded and controls existing activity and venue detail regions", () => {
   for (const kind of [
     "home",
     "cafe",
@@ -95,17 +96,40 @@ test("the compact room disclosure starts closed and controls existing activity a
   ] as const) {
     const html = render(kind);
     const toggle = html.match(/<button[^>]*class="detailsToggle"[^>]*>/)?.[0];
-    assert.ok(toggle?.includes('aria-expanded="false"'), kind);
+    assert.ok(toggle?.includes('aria-expanded="true"'), kind);
     const controls = toggle?.match(/aria-controls="([^"]+)"/)?.[1].split(" ");
     assert.equal(controls?.length, 2, kind);
     for (const target of controls || []) {
       assert.ok(html.includes(`id="${target}"`), kind);
     }
-    assert.ok(html.includes('data-expanded="false"'), kind);
+    assert.ok(html.includes('data-expanded="true"'), kind);
     assert.ok(html.includes('aria-label="Exit to street"'), kind);
     assert.ok(html.includes('role="status" aria-live="polite"'), kind);
     assert.ok(html.includes('class="compactNote"'), kind);
   }
+});
+
+test("an activity chosen before room entry starts compact with its live action and progress available", () => {
+  const html = render("cafe", true, {
+    initiallyCompact: true,
+    selectedZone: "pastry",
+    activityState: "walking",
+    completed: ["espresso"],
+  });
+  assert.ok(html.includes('data-expanded="false"'));
+  const toggle = html.match(/<button[^>]*class="detailsToggle"[^>]*>/)?.[0];
+  assert.ok(toggle?.includes('aria-expanded="false"'));
+  assert.ok(html.includes('aria-label="Exit to street"'));
+  assert.ok(
+    html.includes(
+      '<div class="compactProgress"><span>Pastry case</span><span>1/3 explored</span></div>',
+    ),
+  );
+  assert.ok(html.includes('role="status" aria-live="polite"'));
+  assert.ok(html.includes("Your character is walking to pastry case."));
+  const action = html.match(/<button[^>]*class="perform"[^>]*>/)?.[0];
+  assert.ok(action?.includes("disabled"));
+  assert.ok(action?.includes('aria-label="Walking to the corner…"'));
 });
 
 test("compact details preserve the selected corner action, busy gating, paused instruction and completed progress", () => {
@@ -137,6 +161,11 @@ test("compact details preserve the selected corner action, busy gating, paused i
   assert.ok(readyAction?.includes('aria-label="Lift weights"'));
   assert.ok(completed.includes('aria-label="Free weights, explored"'));
   assert.ok(completed.includes('aria-label="1 of 3 corners explored"'));
+  assert.ok(
+    completed.includes(
+      '<div class="compactProgress"><span>Free weights</span><span>1/3 explored</span></div>',
+    ),
+  );
   assert.ok(completed.includes("A few controlled lifts"));
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState, useSyncExternalStore } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -29,6 +29,7 @@ export type InteriorPanelProps = {
   activityState: "idle" | "walking" | "active";
   completed: string[];
   motion?: boolean;
+  initiallyCompact?: boolean;
 };
 
 const roomGraphics: Record<InteriorKind, string> = {
@@ -55,6 +56,16 @@ const cornerGraphics: Record<InteriorKind, Record<string, string>> = {
   "bus-stop": { card: "💳", timetable: "🗓️", board: "🚌" },
 };
 
+const compactRoomQuery =
+  "(max-width: 600px), (max-height: 550px) and (orientation: landscape)";
+function subscribeToRoomViewport(onChange: () => void) {
+  const query = window.matchMedia(compactRoomQuery);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+const isCompactRoomViewport = () => window.matchMedia(compactRoomQuery).matches;
+const serverRoomViewport = () => false;
+
 export default function InteriorPanel({
   visit,
   selectedZone,
@@ -64,9 +75,19 @@ export default function InteriorPanel({
   activityState,
   completed,
   motion = true,
+  initiallyCompact = false,
 }: InteriorPanelProps) {
   const titleId = useId();
-  const [expanded, setExpanded] = useState(false);
+  const compactViewport = useSyncExternalStore(
+    subscribeToRoomViewport,
+    isCompactRoomViewport,
+    serverRoomViewport,
+  );
+  const [expandedChoice, setExpanded] = useState<boolean | null>(
+    initiallyCompact ? false : null,
+  );
+  const expanded = expandedChoice ?? !compactViewport;
+  const detailsToggle = useRef<HTMLButtonElement>(null);
   const activities = INTERIOR_ACTIVITIES[visit.kind];
   const selected =
     activities.find((activity) => activity.id === selectedZone) ||
@@ -110,11 +131,12 @@ export default function InteriorPanel({
     >
       <div className={styles.topline}>
         <button
+          ref={detailsToggle}
           type="button"
           className={styles.detailsToggle}
           aria-expanded={expanded}
           aria-controls={`${titleId}-corners ${titleId}-room-details`}
-          onClick={() => setExpanded((open) => !open)}
+          onClick={() => setExpanded(!expanded)}
         >
           Room activities
           <ChevronDown size={16} aria-hidden="true" />
@@ -178,7 +200,15 @@ export default function InteriorPanel({
                 aria-pressed={selected.id === activity.id}
                 aria-label={`${activity.label}${visited ? ", explored" : ""}`}
                 disabled={busy}
-                onClick={() => onSelectZone(activity.id)}
+                onClick={() => {
+                  onSelectZone(activity.id);
+                  setExpanded(false);
+                  // The selected corner disappears from the compact card.
+                  // Keep keyboard focus on its visible disclosure control.
+                  requestAnimationFrame(() =>
+                    detailsToggle.current?.focus({ preventScroll: true }),
+                  );
+                }}
               >
                 <span className={styles.zoneTop} aria-hidden="true">
                   <span className={styles.zoneGraphic}>
@@ -200,6 +230,14 @@ export default function InteriorPanel({
         </div>
       </div>
 
+      <div className={styles.compactProgress}>
+        <span>{selected.label}</span>
+        <span>
+          {transit
+            ? `${activities.length} travel points`
+            : `${explored}/${activities.length} explored`}
+        </span>
+      </div>
       <div className={styles.activity}>
         <p
           className={done ? styles.result : styles.description}
@@ -214,7 +252,10 @@ export default function InteriorPanel({
           className={styles.perform}
           disabled={busy || !motion}
           aria-label={actionLabel}
-          onClick={() => onPerform(selected.id)}
+          onClick={() => {
+            onPerform(selected.id);
+            setExpanded(false);
+          }}
         >
           {!motion ? (
             <Pause size={17} aria-hidden="true" />

@@ -36,6 +36,8 @@ import {
   Zap,
 } from "lucide-react";
 import World from "../../components/World";
+import LocationPopup from "../../components/LocationPopup";
+import { LocationSelectionGate } from "../../lib/location-selection";
 import AuthBoundary from "../../components/AuthBoundary";
 import Phone, { type PhoneApp } from "../../components/Phone";
 import ProfileMenu from "../../components/ProfileMenu";
@@ -194,10 +196,14 @@ type Panel =
   | null;
 type AreaEntry = {
   focus: WorldFocus;
-  visit: InteriorVisit;
+  visit?: InteriorVisit;
+  arrivalHotspot?: WorldHotspot;
   hubId?: HubId;
   message?: string;
 };
+type AreaTransportOption =
+  | (typeof areaTransport)[number]
+  | { mode: "walk"; label: "Walk"; costCents: 0 };
 const iconFor = (id: PlaceId) =>
   ({
     home: Home,
@@ -260,6 +266,11 @@ function RoamExperience({ user }: { user: AuthUser }) {
     user.userType === "local" ? focusFor("home", "Graça") : placeFocus.cais,
   );
   const [mapHotspot, setMapHotspot] = useState<WorldHotspot | null>(null);
+  const [locationStage, setLocationStage] = useState<"plan" | "arrival">(
+    "plan",
+  );
+  const [focusingLocation, setFocusingLocation] = useState<string | null>(null);
+  const locationSelection = useRef(new LocationSelectionGate());
   const [pins, setPins] = useState<WorldHotspot[]>([]);
   const [search, setSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState<
@@ -437,6 +448,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     null,
   );
   const [areaEntry, setAreaEntry] = useState<AreaEntry | null>(null);
+  const areaTravelLock = useRef(false);
   const pendingAreaTravel = useRef<{
     sequence: TravelSequence;
     entry: AreaEntry;
@@ -518,6 +530,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     afterPanel: "journey" | "recap" | null,
     outcome: string,
   ) {
+    cancelLocationSelection();
     travelGate.current.start({
       sequence,
       tripId: next.id,
@@ -563,12 +576,36 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }, [visitedLocation, travelSequence?.id, setLocation]);
   function pickHotspot(h: WorldHotspot) {
     if (travelGate.current.pending) return;
+    closeOverlays();
     if (interior) leaveRoom();
     setMapHotspot(h);
-    setMapFocus({ ...h, range: 140 });
+    setLocationStage("plan");
     setPanel("hotspot");
   }
+  function cancelLocationSelection() {
+    locationSelection.current.cancel();
+    setFocusingLocation(null);
+  }
+  function focusHotspot(hotspot: WorldHotspot) {
+    closeOverlays();
+    if (interior) leaveRoom();
+    const selectionId = locationSelection.current.begin();
+    setMapHotspot(hotspot);
+    setLocationStage("arrival");
+    setFocusingLocation(hotspot.name);
+    setMapFocus({ ...hotspot, range: 140, selectionId });
+  }
+  function locationReady(selectionId: string, framed: boolean) {
+    if (!locationSelection.current.complete(selectionId)) return;
+    setFocusingLocation(null);
+    if (framed) setPanel("hotspot");
+    else
+      notify(
+        "The view was interrupted. Pick the location again to take a closer look.",
+      );
+  }
   function enterRoom(visit: InteriorVisit) {
+    cancelLocationSelection();
     const place = playerPlace(visit.id);
     if (place?.kind)
       setVisitedLocation({
@@ -595,13 +632,17 @@ function RoamExperience({ user }: { user: AuthUser }) {
       )
         return;
     }
-    setMapFocus(entry.focus);
     setVisitedLocation({
       latitude: entry.focus.lat,
       longitude: entry.focus.lng,
       area: entry.focus.presenceArea || entry.focus.name,
     });
-    enterRoom(entry.visit);
+    if (entry.arrivalHotspot) {
+      focusHotspot(entry.arrivalHotspot);
+      return;
+    }
+    setMapFocus(entry.focus);
+    if (entry.visit) enterRoom(entry.visit);
     if (entry.message) notify(entry.message);
   }
   function requestAreaEntry(entry: AreaEntry) {
@@ -621,27 +662,47 @@ function RoamExperience({ user }: { user: AuthUser }) {
       entry.focus,
     );
     if (metres <= WALKABLE_METRES) {
+      if (pendingWalletAttempt.current) {
+        notify("Retry your last payment choice before starting another journey.");
+        return;
+      }
       void finishAreaEntry(entry);
       return;
     }
     setAreaEntry(entry);
     setPanel("area-transport");
   }
-  async function takeAreaTransport(option: (typeof areaTransport)[number]) {
-    if (!areaEntry || areaTravelBusy || travelSequence) return;
+  async function takeAreaTransport(
+    option: AreaTransportOption,
+    entry = areaEntry,
+  ) {
+    if (
+      !entry ||
+      areaTravelLock.current ||
+      walletBusy.current ||
+      travelSequence
+    )
+      return;
+    if (option.costCents === 0 && pendingWalletAttempt.current) {
+      notify("Retry your last payment choice before starting another journey.");
+      return;
+    }
+    areaTravelLock.current = true;
     setAreaTravelBusy(true);
     try {
-      const charged = await chargeWallet(
-        option.costCents,
-        "travel",
-        `${option.label} to ${areaEntry.focus.name}`,
-        JSON.stringify({
-          kind: "area-travel",
-          from: [visitedLocation.latitude, visitedLocation.longitude],
-          to: [areaEntry.focus.lat, areaEntry.focus.lng],
-          mode: option.mode,
-        }),
-      );
+      const charged =
+        option.costCents === 0 ||
+        (await chargeWallet(
+          option.costCents,
+          "travel",
+          `${option.label} to ${entry.focus.name}`,
+          JSON.stringify({
+            kind: "area-travel",
+            from: [visitedLocation.latitude, visitedLocation.longitude],
+            to: [entry.focus.lat, entry.focus.lng],
+            mode: option.mode,
+          }),
+        ));
       if (!charged) return;
       const sequence: TravelSequence = {
         id: crypto.randomUUID(),
@@ -651,10 +712,11 @@ function RoamExperience({ user }: { user: AuthUser }) {
           lng: visitedLocation.longitude,
           name: visitedLocation.area,
         },
-        to: areaEntry.focus,
+        to: entry.focus,
         appearance: travellerAppearance,
       };
-      pendingAreaTravel.current = { sequence, entry: areaEntry };
+      pendingAreaTravel.current = { sequence, entry };
+      cancelLocationSelection();
       setAreaEntry(null);
       setPanel(null);
       setTravelSequence(sequence);
@@ -664,6 +726,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
       leaveRoom();
       setClean(false);
     } finally {
+      areaTravelLock.current = false;
       setAreaTravelBusy(false);
     }
   }
@@ -1072,6 +1135,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
         outcome,
       );
     } else {
+      closeOverlays();
       notify(outcome);
     }
     if (!sequence && action.kind === "journey" && action.action === "board") {
@@ -1122,6 +1186,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     a.href = url;
     a.download = "roam-lisbon-itinerary.txt";
     a.click();
+    closeOverlays();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const place = trip?.place || "home";
@@ -1171,6 +1236,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     : undefined;
   function selectPlayer(player: ChatPeer) {
     if (player.id === user.id || travelSequence) return;
+    cancelLocationSelection();
     setPhoneOpen(false);
     setPanel(null);
     setNearbyOpen(false);
@@ -1185,6 +1251,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }
   function messagePlayer(player: ChatPeer | null = selectedPlayer) {
     if (!player) return;
+    cancelLocationSelection();
     setChatPeer(player);
     setOpenPeerRequest((request) => request + 1);
     setSelectedPlayer(null);
@@ -1195,10 +1262,12 @@ function RoamExperience({ user }: { user: AuthUser }) {
   }
   function findPlayer() {
     if (!selectedPresence) return;
+    cancelLocationSelection();
     const place = playerPlace(selectedPresence.placeId);
     setSelectedPlayer(null);
     leaveRoom();
     setMapHotspot(place?.hotspot || null);
+    setLocationStage("plan");
     setPanel(place ? "hotspot" : null);
     setMapFocus({
       lat: place?.lat ?? selectedPresence.latitude,
@@ -1252,6 +1321,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setPhoneOpen(false);
   }
   function closeOverlays() {
+    cancelLocationSelection();
     setPhoneOpen(false);
     setPanel(null);
     setNearbyOpen(false);
@@ -1465,9 +1535,10 @@ function RoamExperience({ user }: { user: AuthUser }) {
           selectedActivityId={activityId}
           onActivityChange={selectActivity}
           onRoomChange={receiveActivityRoom}
-          onAction={(event) =>
-            receiveActivityAction(event, activityRoom?.venueId)
-          }
+          onAction={(event) => {
+            receiveActivityAction(event, activityRoom?.venueId);
+            closeOverlays();
+          }}
           currentVenueId={
             enabled && presenceStatus === "online"
               ? visitedLocation.placeId
@@ -1694,7 +1765,14 @@ function RoamExperience({ user }: { user: AuthUser }) {
           sharedOuting={Boolean(
             activityRoom && interior?.id === activityRoom.venueId,
           )}
+          onLocationReady={locationReady}
         />
+        {focusingLocation && !travelSequence && (
+          <p className="location-focus-notice" role="status">
+            <span aria-hidden="true">📍</span> Finding your view of{" "}
+            {focusingLocation}…
+          </p>
+        )}
         {activityRoom && !phoneOpen && !travelSequence && (
           <ActivityOuting
             activity={activityRoom}
@@ -2314,86 +2392,88 @@ function RoamExperience({ user }: { user: AuthUser }) {
         </Dialog>
       )}
       {panel === "hotspot" && mapHotspot && (
-        <Dialog title={mapHotspot.name} onClose={() => setPanel(null)}>
-          <span className="eyebrow">
-            {mapHotspot.custom
-              ? "YOUR MAP PIN"
-              : mapHotspot.area?.toUpperCase()}
-          </span>
-          <p className="lede">
-            {mapHotspot.custom
-              ? "A location you picked from a Maps link."
-              : mapHotspot.description ||
-                GEOGRAPHIC_HOTSPOTS.find((h) => h.id === mapHotspot.id)
-                  ?.description}
-          </p>
-          <div className="hotspot-coordinates">
-            <MapPin size={15} />
-            {mapHotspot.lat.toFixed(5)}, {mapHotspot.lng.toFixed(5)}
-          </div>
-          <button
-            className="primary full"
-            onClick={() => {
-              setMapFocus({ ...mapHotspot, range: 100 });
-              setPanel(null);
-            }}
-          >
-            Look around in 3D <Compass size={17} />
-          </button>
-          {interiorForHotspot(mapHotspot) && (
-            <button
-              className="secondary full"
-              onClick={() =>
-                requestAreaEntry({
+        <LocationPopup
+          hotspot={mapHotspot}
+          stage={locationStage}
+          busy={areaTravelBusy}
+          onClose={() => {
+            if (!areaTravelBusy) setPanel(null);
+          }}
+          onPreview={() => focusHotspot(mapHotspot)}
+          transportOptions={[
+            { mode: "walk", label: "Walk", costCents: 0 } as const,
+            ...areaTransport,
+          ].map((option) => {
+            const metres = distanceMetres(
+              { lat: visitedLocation.latitude, lng: visitedLocation.longitude },
+              mapHotspot,
+            );
+            const tooFar = option.mode === "walk" && metres > WALKABLE_METRES;
+            return {
+              id: option.mode,
+              emoji: { walk: "🚶", bus: "🚌", tram: "🚋", taxi: "🚕" }[
+                option.mode
+              ],
+              label: option.label,
+              detail: tooFar
+                ? "Beyond the 2 km walking range"
+                : `${option.costCents ? euro(option.costCents / 100) : "Free"} · ${metres < 1000 ? `${Math.round(metres)} m` : `${(metres / 1000).toFixed(1)} km`}`,
+              disabled:
+                tooFar ||
+                areaTravelBusy ||
+                (option.costCents > 0 &&
+                  (!wallet || wallet.balanceCents < option.costCents)),
+              onSelect: () =>
+                void takeAreaTransport(option, {
                   focus: { ...mapHotspot, range: 140 },
-                  visit: {
-                    id: mapHotspot.id,
-                    name: mapHotspot.name,
-                    kind: interiorForHotspot(mapHotspot)!,
-                    sourceUrl: mapHotspot.sourceUrl,
-                  },
-                })
-              }
-            >
-              Enter{" "}
-              {mapHotspot.category === "culture"
-                ? "cultural scene"
-                : interiorForHotspot(mapHotspot) === "cafe"
-                  ? "café"
-                  : interiorForHotspot(mapHotspot)}{" "}
-              <ArrowRight size={17} />
-            </button>
+                  arrivalHotspot: mapHotspot,
+                }),
+            };
+          })}
+          onLookAround={() => setPanel(null)}
+          onEnterActivity={
+            interiorForHotspot(mapHotspot)
+              ? (initialZoneId) =>
+                  requestAreaEntry({
+                    focus: { ...mapHotspot, range: 140 },
+                    visit: {
+                      id: mapHotspot.id,
+                      name: mapHotspot.name,
+                      kind: interiorForHotspot(mapHotspot)!,
+                      sourceUrl: mapHotspot.sourceUrl,
+                      initialZoneId,
+                    },
+                  })
+              : undefined
+          }
+          onTransit={
+            transitHubFor(mapHotspot)
+              ? () => visitTransitHub(transitHubFor(mapHotspot)!.id)
+              : undefined
+          }
+          transitDisabled={Boolean(
+            trip &&
+              transitHubFor(mapHotspot) &&
+              trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
+              previewJourney(trip, {
+                action: "visit-hub",
+                hub: transitHubFor(mapHotspot)!.id,
+              }).reason,
           )}
-          {transitHubFor(mapHotspot) && (
-            <button
-              className="secondary full"
-              disabled={
-                !!trip &&
-                trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
-                !!previewJourney(trip, {
-                  action: "visit-hub",
-                  hub: transitHubFor(mapHotspot)!.id,
-                }).reason
-              }
-              onClick={() => visitTransitHub(transitHubFor(mapHotspot)!.id)}
-            >
-              {transitHubFor(mapHotspot)!.kind === "bus-stop"
-                ? "Stand at the bus stop"
-                : `Enter ${transitHubFor(mapHotspot)!.kind === "station" ? "train station" : "airport"}`}{" "}
-              {trip &&
-                trip.journey.hub !== transitHubFor(mapHotspot)!.id &&
-                "· 20 min · €0 "}
-              <ArrowRight size={17} />
-            </button>
-          )}
-          {trip &&
+          transitHint={
+            trip &&
+            transitHubFor(mapHotspot) &&
+            trip.journey.hub !== transitHubFor(mapHotspot)!.id
+              ? "20 min · €0 in your trip"
+              : undefined
+          }
+          onTravel={
+            trip &&
             !trip.complete &&
             mapHotspot.area &&
             areaPlace[mapHotspot.area] &&
-            areaPlace[mapHotspot.area] !== trip.place && (
-              <button
-                className="secondary full"
-                onClick={() => {
+            areaPlace[mapHotspot.area] !== trip.place
+              ? () => {
                   if (
                     trip.journey.phase === "arriving" ||
                     trip.journey.ticket
@@ -2404,46 +2484,22 @@ function RoamExperience({ user }: { user: AuthUser }) {
                   setDestination(areaPlace[mapHotspot.area!]);
                   setMode(mapHotspot.area === "Sintra" ? "train" : "walk");
                   setPanel("travel");
-                }}
-              >
-                Travel here in your trip <ArrowRight size={17} />
-              </button>
-            )}
-          <div className="source-note">
-            <span>
-              Mapped geographic position. Building heights and appearances are
-              approximate. Activities are simulated; nothing is booked.
-            </span>
-            {mapHotspot.mapsUrl && (
-              <a target="_blank" rel="noreferrer" href={mapHotspot.mapsUrl}>
-                Open this pin in Google Maps <ArrowUpRight size={13} />
-              </a>
-            )}
-            {mapHotspot.sourceUrl && (
-              <a target="_blank" rel="noreferrer" href={mapHotspot.sourceUrl}>
-                {mapHotspot.mapVenue || mapHotspot.mapLocation
-                  ? "View the map source"
-                  : "Official cultural context"}{" "}
-                <ArrowUpRight size={13} />
-              </a>
-            )}
-          </div>
-          {mapHotspot.custom && (
-            <button
-              className="danger-link"
-              onClick={() => {
-                const next = pins.filter((p) => p.id !== mapHotspot.id);
-                setPins(next);
-                try {
-                  localStorage.setItem(storage.pins, JSON.stringify(next));
-                } catch {}
-                setPanel(null);
-              }}
-            >
-              Remove this pin
-            </button>
-          )}
-        </Dialog>
+                }
+              : undefined
+          }
+          onRemovePin={
+            mapHotspot.custom
+              ? () => {
+                  const next = pins.filter((pin) => pin.id !== mapHotspot.id);
+                  setPins(next);
+                  try {
+                    localStorage.setItem(storage.pins, JSON.stringify(next));
+                  } catch {}
+                  setPanel(null);
+                }
+              : undefined
+          }
+        />
       )}
       {pending && trip && (
         <Dialog title={pending.title} onClose={() => setPending(null)}>

@@ -17,6 +17,7 @@ export type InteriorVisit = {
   name: string;
   kind: InteriorKind;
   sourceUrl?: string;
+  initialZoneId?: string;
 };
 
 export type InteriorActivity = {

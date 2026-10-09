@@ -13,6 +13,9 @@ export type WorldHotspot = GoogleHotspot & {
   mapLocation?: boolean;
 };
 export type WorldFocus = {
+  id?: string;
+  /** Identifies an explicit location preview so stale camera arrivals are ignored. */
+  selectionId?: string;
   lat: number;
   lng: number;
   name: string;

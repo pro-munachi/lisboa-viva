@@ -26,8 +26,16 @@ import { createLandmarks, isLandmarkBuilding } from "./city-landmarks";
 import { createCityAtmosphere } from "./city-atmosphere";
 import { coastRegions } from "./city-water";
 import { beachCameraView } from "./city-beach-camera";
+import {
+  createLocationFocus,
+  locationCameraView,
+  locationTreeObstacles,
+} from "./city-location-focus";
 import { drapedPolygonGeometry } from "./city-surfaces";
 import { createVenueDecorations } from "./city-venues";
+import { createBeachLife, updateBeachLife } from "./city-beach-life";
+import { chooseLocalTraffic } from "./city-traffic";
+import { createScenicNpcLod, updateScenicNpcLod } from "./city-npc-lod";
 import { createInteriorRuntime } from "./city-interior-runtime";
 import { interiorLightingForMinute } from "./city-interiors";
 import { createHotspotBadgeLayer } from "./city-hotspot-badges";
@@ -135,6 +143,7 @@ export function createCity(host, options) {
     personMeshes = [],
     peerMeshes = [];
   let selectedHotspotId = null;
+  let pendingLocation = null;
   const badgeItems = [];
   let markerSelection = "",
     populationCentre = null,
@@ -213,6 +222,30 @@ export function createCity(host, options) {
     reducedMotion: reduce,
     night: exteriorLighting.night,
   });
+  const locationFocus = createLocationFocus({
+    scene,
+    camera,
+    controls,
+    reducedMotion: reduce,
+  });
+  function clearLocationFocus() {
+    if (pendingLocation) pendingLocation.resolve(false);
+    pendingLocation = null;
+    locationFocus.clear();
+  }
+  function interruptLocationFocus() {
+    if (pendingLocation) {
+      pendingLocation.resolve(false);
+      pendingLocation = null;
+      generation++;
+    }
+    locationFocus.interrupt();
+  }
+  controls.addEventListener("start", interruptLocationFocus);
+  const chunkFocusTarget = () =>
+    pendingLocation?.ticket === generation
+      ? pendingLocation.point
+      : controls.target;
   let travelPhase = null;
   const travel = createTravelRuntime({
     scene,
@@ -262,6 +295,7 @@ export function createCity(host, options) {
       return false;
     cancelTravel();
     setFocus(sequence.to);
+    clearLocationFocus();
     city.visible = population.visible = peerPopulation.visible = false;
     if (overviewMesh) overviewMesh.visible = false;
     badges.update(camera, {
@@ -585,6 +619,9 @@ export function createCity(host, options) {
           width: road.width,
           id: road.id,
           owner,
+          foot: road.foot,
+          sidewalk: road.sidewalk,
+          bridge: road.bridge,
         });
     }
     for (const [material, geometries] of buckets) {
@@ -614,13 +651,17 @@ export function createCity(host, options) {
     )
       return;
     refreshMarkers();
-    if (camera.position.distanceTo(controls.target) > 5000) return;
+    if (!pendingLocation && camera.position.distanceTo(controls.target) > 5000)
+      return;
     loadInProgress = true;
     const ticket = generation;
     let changed = false;
     try {
-      const p = unprojectGeo(controls.target.x, controls.target.z);
-      const range = camera.position.distanceTo(controls.target);
+      const centre = chunkFocusTarget();
+      const p = unprojectGeo(centre.x, centre.z);
+      const range = pendingLocation
+        ? 90
+        : camera.position.distanceTo(controls.target);
       const limit = Math.min(13000, Math.max(650, range * 1.1));
       const wanted = manifest.chunks
         .filter((c) => boundsDistance(c.bounds, p) < limit)
@@ -661,11 +702,7 @@ export function createCity(host, options) {
         changed = true;
       }
       if (!destroyed && ticket === generation) {
-        if (
-          changed ||
-          !venueCentre ||
-          venueCentre.distanceTo(controls.target) > 120
-        ) {
+        if (changed || !venueCentre || venueCentre.distanceTo(centre) > 120) {
           for (const [id, group] of chunkGroups) {
             const data = chunkCache.get(id);
             if (!data) continue;
@@ -679,7 +716,7 @@ export function createCity(host, options) {
             addNearBuildingDetails(data, group);
             addStreetDetails(data, group);
           }
-          venueCentre = controls.target.clone();
+          venueCentre = centre.clone();
         }
         venueMeshes.length = 0;
         for (const group of chunkGroups.values())
@@ -691,7 +728,7 @@ export function createCity(host, options) {
           pendingTeleport ||
           changed ||
           !populationCentre ||
-          populationCentre.distanceTo(controls.target) > 70
+          populationCentre.distanceTo(centre) > 70
         ) {
           populate(pendingTeleport);
           pendingTeleport = false;
@@ -715,7 +752,18 @@ export function createCity(host, options) {
         source: manifest.source.name,
         heights: "OSM heights where recorded; otherwise estimated",
         terrain: !!terrain,
-        people: agents.length,
+        people:
+          agents.length +
+          [...chunkGroups.values()].reduce(
+            (total, group) =>
+              total +
+              group.children.reduce(
+                (count, child) =>
+                  count + (child.userData.beachLife?.people || 0),
+                0,
+              ),
+            0,
+          ),
       });
     } catch (e) {
       if (!destroyed)
@@ -725,6 +773,8 @@ export function createCity(host, options) {
     } finally {
       loadInProgress = false;
       if (!destroyed && ticket !== generation) loadChunks();
+      else if (!destroyed && pendingLocation?.ticket === ticket)
+        finishLocationFocus(ticket);
     }
   }
   async function addBuildings(chunk, ticket) {
@@ -782,29 +832,46 @@ export function createCity(host, options) {
     chunkGroups.set(chunk.id, group);
   }
   function addStreetDetails(chunk, group) {
-    const focusPoint = unprojectGeo(controls.target.x, controls.target.z);
+    const centre = chunkFocusTarget();
+    const focusPoint = unprojectGeo(centre.x, centre.z);
     const storefronts = createVenueDecorations(
       chunk,
       (options.hotspots || []).filter((h) => h.mapVenue),
-      { projectGeo, geoY, focusPoint },
+      { projectGeo, geoY, focusPoint, enableBeachFurniture: false },
     );
     storefronts.userData.streetDetail = storefronts.userData.venueDetail = true;
     const life = createStreetLife(chunk, storefronts, { projectGeo, geoY });
     life.userData.streetDetail = life.userData.venueDetail = true;
     setStreetLifeNight(life, exteriorLighting.night);
+    const beach = createBeachLife(chunk, {
+      projectGeo,
+      geoY,
+      focusPoint,
+      waterAt: (point) =>
+        Boolean(coastline?.waterAt(unprojectGeo(point.x, point.z))),
+      maxPeople: host.clientWidth < 640 ? 24 : 32,
+      maxArrangements: 40,
+      radius: 160,
+    });
+    beach.userData.streetDetail = beach.userData.venueDetail = true;
+    const reservations = [
+      ...life.userData.streetLife.reservations,
+      ...(beach.userData.beachLife?.reservations || []),
+    ];
     const dressing = createLandscape(chunk, {
       projectGeo,
       geoY,
       focusPoint,
-      venueReservations: life.userData.streetLife.reservations,
+      venueReservations: reservations,
     });
     setLandscapeNight(dressing, exteriorLighting.night);
     dressing.userData.streetDetail = dressing.userData.landscapeDetail = true;
-    group.add(storefronts, life, dressing);
+    group.add(storefronts, life, beach, dressing);
   }
   function addNearBuildingDetails(chunk, group) {
     // Ornament follows the camera, including within an already loaded chunk.
     // Keep it bounded independently of the full geographic building mesh.
+    const centreOfView = chunkFocusTarget();
     const nearest = chunk.buildings
       .filter(
         (building) =>
@@ -817,8 +884,7 @@ export function createCity(host, options) {
         const p = projectGeo(centre);
         return {
           building,
-          distance:
-            (p.x - controls.target.x) ** 2 + (p.z - controls.target.z) ** 2,
+          distance: (p.x - centreOfView.x) ** 2 + (p.z - centreOfView.z) ** 2,
         };
       })
       .filter(({ distance }) => distance < 350 ** 2)
@@ -1162,18 +1228,12 @@ export function createCity(host, options) {
     vehicles = [];
     const target = teleport
       ? point3([focus.lng, focus.lat])
-      : controls.target.clone();
+      : chunkFocusTarget().clone();
     const close = roadPaths.filter((p) =>
       p.ps.some((v) => Math.hypot(v.x - target.x, v.z - target.z) < 650),
     );
     populationCentre = target.clone();
     personMeshes.length = 0;
-    const drives = close.filter(
-      (p) =>
-        !["footway", "pedestrian", "steps", "path", "rail", "tram"].includes(
-          p.kind,
-        ),
-    );
     const profiles = createLocalWalkerProfiles({
       paths: roadPaths,
       target,
@@ -1188,6 +1248,7 @@ export function createCity(host, options) {
       reservations: [...chunkGroups.values()].flatMap((chunk) =>
         chunk.children.flatMap((child) => [
           ...(child.userData.streetLife?.reservations || []),
+          ...(child.userData.beachLife?.reservations || []),
           ...(child.userData.landscape?.parkDetails?.benches || []).map(
             (point) => ({ ...point, radius: 1.25 }),
           ),
@@ -1196,12 +1257,18 @@ export function createCity(host, options) {
           ),
         ]),
       ),
-      max: 28,
+      waterAt: (point, line) =>
+        !line.bridge &&
+        Boolean(coastline?.waterAt(unprojectGeo(point.x, point.z))),
+      max: host.clientWidth < 640 ? 48 : 64,
+      maxDistance: 125,
+      context: focus?.category,
     });
     for (const profile of profiles) {
       const group = createCharacter(profile.character);
       applyLocalDemographicVisuals(group, profile);
       poseLocalDemographic(group, profile, 0);
+      createScenicNpcLod(group);
       const initial = sampleLocalWalker(profile);
       group.position.set(
         initial.x,
@@ -1215,24 +1282,21 @@ export function createCity(host, options) {
         personMeshes.push(mesh);
       });
       population.add(group);
-      agents.push({ ...profile, group });
+      agents.push({ ...profile, group, samplePoint: {} });
     }
-    for (let i = 0; i < 18 && drives.length; i++) {
-      const line = drives[i % drives.length],
-        tram = false,
-        group = car(
-          tram
-            ? "#d4aa48"
-            : ["#ecebe3", "#8b5550", "#69808a", "#5e7164"][i % 4],
-          tram,
-        );
-      const d = ((i * 0.217) % 1) * line.length,
-        side = line.width / 4,
-        initial = sample(line, d, side);
+    for (const [i, route] of chooseLocalTraffic(roadPaths, target, {
+      max: host.clientWidth < 640 ? 18 : 26,
+    }).entries()) {
+      const group = car(
+          ["#e9e7d9", "#e4bd5b", "#729f9c", "#b85f50", "#486379", "#e4ebec"][
+            i % 6
+          ],
+        ),
+        initial = sample(route.line, route.d, route.side);
       group.position.copy(initial.v);
       group.rotation.y = initial.angle;
       population.add(group);
-      vehicles.push({ group, line, d, side, speed: tram ? 5 : 6 + (i % 4) });
+      vehicles.push({ group, ...route });
     }
     const trams = close.filter((p) => p.kind === "tram");
     for (let i = 0; i < 3 && trams.length; i++) {
@@ -1245,6 +1309,12 @@ export function createCity(host, options) {
       population.add(group);
       vehicles.push({ group, line, d, side: 0, speed: 5 });
     }
+    for (const chunk of chunkGroups.values())
+      for (const child of chunk.children)
+        if (child.userData.beachLife)
+          child.traverse((mesh) => {
+            if (mesh.isMesh && mesh.userData.person) personMeshes.push(mesh);
+          });
     if (savedPlayer && !teleport) {
       player = savedPlayer;
       population.add(player);
@@ -1314,6 +1384,7 @@ export function createCity(host, options) {
     return true;
   }
   function playerView() {
+    clearLocationFocus();
     followPlayer = true;
     restoreCity();
     if (characterGallery) {
@@ -1339,6 +1410,9 @@ export function createCity(host, options) {
     setPeers(options.peers || []);
   }
   function setFocus(next, street = false) {
+    if (destroyed || !next || ![next.lng, next.lat].every(Number.isFinite))
+      return Promise.resolve(false);
+    clearLocationFocus();
     cancelTravel();
     restoreCity();
     if (characterGallery) {
@@ -1348,11 +1422,30 @@ export function createCity(host, options) {
     generation++;
     focus = next;
     selectedHotspotId = next.id || null;
-    pendingVenue = !street && next.mapVenue ? next.id : null;
+    const locationSelection =
+      !street && !next.peerId && Boolean(next.id && next.selectionId);
+    pendingVenue =
+      !locationSelection && !street && next.mapVenue ? next.id : null;
     const p = point3([next.lng, next.lat]);
     const distance = street ? 24 : next.range || 160;
     if (!street) pendingTeleport = true;
     if (street && player && !pendingTeleport) p.copy(player.position);
+    if (locationSelection) {
+      followPlayer = false;
+      lastPlayerPosition = null;
+      const promise = new Promise((resolve) => {
+        pendingLocation = {
+          ticket: generation,
+          point: p,
+          next,
+          resolve,
+          started: false,
+        };
+      });
+      refreshMarkers();
+      if (manifest) loadChunks();
+      return promise;
+    }
     controls.target.copy(p);
     camera.position.set(
       p.x + distance * 0.7,
@@ -1364,9 +1457,9 @@ export function createCity(host, options) {
     controls.update();
     refreshMarkers();
     setPeers(options.peers || [], !street);
-    if (manifest) {
-      return loadChunks();
-    }
+    return Promise.resolve(manifest ? loadChunks() : undefined).then(
+      () => !destroyed,
+    );
   }
   async function loadOverview() {
     if (overviewMesh || overviewLoading || destroyed) return;
@@ -1389,6 +1482,7 @@ export function createCity(host, options) {
     }
   }
   function overview() {
+    clearLocationFocus();
     followPlayer = false;
     cancelTravel();
     restoreCity();
@@ -1480,6 +1574,7 @@ export function createCity(host, options) {
           playerTarget = nearest
             ? sample(nearest.line, nearest.d, nearest.line.width / 2 + 1.2).v
             : ground.point.clone();
+          clearLocationFocus();
         }
       }
     }
@@ -1493,6 +1588,17 @@ export function createCity(host, options) {
     if (!travel.active) controls.update();
     travel.update(dt);
     indoor.update(dt, motion);
+    locationFocus.update(
+      dt,
+      player,
+      motion,
+      !characterGallery && !indoor.active && !travel.active,
+    );
+    // Detailed gait is useful close up. Farther visitors keep their mapped
+    // route movement through one baked mesh, without submitting every joint.
+    if (!characterGallery && !indoor.active && !travel.active)
+      for (const actor of agents)
+        actor.articulated = updateScenicNpcLod(actor.group, camera);
     if (
       motion &&
       !characterGallery &&
@@ -1502,15 +1608,17 @@ export function createCity(host, options) {
     ) {
       for (const a of agents) {
         advanceLocalWalker(a, dt);
-        const p = sampleLocalWalker(a);
+        const p = sampleLocalWalker(a, a.samplePoint);
         a.group.position.set(p.x, geoY(unprojectGeo(p.x, p.z)) + 0.2, p.z);
         a.group.rotation.y = p.angle;
-        animateCharacter(
-          a.group,
-          (now / 1000) * (a.pace || 1),
-          a.moving !== false,
-        );
-        poseLocalDemographic(a.group, a, now / 1000);
+        if (a.articulated) {
+          animateCharacter(
+            a.group,
+            (now / 1000) * (a.pace || 1),
+            a.moving !== false,
+          );
+          poseLocalDemographic(a.group, a, now / 1000);
+        }
       }
       for (const v of vehicles) {
         v.d += dt * v.speed;
@@ -1567,7 +1675,11 @@ export function createCity(host, options) {
     for (const group of chunkGroups.values()) {
       group.visible = range < 6000;
       for (const child of group.children)
-        if (child.userData.streetDetail) child.visible = range < 2300;
+        if (child.userData.beachLife) {
+          child.visible = range < 1300;
+          if (!characterGallery && !indoor.active && !travel.active)
+            updateBeachLife(child, dt, now / 1000, motion && child.visible);
+        } else if (child.userData.streetDetail) child.visible = range < 2300;
         else if (child.userData.architectureDetail) child.visible = range < 900;
     }
     if (overviewMesh)
@@ -1627,6 +1739,7 @@ export function createCity(host, options) {
       return false;
     });
   function characters() {
+    clearLocationFocus();
     cancelTravel();
     if (!player) return;
     if (characterGallery) disposeGroup(characterGallery);
@@ -1679,6 +1792,7 @@ export function createCity(host, options) {
     controls.update();
   }
   function people() {
+    clearLocationFocus();
     cancelTravel();
     if (pendingTeleport) return;
     restoreCity();
@@ -1713,6 +1827,137 @@ export function createCity(host, options) {
     );
     controls.target.copy(at).add(new THREE.Vector3(0, 0.9, 0));
     controls.update();
+  }
+  function finishLocationFocus(ticket) {
+    const request = pendingLocation;
+    if (!request || request.ticket !== ticket || request.started) return;
+    request.started = true;
+    if (!player) {
+      populate(true);
+      pendingTeleport = false;
+    }
+    const { next, point } = request;
+    const storefront = venueMeshes.find(
+      (mesh) =>
+        mesh.userData.hotspot?.id === next.id && mesh.userData.venueView,
+    )?.userData.venueView;
+    const source = storefront?.point || point;
+    const footprints = [...chunkCache.values()]
+      .flatMap((chunk) => chunk.buildings || [])
+      .map((building) => building.ring.map(projectGeo))
+      .filter((ring) => {
+        const west = Math.min(...ring.map((p) => p.x)),
+          east = Math.max(...ring.map((p) => p.x)),
+          north = Math.min(...ring.map((p) => p.z)),
+          south = Math.max(...ring.map((p) => p.z));
+        return (
+          Math.hypot(
+            Math.max(west - source.x, 0, source.x - east),
+            Math.max(north - source.z, 0, source.z - south),
+          ) < 130
+        );
+      });
+    const waterAt = (p) => Boolean(coastline?.waterAt(unprojectGeo(p.x, p.z)));
+    const elevationAt = (p) => geoY(unprojectGeo(p.x, p.z));
+    const beachView =
+      next.category === "beach"
+        ? beachCameraView({
+            point,
+            groundY: point.y,
+            waterAt,
+            elevationAt,
+            footprints,
+            aspect: camera.aspect,
+          })
+        : null;
+    const driving = roadPaths.filter(
+      (line) =>
+        ![
+          "footway",
+          "pedestrian",
+          "path",
+          "steps",
+          "rail",
+          "tram",
+          "cycleway",
+        ].includes(line.kind) &&
+        line.ps.some((p) => Math.hypot(p.x - source.x, p.z - source.z) < 400),
+    );
+    const safeAt = (p) =>
+      driving.every((line) =>
+        line.ps.slice(1).every((b, i) => {
+          const a = line.ps[i],
+            dx = b.x - a.x,
+            dz = b.z - a.z;
+          const t = Math.max(
+            0,
+            Math.min(
+              1,
+              ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz || 1),
+            ),
+          );
+          return (
+            Math.hypot(p.x - a.x - dx * t, p.z - a.z - dz * t) >=
+            line.width / 2 + 0.5
+          );
+        }),
+      );
+    const view = locationCameraView({
+      point: source,
+      normal: storefront?.normal,
+      groundY: storefront?.groundY ?? point.y,
+      footprints,
+      reservations: [
+        ...[...chunkGroups.values()].flatMap((chunk) =>
+          chunk.children.flatMap((child) => [
+            ...(child.userData.streetLife?.reservations || []),
+            ...(child.userData.beachLife?.reservations || []),
+          ]),
+        ),
+        ...venueMeshes.flatMap((mesh) =>
+          (mesh.userData.terraceTables || []).map((table) => ({
+            ...table,
+            radius: 1.1,
+          })),
+        ),
+      ],
+      obstacles: locationTreeObstacles([...chunkGroups.values()], source),
+      waterAt,
+      elevationAt,
+      safeAt,
+      fallbackPlayer: player?.position,
+      beachView,
+      aspect: camera.aspect,
+    });
+    if (!view || !player) {
+      pendingLocation = null;
+      request.resolve(false);
+      return;
+    }
+    player.position.set(view.player.x, view.player.y, view.player.z);
+    playerTarget = player.position.clone();
+    player.rotation.y = view.angle;
+    if (beachView) {
+      const sign = venueMeshes.find(
+        (mesh) => mesh.userData.hotspot?.id === next.id,
+      );
+      if (sign)
+        sign.rotation.y = Math.atan2(
+          view.camera.x - source.x,
+          view.camera.z - source.z,
+        );
+    }
+    sun.position.set(point.x - 150, point.y + 400, point.z + 180);
+    sun.target.position.copy(point);
+    locationFocus.start(view, player).then((completed) => {
+      if (pendingLocation !== request || destroyed) {
+        request.resolve(false);
+        return;
+      }
+      pendingLocation = null;
+      setPeers(options.peers || []);
+      request.resolve(completed);
+    });
   }
   function frameVenue(view) {
     if (indoor.active || characterGallery || travel.active) return;
@@ -1797,6 +2042,7 @@ export function createCity(host, options) {
     controls.update();
   }
   function setInterior(next) {
+    if (next) clearLocationFocus();
     cancelTravel();
     options.interior = next;
     if (!next) {
@@ -1850,6 +2096,7 @@ export function createCity(host, options) {
     },
     zoom(multiplier) {
       if (travel.active) return;
+      interruptLocationFocus();
       camera.position
         .sub(controls.target)
         .multiplyScalar(multiplier)
@@ -1858,6 +2105,7 @@ export function createCity(host, options) {
     },
     rotate(angle) {
       if (travel.active) return;
+      interruptLocationFocus();
       const offset = camera.position.clone().sub(controls.target);
       offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
       camera.position.copy(controls.target).add(offset);
@@ -1865,10 +2113,13 @@ export function createCity(host, options) {
     },
     dispose() {
       destroyed = true;
+      clearLocationFocus();
       abort.abort();
       cancelAnimationFrame(frame);
       observer.disconnect();
+      controls.removeEventListener("start", interruptLocationFocus);
       controls.dispose();
+      locationFocus.dispose();
       badges.dispose();
       indoor.dispose();
       travel.dispose();

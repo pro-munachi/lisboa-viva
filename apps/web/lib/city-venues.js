@@ -526,7 +526,7 @@ function awningGeometry(width, height) {
 export function createVenueDecorations(
   chunk,
   venues,
-  { projectGeo, geoY, focusPoint },
+  { projectGeo, geoY, focusPoint, enableBeachFurniture = true },
 ) {
   const group = new THREE.Group();
   group.name = "Real Lisbon venue storefronts";
@@ -854,7 +854,7 @@ export function createVenueDecorations(
         .applyMatrix4(decoration.matrix);
       fixtures.push(pole, base);
     }
-    if (beachSurface && beachFurnishings.length < 6) {
+    if (enableBeachFurniture && beachSurface && beachFurnishings.length < 6) {
       const candidate = [
         { x: p.x + 3, z: p.z },
         { x: p.x - 3, z: p.z },

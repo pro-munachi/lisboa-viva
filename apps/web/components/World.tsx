@@ -42,7 +42,7 @@ type CityController = {
   selectInteriorZone: (id: string) => void;
   performInteriorAction: (id: string, duration?: number) => void;
   playSocialEvent: (event: SocialSceneEvent) => boolean;
-  setFocus: (f: WorldFocus, street?: boolean) => void;
+  setFocus: (f: WorldFocus, street?: boolean) => Promise<boolean | void> | void;
   setMarkers: (h: WorldHotspot[]) => void;
   setPeers: (peers: MultiplayerPeer[]) => void;
   setAppearance: (appearance: CharacterAppearance) => void;
@@ -79,6 +79,7 @@ export default function World({
   onPlayer,
   socialEvent,
   sharedOuting = false,
+  onLocationReady,
 }: {
   focus: WorldFocus;
   shirt: string;
@@ -96,9 +97,18 @@ export default function World({
   onPlayer?: (player: MultiplayerPeer) => void;
   socialEvent?: SocialSceneEvent | null;
   sharedOuting?: boolean;
+  onLocationReady?: (selectionId: string, framed: boolean) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<CityController | null>(null);
+  const enteredInterior = useRef<{
+    instance: CityController;
+    visit: InteriorVisit;
+  } | null>(null);
+  const [sceneVersion, setSceneVersion] = useState(0);
+  const [sceneUnavailable, setSceneUnavailable] = useState(false);
+  const locationCallback = useRef(onLocationReady);
+  locationCallback.current = onLocationReady;
   const callback = useRef(onHotspot);
   callback.current = onHotspot;
   const playerCallback = useRef(onPlayer);
@@ -289,10 +299,13 @@ export default function World({
                 travelCallback.current?.(event.id);
             },
           });
+          setSceneUnavailable(false);
           controller.current?.setMode(ui.current.gesture);
           controller.current?.setMotion(ui.current.motion);
+          setSceneVersion((version) => version + 1);
           if (controller.current) startPendingTravel(controller.current);
         } catch {
+          setSceneUnavailable(true);
           setStatus(
             "3D is unavailable on this device. Trip experiences still work.",
           );
@@ -303,6 +316,7 @@ export default function World({
         }
       })
       .catch(() => {
+        setSceneUnavailable(true);
         setStatus("The city could not load. Try reloading.");
         if (latest.current.travelSequence)
           setTravelError(
@@ -342,11 +356,61 @@ export default function World({
     setPerson(null);
     setPeer(null);
     if (travelSequence) return;
-    controller.current?.setFocus(focus);
-    // A journey hub can update its map focus after entering a room. Restore
-    // the requested interior after the focus command clears the previous view.
-    controller.current?.setInterior(interior);
-  }, [focus, interior, travelSequence]);
+    if (googleVisible) {
+      if (focus.selectionId)
+        locationCallback.current?.(focus.selectionId, true);
+      return;
+    }
+    const instance = controller.current;
+    if (!instance) {
+      if (sceneUnavailable && focus.selectionId)
+        locationCallback.current?.(focus.selectionId, true);
+      return;
+    }
+    let active = true;
+    void instance.ready
+      .then(async (ready) => {
+        if (!active || controller.current !== instance) return;
+        if (interior) {
+          if (
+            ready &&
+            (enteredInterior.current?.instance !== instance ||
+              enteredInterior.current.visit !== interior)
+          ) {
+            instance.setInterior(interior);
+            enteredInterior.current = { instance, visit: interior };
+            const initialAction = INTERIOR_ACTIVITIES[interior.kind].find(
+              (activity) => activity.id === interior.initialZoneId,
+            );
+            if (initialAction)
+              instance.performInteriorAction(
+                initialAction.id,
+                initialAction.durationMs,
+              );
+          }
+          return;
+        }
+        enteredInterior.current = null;
+        const framed = ready ? await instance.setFocus(focus) : undefined;
+        if (!active || controller.current !== instance) return;
+        if (focus.selectionId)
+          locationCallback.current?.(focus.selectionId, framed !== false);
+      })
+      .catch(() => {
+        if (active && focus.selectionId)
+          locationCallback.current?.(focus.selectionId, true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    focus,
+    interior,
+    travelSequence,
+    sceneVersion,
+    googleVisible,
+    sceneUnavailable,
+  ]);
   useEffect(() => {
     controller.current?.setMarkers(hotspots);
   }, [hotspots]);
@@ -362,7 +426,13 @@ export default function World({
     setCompleted([]);
     setRoomError("");
     setActivityState("idle");
-    setSelectedZone(interior ? INTERIOR_ACTIVITIES[interior.kind][0].id : null);
+    setSelectedZone(
+      interior
+        ? INTERIOR_ACTIVITIES[interior.kind].find(
+            (zone) => zone.id === interior.initialZoneId,
+          )?.id || INTERIOR_ACTIVITIES[interior.kind][0].id
+        : null,
+    );
     if (interior) setGoogle(false);
   }, [interior]);
   useEffect(() => {
@@ -665,6 +735,8 @@ export default function World({
       )}
       {interior && !travelSequence && !sharedOuting && (
         <InteriorPanel
+          key={`${interior.id}:${interior.initialZoneId || "default"}`}
+          initiallyCompact={Boolean(interior.initialZoneId)}
           visit={interior}
           selectedZone={selectedZone}
           activityState={activityState}

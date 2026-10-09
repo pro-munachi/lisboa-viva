@@ -210,3 +210,37 @@ test("elder and scooter poses are composed after animation without accumulating 
     disposeCharacter(actor);
   }
 });
+
+test("market and café neighbours use contextual workwear instead of unrelated staff roles", () => {
+  const marketRoles = new Set<string>(),
+    cafeRoles = new Set<string>();
+  for (let seed = 0; seed < 80; seed++) {
+    const shopper = demographicProfile("DEMO_006", `market-${seed}`, {
+      context: "market",
+    });
+    marketRoles.add(shopper.role);
+    assert.ok(["shopper", "neighbour", "market-vendor"].includes(shopper.role));
+    if (shopper.role === "shopper") assert.equal(shopper.prop, "tote");
+    if (shopper.role === "market-vendor") assert.equal(shopper.prop, "apron");
+    const cafe = demographicProfile("DEMO_006", `cafe-${seed}`, {
+      context: "café",
+    });
+    cafeRoles.add(cafe.role);
+    if (cafe.role === "café-worker") assert.equal(cafe.prop, "apron");
+  }
+  assert.deepEqual(
+    marketRoles,
+    new Set(["shopper", "neighbour", "market-vendor"]),
+  );
+  assert.ok(cafeRoles.has("café-worker"));
+  const marketStaff = demographicProfile("DEMO_008", "mercado-worker", {
+    context: "market",
+  });
+  assert.equal(marketStaff.role, "market-staff");
+  assert.equal(marketStaff.prop, "apron");
+  const transitStaff = demographicProfile("DEMO_008", "station-worker", {
+    context: "transit",
+  });
+  assert.equal(transitStaff.role, "transit-staff");
+  assert.equal(transitStaff.prop, "staff-uniform");
+});

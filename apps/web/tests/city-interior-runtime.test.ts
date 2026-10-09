@@ -8,6 +8,26 @@ const THREE = require("three");
 type ActivityEvent = { state: string; zoneId: string | null; error?: string };
 const kinds: InteriorKind[] = ["home", "cafe", "gym", "shop", "museum", "bar"];
 
+test("a street activity choice opens its actual room zone without starting an action or accepting unknown zones", () => {
+  const h = harness();
+  try {
+    h.runtime.enter(
+      { id: "cafe", name: "Café", kind: "cafe", initialZoneId: "pastry" },
+      new THREE.Vector3(),
+    );
+    assert.equal(h.zones.at(-1), "pastry");
+    assert.deepEqual(h.events.at(-1), { state: "idle", zoneId: "pastry" });
+    h.runtime.enter(
+      { id: "cafe", name: "Café", kind: "cafe", initialZoneId: "not-a-zone" },
+      new THREE.Vector3(),
+    );
+    assert.equal(h.zones.at(-1), INTERIOR_ACTIVITIES.cafe[0].id);
+    assert.equal(h.events.at(-1)?.state, "idle");
+  } finally {
+    h.runtime.dispose();
+  }
+});
+
 function harness(
   badgeHost?: any,
   lighting?: { night?: number; reducedMotion?: boolean },

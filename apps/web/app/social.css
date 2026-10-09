@@ -791,6 +791,25 @@ h3 {
   }
 }
 /* Keep social and Phone controls reachable while a room card is open. */
+.location-focus-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 104px;
+  z-index: 30;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 12px 18px;
+  border: 1px solid #dce5f5;
+  border-radius: 24px;
+  background: #fff;
+  color: #223252;
+  box-shadow: 0 8px 24px #18304d16;
+  font-size: 13px;
+}
 .roam-play.inside-location [data-local-radio] {
   top: 150px;
   bottom: auto;
