@@ -57,6 +57,8 @@ import { accountStorageKeys } from "../../lib/account-storage";
 import { TRAVELLER_COLOURS } from "../../lib/traveller-colours";
 import MultiplayerDock from "../../components/MultiplayerDock";
 import LocalRadio from "../../components/LocalRadio";
+import StoryGuide from "../../components/StoryGuide";
+import { playerStory, type StoryAction } from "../../lib/player-story";
 import { interiorForHotspot, type InteriorVisit } from "../../lib/interiors";
 import Dialog from "../../components/Dialog";
 import JourneyPanel from "../../components/JourneyPanel";
@@ -195,6 +197,7 @@ type Panel =
   | "new"
   | "clear"
   | "area-transport"
+  | "story"
   | null;
 type AreaEntry = {
   focus: WorldFocus;
@@ -1215,6 +1218,7 @@ function RoamExperience({ user }: { user: AuthUser }) {
     place === "home" ? trip?.setup.base || setup.base : places[place].district;
   const PlaceIcon = iconFor(place);
   const available = trip && !trip.complete ? availableScenarios(trip) : [];
+  const story = playerStory(trip, user.userType, available.length > 0);
   const current = available.find((s) => s.id === selected) || available[0];
   const mood = trip
     ? trip.energy < 25
@@ -1231,6 +1235,16 @@ function RoamExperience({ user }: { user: AuthUser }) {
     setDestination(null);
     setPanel("travel");
   };
+  function continueStory(action: StoryAction) {
+    if (action === "experiences") {
+      closeOverlays();
+      setActivitiesOpen(true);
+    } else if (action === "travel") {
+      openFeature("map-search");
+    } else {
+      openFeature(action);
+    }
+  }
 
   const visited = trip
     ? new Set(memories(trip).map((h) => h.place))
@@ -1487,6 +1501,13 @@ function RoamExperience({ user }: { user: AuthUser }) {
         month: "long",
       }) || "Your Lisbon chapter";
   const phoneApps: PhoneApp[] = [
+    {
+      id: "story",
+      label: "My story",
+      detail: "Your next step in Lisbon",
+      icon: Compass,
+      onOpen: () => openFeature("story"),
+    },
     {
       id: "radio",
       label: "Local radio",
@@ -1948,6 +1969,20 @@ function RoamExperience({ user }: { user: AuthUser }) {
                   <b>·</b> {trip.journey.hub ? "Transport hub" : placeDistrict}
                 </span>
               </div>
+              {!interior && !clean && !activitiesOpen && (
+                <button
+                  type="button"
+                  className="story-prompt"
+                  onClick={() => openFeature("story")}
+                  aria-label={`Open your story. Next step: ${story.title}`}
+                >
+                  <span>YOUR STORY · STEP {story.activeIndex + 1} OF 4</span>
+                  <strong>{story.title}</strong>
+                  <small>
+                    See your path <ArrowRight size={13} />
+                  </small>
+                </button>
+              )}
               <section
                 className="interaction card"
                 id="city-experiences"
@@ -2228,6 +2263,15 @@ function RoamExperience({ user }: { user: AuthUser }) {
         <span>Try a city. Find your rhythm.</span>
         <span>Lisbon pilot · Illustrative costs · Europe/Lisbon time</span>
       </div>
+      {panel === "story" && !travelSequence && (
+        <Dialog title="Your Lisbon story" onClose={() => setPanel(null)}>
+          <StoryGuide
+            story={story}
+            onContinue={() => continueStory(story.action)}
+            onNearby={openNearby}
+          />
+        </Dialog>
+      )}
       {panel === "map-search" && (
         <Dialog title="Find your Lisbon." onClose={() => setPanel(null)} wide>
           <p className="lede">

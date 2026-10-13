@@ -2988,6 +2988,137 @@ small {
   left: auto;
   max-width: min(380px, calc(100% - 44px));
 }
+.roam-play .story-prompt {
+  position: absolute;
+  top: 143px;
+  right: 22px;
+  z-index: 7;
+  display: grid;
+  gap: 4px;
+  width: min(248px, calc(100% - 44px));
+  padding: 12px 14px;
+  border: 1px solid #fff;
+  border-radius: 16px;
+  background: #fffefbf2;
+  box-shadow: 0 8px 28px #19305b24;
+  text-align: left;
+  backdrop-filter: blur(12px);
+}
+.story-prompt > span {
+  color: #2853e3;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.story-prompt > strong {
+  color: #263749;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.story-prompt > small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #2853e3;
+  font-size: 10px;
+  font-weight: 700;
+}
+.story-guide .lede {
+  line-height: 1.6;
+}
+.story-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid #e3e8ef;
+  border-radius: 12px;
+  background: #fff;
+}
+.story-steps li.current {
+  border-color: #9cb3f5;
+  background: #f3f6ff;
+}
+.story-step-number {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #284bc5;
+  background: #e7edff;
+  font-size: 11px;
+  font-weight: 900;
+}
+.story-steps strong {
+  font-size: 12px;
+}
+.story-steps p,
+.story-next p,
+.story-social p,
+.story-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.story-steps p {
+  margin: 3px 0 0;
+}
+.story-step-status {
+  color: #667184;
+  font-size: 9px;
+  font-weight: 800;
+}
+.story-next {
+  margin-top: 16px;
+  padding: 15px;
+  border-radius: 14px;
+  background: #eaf0ff;
+}
+.story-next h3 {
+  margin: 7px 0 3px;
+  font-size: 18px;
+}
+.story-next p {
+  margin: 0 0 12px;
+}
+.story-social {
+  display: grid;
+  gap: 9px;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #e3e8ef;
+}
+.story-social strong {
+  font-size: 12px;
+}
+.story-social p {
+  margin: 3px 0 0;
+}
+.story-social button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  color: #284bc5;
+  background: #edf2ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.story-note {
+  margin: 13px 0 0;
+}
 .roam-play .world-controls,
 .roam-play.clean-world .world-controls {
   top: 94px;
@@ -3252,6 +3383,11 @@ small {
     left: auto;
     font-size: 10px;
     padding: 9px 11px;
+  }
+  .roam-play .story-prompt {
+    top: 193px;
+    right: 14px;
+    width: min(218px, calc(100% - 28px));
   }
   .roam-play .world-controls,
   .roam-play.clean-world .world-controls,
